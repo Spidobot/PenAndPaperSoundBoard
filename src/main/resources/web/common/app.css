@@ -59,7 +59,7 @@ th{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mu
 .side a[aria-current="page"]{background:var(--acc-soft);color:var(--fg);font-weight:700;box-shadow:inset 3px 0 0 var(--acc)}
 .side .foot{margin-top:18px;padding:10px;font-size:.8rem;color:var(--mut);border-top:1px solid var(--line)}
 main{padding-block:22px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px;align-content:start;min-width:0}
-.view{display:grid;gap:18px;max-width:1200px;min-width:0}
+.view{display:grid;gap:18px;min-width:0}
 @media (max-width:760px){.shell{grid-template-columns:1fr}.side{grid-auto-flow:column;grid-auto-columns:max-content;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px}.side .brand,.side .foot{display:none}}
 
 /* Session */
@@ -124,7 +124,7 @@ mark{background:var(--acc-soft);color:inherit;padding:0 2px}
 .fx button.hit{background:var(--acc-soft);border-color:var(--acc)}
 .fx .ic{width:36px;height:36px}
 .plists{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
-.plist ul{list-style:none;margin:0;padding:0;max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:4px}
+.plist ul{list-style:none;margin:0;padding:0;height:max(240px,calc(100vh - 470px));overflow:auto;border:1px solid var(--line);border-radius:4px}
 .plist li button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:none;padding:7px 10px;overflow-wrap:anywhere}
 .plist li button:hover{background:var(--panel2)}
 .plist li button[aria-current="true"]{background:var(--acc-soft);font-weight:700}
@@ -161,10 +161,13 @@ mark{background:var(--acc-soft);color:inherit;padding:0 2px}
 #jarinfo p{overflow-wrap:anywhere}
 .link{background:none;border:0;padding:0;color:inherit;font:inherit;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px;cursor:pointer;text-align:left}
 .link:hover{text-decoration-color:var(--acc)}
-.sheetdlg{width:min(1100px,calc(100vw - 32px));max-height:calc(100vh - 48px);border:1px solid var(--line);border-radius:var(--r);background:var(--bg);color:var(--fg);padding:20px}
+.sheetdlg{width:min(1600px,calc(100vw - 32px));max-height:calc(100vh - 48px);border:1px solid var(--line);border-radius:var(--r);background:var(--bg);color:var(--fg);padding:20px}
 .sheetdlg::backdrop{background:rgba(0,0,0,.55)}
 #sheetbody,#hdet{display:grid;gap:14px}
 details.sec{border-top:1px solid var(--line);padding-top:8px}
 details.sec summary{cursor:pointer;padding:4px 0}
 details.sec td{vertical-align:top}
 details.sec td:first-child{white-space:nowrap}
+.plist .head{display:grid;gap:2px}
+.plist .head .mono{overflow-wrap:anywhere}
+.plist .lsearch{width:100%}

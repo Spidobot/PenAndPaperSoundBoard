@@ -153,12 +153,23 @@ function renderScenes(){
    `<hr><button data-folder title="Dateiordner">${IMG('ordner')}<span>Dateiordner</span></button><button data-fx="pizza" title="Pizza"${lib&&!lib.fx.pizza?' disabled':''}>${IMG('pizza')}<span>Pizza</span></button>`;
 }
 function renderFx(){$('#fx').innerHTML=FX.map(([k,l])=>{const ok=lib&&lib.fx[k];return `<button data-fx="${k}" title="${ok?l:l+': Datei fehlt in /data/audio/Effects'}" aria-label="${l}"${ok?'':' disabled'}>${IMG(k)}</button>`}).join('')}
+/* Tippfehlertolerante Suche: Teilstring, Wortanfang oder kleine Abweichung pro Wort */
+const qs={music:'',bg:''};
+const norm=s=>s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\.mp3$/,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+function lev(a,b){if(Math.abs(a.length-b.length)>2)return 9;let p=[...Array(b.length+1).keys()];
+  for(let i=1;i<=a.length;i++){const c=[i];for(let j=1;j<=b.length;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return p[b.length]}
+function fuzzy(q,name){q=norm(q);if(!q)return true;const n=norm(name);if(n.includes(q))return true;const words=n.split(' ');
+  return q.split(' ').every(t=>{const tol=t.length>=7?2:t.length>=4?1:0;
+    return words.some(w=>w.startsWith(t)||(t.length>2&&w.includes(t))||lev(t,w)<=tol||lev(t,w.slice(0,t.length))<=tol)})}
 function renderList(id){
-  if(!st||!lib)return;const c=st.ch[id],[title,dir]=CH[id],el=$(`.plist[data-ch="${id}"]`),items=lib[dir]||[];
+  if(!st||!lib)return;const c=st.ch[id],[title,dir]=CH[id],el=$(`.plist[data-ch="${id}"]`),all=lib[dir]||[],items=all.filter(n=>fuzzy(qs[id],n));
+  // Neu zeichnen ohne Sprung: Scrollposition und Suchfeld (Fokus, Cursor) merken
+  const oldUl=el.querySelector('ul'),scroll=oldUl?oldUl.scrollTop:0,inp=el.querySelector('.lsearch'),focused=inp&&document.activeElement===inp,caret=focused?inp.selectionStart:0;
   const cur=c.file&&c.file.startsWith(dir+'/'+st.scene+'/')?c.file.split('/').pop():null;
   const a=pl.a[id];
-  el.innerHTML=`<div class="spread"><h3>${title}</h3><span class="small mut mono">/data/audio/${dir}/${esc(st.scene)}</span></div>
-   <ul>${items.map(n=>`<li><button data-pick="${id}" data-f="${esc(dir+'/'+st.scene+'/'+n)}" aria-current="${n===cur}" class="${sel[id]===dir+'/'+st.scene+'/'+n?'sel':''}" title="Klick: auswählen · Doppelklick oder Play: abspielen">${n===cur&&c.playing?'▶ ':''}${esc(n.replace(/\.mp3$/i,''))}</button></li>`).join('')||'<li class="empty small">Keine MP3 in diesem Ordner.</li>'}</ul>
+  el.innerHTML=`<div class="head"><h3>${title}</h3><span class="small mut mono">/data/audio/${dir}/${esc(st.scene)}</span></div>
+   <input type="search" class="lsearch" data-ls="${id}" value="${esc(qs[id])}" placeholder="${title} durchsuchen… (${all.length})" aria-label="${title} durchsuchen">
+   <ul>${items.map(n=>`<li><button data-pick="${id}" data-f="${esc(dir+'/'+st.scene+'/'+n)}" aria-current="${n===cur}" class="${sel[id]===dir+'/'+st.scene+'/'+n?'sel':''}" title="Klick: auswählen · Doppelklick oder Play: abspielen">${n===cur&&c.playing?'▶ ':''}${esc(n.replace(/\.mp3$/i,''))}</button></li>`).join('')||`<li class="empty small">${all.length?'Kein Treffer.':'Keine MP3 in diesem Ordner.'}</li>`}</ul>
    <div class="small"><span class="mono" data-pos="${id}">--:-- / --:--</span> ${c.file?esc(c.file.split('/').pop().replace(/\.mp3$/i,'')):'<span class="mut">nichts gewählt</span>'}</div>
    <div class="prog"><i data-prog="${id}"></i></div>
    <div class="pbar">
@@ -168,6 +179,8 @@ function renderList(id){
      <button class="ib" data-act="rep" data-ch="${id}" title="Wiederholen" aria-pressed="${c.repeat}">${IMG('rep1','Wiederholen')}</button>
      <button class="ib" data-act="once" data-ch="${id}" title="Einmal abspielen" aria-pressed="${!c.repeat}">${IMG('once','Einmal')}</button>
    </div>`;
+  el.querySelector('ul').scrollTop=scroll;
+  if(focused){const n=el.querySelector('.lsearch');n.focus();n.setSelectionRange(caret,caret)}
 }
 function renderSound(){renderScenes();renderFx();renderList('music');renderList('bg');
   if(st){$('#onair').hidden=!(st.ch.music.playing||st.ch.bg.playing);$('#lstn').textContent=st.listeners+' Zuhörer';$('#bertha').checked=st.berthaAt>0;if(document.activeElement!==$('#fxvol')){$('#fxvol').value=st.fxVolume;$('#fxvolv').textContent=st.fxVolume}}}
@@ -185,6 +198,7 @@ $('#m-sound').addEventListener('click',e=>{
     if(a==='play'&&sel[k]&&sel[k]!==st.ch[k].file){cmd({action:'pick',ch:k,file:sel[k]});return} // ausgewählten Titel starten
     cmd(a==='rep'||a==='once'?{action:'repeat',ch:k,value:a==='rep'}:{action:a,ch:k})}
 });
+$('#m-sound').addEventListener('input',e=>{const id=e.target.dataset.ls;if(!id)return;qs[id]=e.target.value;renderList(id)});
 let volT;$('#m-sound').addEventListener('input',e=>{const id=e.target.dataset.chvol;if(!id)return;$(`[data-volv="${id}"]`).textContent=e.target.value;
   clearTimeout(volT);volT=setTimeout(()=>cmd({action:'volume',ch:id,value:+e.target.value}),120)});
 /* Upload */
