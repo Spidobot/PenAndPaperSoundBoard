@@ -49,6 +49,7 @@
             </div>
             <label class="drop" for="upfile" id="drop">MP3 hierher ziehen oder klicken<input type="file" id="upfile" multiple accept=".mp3,audio/mpeg" hidden></label>
             <div class="prog" id="uplProg" hidden><i></i></div>
+            <div id="fxDiag"></div>
             <p class="small mut">Nur MP3. Gleichnamige Dateien werden ersetzt. Effekt-Knöpfe brauchen genau diese Namen: Schatztruhe, Kuh, Avengers, Bertha, QuestHinzugefuegt, QuestAbgeschlossen, Pizza (.mp3).</p>
           </div>
           <div class="plists">
@@ -240,9 +241,20 @@ $('#m-sound').addEventListener('input',e=>{const id=e.target.dataset.ls;if(!id)r
 let volT;$('#m-sound').addEventListener('input',e=>{const id=e.target.dataset.chvol;if(!id)return;$(`[data-volv="${id}"]`).textContent=e.target.value;
   clearTimeout(volT);volT=setTimeout(()=>cmd({action:'volume',ch:id,value:+e.target.value}),120)});
 /* Upload */
-function showUpl(){$('#upl').hidden=false;const sc=SCENES.find(s=>s[0]===st.scene);$('#uplScene').textContent=sc?sc[1]:st.scene;
+function showUpl(){setTimeout(fxDiag,0);$('#upl').hidden=false;const sc=SCENES.find(s=>s[0]===st.scene);$('#uplScene').textContent=sc?sc[1]:st.scene;
   const t=$('#uplTarget').value;$('#uplPath').textContent=t==='Effects'?'/data/audio/Effects/':`/data/audio/${t}/${st.scene}/`}
-$('#uplTarget').onchange=showUpl;$('#uplClose').onclick=()=>$('#upl').hidden=true;
+$('#uplTarget').onchange=showUpl;
+async function fxDiag(){if($('#uplTarget').value!=='Effects'){$('#fxDiag').innerHTML='';return}let r;try{r=await api('/api/sound/fxinfo')}catch(e){return}
+  $('#fxDiag').innerHTML=`<div class="tw"><table class="small"><thead><tr><th>Effekt-Datei</th><th>Format</th><th>Größe</th><th>Prüfsumme</th><th></th></tr></thead><tbody>${r.map(x=>`<tr>
+    <td class="mono">${esc(x.file)}${x.similar&&x.similar.length?`<div class="err">Gefunden mit anderer Schreibweise: ${x.similar.map(esc).join(', ')}</div>`:''}</td>
+    <td>${x.status==='ok'?'<span class="pill ok">MP3 ok</span>':`<span class="pill warn">${esc(x.status)}</span>`}</td>
+    <td class="mono">${x.size!=null?Math.round(x.size/1024)+' KB':'–'}</td><td class="mono">${esc(x.md5||'–')}</td>
+    <td>${x.size!=null?`<button class="btn sm" type="button" data-fxtest="${esc(x.file)}">Test</button>`:''}</td></tr>`).join('')}</tbody></table></div>
+    <p class="small mut">„Test“ spielt die Datei direkt in diesem Browser ab, auch wenn „Ton in diesem Tab“ aus ist.</p>`}
+$('#fxDiag').addEventListener('click',e=>{const b=e.target.closest('[data-fxtest]');if(!b)return;const a=new Audio('/audio/'+b.dataset.fxtest.split('/').map(encodeURIComponent).join('/')+'?t='+Date.now());
+  a.onerror=()=>toast('Kann '+b.dataset.fxtest+' nicht abspielen: '+(a.error?('Code '+a.error.code+' '+(a.error.message||'')):'unbekannt'));
+  a.onplaying=()=>toast(b.dataset.fxtest+' spielt ('+a.duration.toFixed(1)+' s)');a.play().catch(x=>toast('Abspielen blockiert: '+x.message))});
+pl.onFxError=(file,why)=>toast('Effekt '+file+' konnte hier nicht abgespielt werden: '+why);$('#uplClose').onclick=()=>$('#upl').hidden=true;
 function upload(files){files=[...files].filter(f=>/\.mp3$/i.test(f.name));if(!files.length)return toast('Nur MP3-Dateien');
   const fd=new FormData();fd.append('target',$('#uplTarget').value);fd.append('scene',st.scene);files.forEach(f=>fd.append('files',f));
   const x=new XMLHttpRequest(),bar=$('#uplProg');bar.hidden=false;

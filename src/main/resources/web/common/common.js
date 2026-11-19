@@ -26,7 +26,8 @@ class Player{
       if(el.readyState>=1)sync();else el.addEventListener('loadedmetadata',sync,{once:true});
     }}
   setMaster(v){this.master=v;if(this.state)this.apply(this.state)}
-  fx(file){if(!this.enabled)return;const a=new Audio(this.url(file));a.volume=Math.max(0,Math.min(1,this.master*((this.state?.fxVolume??80)/100)));a.play().catch(()=>{})}
+  fx(file){if(!this.enabled)return;const a=new Audio(this.url(file));
+    a.addEventListener('error',()=>this.onFxError&&this.onFxError(file,a.error?('Code '+a.error.code+(a.error.message?': '+a.error.message:'')):'unbekannt'));a.volume=Math.max(0,Math.min(1,this.master*((this.state?.fxVolume??80)/100)));a.play().catch(e=>this.onFxError&&this.onFxError(file,e.name+': '+e.message))}
 }
 
 /** Abstimmungs-Übersicht: Zeilen = Termine, Spalten = Personen. mine = eigene Konto-ID (Spieler), sonst null. */

@@ -137,6 +137,29 @@ public final class Sound {
 
     long listeners() { return clients.stream().filter(c -> Boolean.TRUE.equals(c.ctx().attribute("player"))).count(); }
 
+    /** Diagnose der Effekt-Dateien: Pfad, Format, Größe, Prüfsumme. */
+    public List<Map<String, Object>> fxInfo() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        FX.forEach((k, f) -> {
+            Path p = root.resolve("Effects").resolve(f);
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("key", k); m.put("file", "Effects/" + f); m.put("path", p.toString()); m.put("status", check(p));
+            try {
+                if (Files.isRegularFile(p)) {
+                    m.put("size", Files.size(p));
+                    m.put("md5", HeldenJar.md5(p).substring(0, 8));
+                    m.put("modified", Files.getLastModifiedTime(p).toString());
+                }
+            } catch (Exception e) { m.put("error", e.getMessage()); }
+            // ähnlich benannte Dateien im Ordner (z. B. falsche Groß-/Kleinschreibung)
+            try (var s = Files.list(root.resolve("Effects"))) {
+                m.put("similar", s.map(x -> x.getFileName().toString()).filter(n -> !n.equals(f) && n.equalsIgnoreCase(f)).toList());
+            } catch (Exception e) { m.put("similar", List.of()); }
+            out.add(m);
+        });
+        return out;
+    }
+
     /** Prüft, ob die Datei eine echte MP3 (MPEG Layer III) ist. Browser können z. B. kein MP2. */
     static String check(Path p) {
         if (!Files.isRegularFile(p)) return "fehlt";

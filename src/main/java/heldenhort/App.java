@@ -86,6 +86,7 @@ public final class App {
             ctx.json(Map.of("saved", saved));
         });
         m.sse("/api/sound/events", c -> sound.subscribe(c, false));
+        m.get("/api/sound/fxinfo", ctx -> ctx.json(sound.fxInfo()));
         m.post("/api/sound/cmd", ctx -> { sound.command(ctx.bodyAsClass(Map.class)); ctx.json(sound.state()); });
 
         m.get("/api/config", ctx -> {
