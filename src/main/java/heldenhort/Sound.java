@@ -216,7 +216,7 @@ public final class Sound {
         });
         Map<String, Object> s = new LinkedHashMap<>();
         s.put("type", "state"); s.put("scene", scene); s.put("ch", chs); s.put("berthaAt", berthaAt); s.put("fxVolume", fxVolume);
-        s.put("serverNow", System.currentTimeMillis()); s.put("listeners", listeners()); s.put("listenerNames", listenerNames()); s.put("fxSeq", fxSeq);
+        s.put("serverNow", System.currentTimeMillis()); s.put("listeners", listeners()); s.put("fxSeq", fxSeq);
         return s;
     }
 
@@ -256,10 +256,9 @@ public final class Sound {
     }
 
     private final Map<Object, Long> pollers = new ConcurrentHashMap<>();
-    private final Map<Object, String> pollerNames = new ConcurrentHashMap<>();
 
     /** Spieler, der gerade wirklich zuhört (Ton an, Lautstärke > 0). */
-    public void polled(Object id, String name) { if (id != null) { pollers.put(id, System.currentTimeMillis()); pollerNames.put(id, name); } }
+    public void polled(Object id) { if (id != null) pollers.put(id, System.currentTimeMillis()); }
 
     /** Zuhörer: Spieler, die in den letzten 5 s mit eingeschaltetem Ton abgefragt haben. Nur online zählt nicht. */
     long listeners() {
@@ -268,7 +267,6 @@ public final class Sound {
         return pollers.size();
     }
 
-    List<String> listenerNames() { listeners(); return pollers.keySet().stream().map(pollerNames::get).sorted().toList(); }
 
     /** Effekt-Adresse mit Änderungszeit: eine ersetzte Datei bekommt eine neue Adresse, der Browser lädt sie neu. */
     String fxUrl(String f) {

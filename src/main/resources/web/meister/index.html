@@ -274,7 +274,7 @@ let lastLib='',lastFile={music:null,bg:null};
 function renderSound(){renderScenes();renderFx();
   for(const id of ['music','bg']){const key=JSON.stringify([st&&st.scene,lib&&lib[CH[id][1]],qs[id]]);
     if(key!==lastFile[id+'k']){lastFile[id+'k']=key;renderList(id)}else updateList(id)}
-  if(st){$('#onair').hidden=!(st.ch.music.playing||st.ch.bg.playing);$('#lstn').textContent=st.listeners+' Zuhörer';$('#lstn').title=(st.listenerNames||[]).length?'Hören gerade zu: '+st.listenerNames.join(', '):'Gerade hört kein Spieler zu (Ton an und lauter als 0)';$('#bertha').checked=st.berthaAt>0;if(document.activeElement!==$('#fxvol')){$('#fxvol').value=st.fxVolume;$('#fxvolv').textContent=st.fxVolume}}}
+  if(st){$('#onair').hidden=!(st.ch.music.playing||st.ch.bg.playing);$('#lstn').textContent=st.listeners+' Zuhörer';$('#lstn').title='Spieler mit eingeschaltetem Ton';$('#bertha').checked=st.berthaAt>0;if(document.activeElement!==$('#fxvol')){$('#fxvol').value=st.fxVolume;$('#fxvolv').textContent=st.fxVolume}}}
 // Listen je Szene im Browser merken: Szenenwechsel zeigt sofort die bekannte Liste, die frische kommt nach
 const libs={};
 async function loadLib(){const sc=st.scene;if(libs[sc]){lib=libs[sc];renderSound()}

@@ -52,7 +52,7 @@ public final class App {
             boolean playerSide = a == s;
             a.get("/api/sound/state", ctx -> {
                 // Zuhörer = Spieler mit eingeschaltetem Ton und Lautstärke > 0 (meldet die Spielerseite bei jeder Abfrage)
-                if (playerSide && "1".equals(ctx.queryParam("hoert"))) { var acc = accounts.current(ctx); if (acc != null) sound.polled(acc.get("id"), str(acc.get("name"))); }
+                if (playerSide && "1".equals(ctx.queryParam("hoert"))) { var acc = accounts.current(ctx); if (acc != null) sound.polled(acc.get("id")); }
                 ctx.header("Cache-Control", "no-store"); ctx.json(sound.snapshot());
             });
             a.get("/api/sound/library", ctx -> ctx.json(sound.library(ctx.queryParamAsClass("scene", String.class).getOrDefault(sound.scene), ctx.queryParam("sid"))));
