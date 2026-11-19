@@ -11,23 +11,40 @@ async function api(path,opt={}){
 const mmss=s=>!isFinite(s)?'--:--':String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0');
 const ICON=k=>`/common/icons/${k}.png`;
 
-/** Spielt den Soundboard-Zustand vom Server ab (Meister-Tab mit Ton und Spieler). */
+/** Spielt den Soundboard-Zustand vom Server ab (Meister-Tab mit Ton und Spieler).
+ *  Jede neue Anweisung macht ältere, noch wartende (z. B. "abspielen, sobald geladen") ungültig. */
+const SILENT='data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
 class Player{
-  constructor(){this.a={music:new Audio(),bg:new Audio()};this.master=1;this.enabled=false;this.skew=0;this.state=null;
-    for(const k in this.a){this.a[k].preload='auto';this.a[k].addEventListener('ended',()=>this.onEnded&&this.onEnded(k))}}
-  url(f){return '/audio/'+f.split('/').map(encodeURIComponent).join('/')}
+  constructor(){this.a={music:new Audio(),bg:new Audio()};this.gen={music:0,bg:0};this.master=1;this.enabled=false;this.skew=0;this.state=null;
+    for(const k in this.a){const el=this.a[k];el.preload='metadata';
+      el.addEventListener('ended',()=>this.onEnded&&this.onEnded(k));
+      ['waiting','playing','pause','loadstart','canplay'].forEach(ev=>el.addEventListener(ev,()=>this.onStatus&&this.onStatus(k)))}}
+  url(f){const [p,q]=f.split('?');return '/audio/'+p.split('/').map(encodeURIComponent).join('/')+(q?'?'+q:'')}
+  /** Position laut Server, auf jetzt hochgerechnet */
+  pos(k){const c=this.state&&this.state.ch[k];if(!c)return 0;return c.playing?c.pos+(Date.now()+this.skew-this.state.serverNow)/1000:c.pos}
   apply(st){this.state=st;this.skew=st.serverNow-Date.now();
-    for(const k in this.a){const c=st.ch[k],el=this.a[k];
+    for(const k in this.a){const c=st.ch[k],el=this.a[k],g=++this.gen[k];
       el.loop=!!c.repeat;el.volume=Math.max(0,Math.min(1,c.volume/100*this.master));
-      if(!this.enabled||!c.file||!c.playing){if(!el.paused)el.pause();if(c.file&&el.dataset.f!==c.file){el.dataset.f=c.file;el.src=this.url(c.file)}continue}
-      if(el.dataset.f!==c.file){el.dataset.f=c.file;el.src=this.url(c.file)}
-      const want=()=>{let p=c.pos;if(el.duration&&isFinite(el.duration)&&c.repeat)p=p%el.duration;return p};
-      const sync=()=>{const p=want();if(Math.abs(el.currentTime-p)>1.5){try{el.currentTime=p}catch(e){}}el.play().catch(()=>{})};
+      if(c.file&&el.dataset.f!==c.file){el.dataset.f=c.file;el.src=this.url(c.file)}
+      if(!this.enabled||!c.file||!c.playing){if(!el.paused)el.pause();continue}
+      el.preload='auto';
+      const sync=()=>{if(g!==this.gen[k])return; // inzwischen kam eine neuere Anweisung
+        let p=this.pos(k);const d=el.duration;
+        if(d&&isFinite(d)){if(c.repeat)p=p%d;else if(p>=d){el.pause();return}}
+        if(Math.abs(el.currentTime-p)>2){try{el.currentTime=p}catch(e){}}
+        el.play().catch(()=>{})};
       if(el.readyState>=1)sync();else el.addEventListener('loadedmetadata',sync,{once:true});
     }}
-  setMaster(v){this.master=v;if(this.state)this.apply(this.state)}
-  fx(file){if(!this.enabled)return;const a=new Audio(this.url(file));
-    a.addEventListener('error',()=>this.onFxError&&this.onFxError(file,a.error?('Code '+a.error.code+(a.error.message?': '+a.error.message:'')):'unbekannt'));a.volume=Math.max(0,Math.min(1,this.master*((this.state?.fxVolume??80)/100)));a.play().catch(e=>this.onFxError&&this.onFxError(file,e.name+': '+e.message))}
+  /** sofort lokal anhalten (ohne auf den Server zu warten) */
+  pauseNow(k){this.gen[k]++;this.a[k].pause()}
+  setVolumeNow(k,v){this.a[k].volume=Math.max(0,Math.min(1,v/100*this.master))}
+  setMaster(v){this.master=v;if(this.state)for(const k in this.a)this.a[k].volume=Math.max(0,Math.min(1,this.state.ch[k].volume/100*v))}
+  /** Effekt-Spieler einmal beim Klick freischalten (Firefox spielt sonst nur, was direkt ein Klick auslöst) */
+  unlock(){if(this.fxPool)return;this.fxPool=[0,1,2,3].map(()=>{const a=new Audio(SILENT);a.play().catch(()=>{});return a});this.fxNext=0;
+    for(const k in this.a){const el=this.a[k];if(!el.src){el.src=SILENT;el.play().then(()=>el.pause()).catch(()=>{})}}}
+  fx(file){if(!this.enabled)return;let a;
+    if(this.fxPool){a=this.fxPool[this.fxNext++%this.fxPool.length];a.pause();a.src=this.url(file)}else a=new Audio(this.url(file));
+    a.onerror=()=>this.onFxError&&this.onFxError(file,a.error?('Code '+a.error.code+(a.error.message?': '+a.error.message:'')):'unbekannt');a.volume=Math.max(0,Math.min(1,this.master*((this.state?.fxVolume??80)/100)));a.play().catch(e=>this.onFxError&&this.onFxError(file,e.name+': '+e.message))}
 }
 
 /** Abstimmungs-Übersicht: Zeilen = Termine, Spalten = Personen. mine = eigene Konto-ID (Spieler), sonst null. */

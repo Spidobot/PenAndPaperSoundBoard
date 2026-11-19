@@ -89,7 +89,7 @@ public final class Sound {
         } else if (action.equals("fx")) {
             String f = FX.get(String.valueOf(c.get("key")));
             if (f == null) throw new IllegalArgumentException("Effekt unbekannt");
-            broadcast(Map.of("type", "fx", "file", "Effects/" + f));
+            broadcast(Map.of("type", "fx", "file", fxUrl(f)));
             return;
         } else {
             Channel k = ch.get(String.valueOf(c.get("ch")));
@@ -102,10 +102,18 @@ public final class Sound {
                     k.file = file; k.offset = 0; k.since = now; k.playing = true;
                 }
                 case "play" -> { if (k.file == null) throw new IllegalArgumentException("Kein Titel gewählt"); if (!k.playing) { k.since = now; k.playing = true; } }
-                case "pause" -> { k.offset = k.pos(); k.playing = false; }
+                case "pause" -> { k.offset = c.get("pos") instanceof Number n ? n.doubleValue() : k.pos(); k.playing = false; }
+                case "seek" -> {
+                    if (!(c.get("pos") instanceof Number n) || n.doubleValue() < 0) throw new IllegalArgumentException("Position fehlt");
+                    k.offset = n.doubleValue(); k.since = now;
+                }
                 case "stop" -> { k.offset = 0; k.playing = false; }
                 case "volume" -> k.volume = Math.max(0, Math.min(100, ((Number) c.get("value")).intValue()));
-                case "repeat" -> k.repeat = Boolean.TRUE.equals(c.get("value"));
+                case "repeat" -> {
+                    k.repeat = Boolean.TRUE.equals(c.get("value"));
+                    // aktuelle Position übernehmen, sonst springt ein schon mehrfach wiederholter Titel ans Ende
+                    if (c.get("pos") instanceof Number n) { k.offset = n.doubleValue(); k.since = now; }
+                }
                 case "ended" -> { if (!k.repeat && k.playing) { k.playing = false; k.offset = 0; } } // meldet ein Meister-Tab am Titelende
                 default -> throw new IllegalArgumentException("Aktion unbekannt: " + action);
             }
@@ -136,6 +144,14 @@ public final class Sound {
     }
 
     long listeners() { return clients.stream().filter(c -> Boolean.TRUE.equals(c.ctx().attribute("player"))).count(); }
+
+    /** Effekt-Adresse mit Änderungszeit: eine ersetzte Datei bekommt eine neue Adresse, der Browser lädt sie neu. */
+    String fxUrl(String f) {
+        Path p = root.resolve("Effects").resolve(f);
+        long v = 0;
+        try { v = Files.getLastModifiedTime(p).toMillis(); } catch (Exception ignored) { }
+        return "Effects/" + f + "?v=" + v;
+    }
 
     /** Diagnose der Effekt-Dateien: Pfad, Format, Größe, Prüfsumme. */
     public List<Map<String, Object>> fxInfo() {
@@ -188,7 +204,7 @@ public final class Sound {
     private void tick() {
         if (berthaAt > 0 && System.currentTimeMillis() >= berthaAt) {
             berthaAt = System.currentTimeMillis() + 3_600_000;
-            broadcast(Map.of("type", "fx", "file", "Effects/" + FX.get("ziege")));
+            broadcast(Map.of("type", "fx", "file", fxUrl(FX.get("ziege"))));
             broadcast(state());
         }
     }

@@ -71,7 +71,7 @@ public final class App {
         m.post("/api/admin/logout", ctx -> { ctx.removeCookie("hhm", "/"); ctx.json(Map.of("ok", true)); });
         m.post("/api/sound/upload", ctx -> {
             String target = ctx.formParam("target"), scene = ctx.formParam("scene");
-            if (!List.of("Music", "Sounds", "Effects").contains(target)) throw new IllegalArgumentException("Ziel unbekannt");
+            if (!List.of("Music", "Sounds").contains(target)) throw new IllegalArgumentException("Ziel unbekannt (Effekte werden nicht über die Oberfläche hochgeladen)");
             Path dir = target.equals("Effects") ? sound.root().resolve("Effects") : sound.root().resolve(target).resolve(String.valueOf(scene));
             if (!target.equals("Effects") && !Sound.SCENES.contains(scene)) throw new IllegalArgumentException("Szene unbekannt");
             try { Files.createDirectories(dir); } catch (Exception e) { throw new IllegalStateException("Ordner " + dir + " kann nicht angelegt werden: keine Schreibrechte für den Container"); }

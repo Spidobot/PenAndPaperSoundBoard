@@ -1,0 +1,95 @@
+package heldenhort;
+
+import de.rototor.pdfbox.graphics2d.PdfBoxGraphics2D;
+import java.awt.*;
+import java.awt.print.PageFormat;
+import java.awt.print.Paper;
+import java.awt.print.Printable;
+import java.io.ByteArrayOutputStream;
+import java.nio.file.Path;
+import java.util.List;
+import javax.swing.*;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+
+/**
+ * Heldenbogen als PDF – gezeichnet von der helden.jar selbst.
+ * Weg wie beim Drucken in der Helden-Software: Held laden, über die Plugin-Schnittstelle
+ * (DatenAustausch3Impl.printHeld) das Printable holen und jede Seite in eine PDF-Seite zeichnen.
+ * Vorher berechnet XMLDatenGenerator.genDaten die Bewaffnung; ohne das bricht die Jar bei den Kampfseiten ab.
+ * Die Hintergrundgeschichte wird auf Wunsch als eigene Seiten angehängt.
+ */
+public final class Pdf {
+    private static final float W = PDRectangle.A4.getWidth(), H = PDRectangle.A4.getHeight();
+
+    /** Synchronisiert auf die Jar: deren Einstellungen sind statisch. */
+    public static byte[] heldenbogen(HeldenJar jar, Path heroXml, String title, String backgroundHtml) throws Exception {
+        synchronized (jar) {
+            ClassLoader l = jar.loader();
+            ClassLoader old = Thread.currentThread().getContextClassLoader();
+            Thread.currentThread().setContextClassLoader(l);
+            try (PDDocument doc = new PDDocument()) {
+                l.loadClass("helden.framework.settings.Setting").getMethod("initAll").invoke(null);
+                Object xp = l.loadClass("helden.framework.held.persistenz.XMLPersistierer").getConstructor().newInstance();
+                Object held = ((List<?>) Creation.call(xp, "ladeHelden", heroXml.toFile())).get(0);
+                Creation.call(l.loadClass("helden.plugin.datenxmlplugin.XMLDatenGenerator"), "genDaten", held, 3);
+                Class<?> listC = l.loadClass("helden.gui.E"); // HeldenListe: die Auswahl, aus der printHeld druckt
+                @SuppressWarnings("unchecked")
+                JList<Object> list = (JList<Object>) listC.getConstructor(javax.swing.event.ListSelectionListener.class)
+                        .newInstance((javax.swing.event.ListSelectionListener) e -> { });
+                list.setListData(new Object[]{held});
+                list.setSelectedIndex(0);
+                Object da = l.loadClass("helden.plugin.datenxmlplugin.DatenAustausch3Impl").getConstructor(listC).newInstance(list);
+                Printable pr = (Printable) Creation.call(da, "printHeld");
+
+                PageFormat pf = new PageFormat();
+                Paper paper = new Paper();
+                paper.setSize(W, H);
+                paper.setImageableArea(0, 0, W, H);
+                pf.setPaper(paper);
+                for (int i = 0; i < 60; i++) {
+                    PdfBoxGraphics2D g = new PdfBoxGraphics2D(doc, W, H);
+                    int r;
+                    try { r = pr.print(g, pf, i); }
+                    catch (Exception pageFailed) { g.dispose(); continue; } // eine kaputte Seite soll nicht den ganzen Bogen verhindern
+                    g.dispose();
+                    if (r != Printable.PAGE_EXISTS) break;
+                    addForm(doc, g);
+                }
+                if (backgroundHtml != null && !backgroundHtml.isBlank()) appendHtml(doc, title, backgroundHtml);
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                doc.save(out);
+                return out.toByteArray();
+            } finally { Thread.currentThread().setContextClassLoader(old); }
+        }
+    }
+
+    private static void addForm(PDDocument doc, PdfBoxGraphics2D g) throws Exception {
+        PDPage page = new PDPage(PDRectangle.A4);
+        doc.addPage(page);
+        try (PDPageContentStream cs = new PDPageContentStream(doc, page)) { cs.drawForm(g.getXFormObject()); }
+    }
+
+    /** Hintergrundgeschichte als Seiten (HTML wie im Editor, gesetzt von Swing). */
+    private static void appendHtml(PDDocument doc, String title, String html) throws Exception {
+        float margin = 50, width = W - 2 * margin, pageH = H - 2 * margin;
+        JEditorPane ed = new JEditorPane("text/html", "<html><body style='font-family:serif;font-size:11pt'>"
+                + "<h2>" + escape(title) + " – Hintergrundgeschichte</h2>" + html + "</body></html>");
+        ed.setSize(new Dimension((int) width, Integer.MAX_VALUE / 4));
+        int total = ed.getPreferredSize().height;
+        ed.setSize(new Dimension((int) width, total));
+        for (int y = 0; y < total; y += (int) pageH) {
+            PdfBoxGraphics2D g = new PdfBoxGraphics2D(doc, W, H);
+            g.translate(margin, margin);
+            g.setClip(0, 0, (int) width, (int) pageH);
+            g.translate(0, -y);
+            ed.print(g);
+            g.dispose();
+            addForm(doc, g);
+        }
+    }
+
+    private static String escape(String s) { return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"); }
+}

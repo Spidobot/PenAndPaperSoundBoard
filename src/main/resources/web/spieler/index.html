@@ -362,7 +362,8 @@ function startStream(){pl.enabled=true;if(es)return;es=new EventSource('/api/sou
   es.onerror=()=>{$('#pstat').textContent='Verbindung unterbrochen, verbinde neu…'}}
 function stopStream(){pl.enabled=false;if(es){es.close();es=null}for(const k in pl.a)pl.a[k].pause()}
 function sstat(m){$('#pstat').textContent=(m.ch.music.playing||m.ch.bg.playing)?'Verbunden. Du hörst den Spieltisch.':'Verbunden. Gerade ist es still.'}
-$('#pplay').onclick=()=>{const on=$('#pplay').getAttribute('aria-pressed')!=='true';$('#pplay').setAttribute('aria-pressed',on);$('#pplay').textContent=on?'❚❚':'▶';
+pl.onFxError=(file,why)=>toast('Effekt konnte nicht abgespielt werden: '+why);
+$('#pplay').onclick=()=>{pl.unlock();const on=$('#pplay').getAttribute('aria-pressed')!=='true';$('#pplay').setAttribute('aria-pressed',on);$('#pplay').textContent=on?'❚❚':'▶';
   if(on)startStream();else{stopStream();$('#pstat').textContent='Ton aus.'}};
 $('#pvol').oninput=e=>{pl.setMaster(e.target.value/100);LS.set('hh-vol',+e.target.value)};
 setInterval(()=>{const on=pl.enabled&&Object.values(pl.a).some(a=>!a.paused);$$('#wave i').forEach(i=>i.style.height=(on?4+Math.random()*30*($('#pvol').value/100):4)+'px')},200);

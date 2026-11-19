@@ -44,13 +44,13 @@
           <div class="card" id="upl" hidden>
             <div class="spread"><h3>Dateiordner: <span id="uplScene"></span></h3><button class="btn sm" id="uplClose">Schließen</button></div>
             <div class="grid2">
-              <div class="field"><label class="label" for="uplTarget">Ziel</label><select id="uplTarget"><option value="Music">Musik</option><option value="Sounds">Hintergrundgeräusche</option><option value="Effects">Effekte (Schatztruhe.mp3, Kuh.mp3 …)</option></select></div>
+              <div class="field"><label class="label" for="uplTarget">Ziel</label><select id="uplTarget"><option value="Music">Musik</option><option value="Sounds">Hintergrundgeräusche</option></select></div>
               <div class="field"><span class="label">Ordner</span><div class="mono small" id="uplPath"></div></div>
             </div>
             <label class="drop" for="upfile" id="drop">MP3 hierher ziehen oder klicken<input type="file" id="upfile" multiple accept=".mp3,audio/mpeg" hidden></label>
             <div class="prog" id="uplProg" hidden><i></i></div>
-            <div id="fxDiag"></div>
-            <p class="small mut">Nur MP3. Gleichnamige Dateien werden ersetzt. Effekt-Knöpfe brauchen genau diese Namen: Schatztruhe, Kuh, Avengers, Bertha, QuestHinzugefuegt, QuestAbgeschlossen, Pizza (.mp3).</p>
+            <p class="small mut">Nur MP3. Gleichnamige Dateien werden ersetzt. Effekte werden nicht hier hochgeladen, sondern per FTP nach /data/audio/Effects.</p>
+            <details class="sec"><summary class="small">Effekt-Dateien prüfen</summary><div id="fxDiag"></div></details>
           </div>
           <div class="plists">
             <div class="card plist" data-ch="music"></div>
@@ -175,18 +175,19 @@ addEventListener('hashchange',route);
 const SCENES=[['Village','Dorf / Stadt','dorf'],['Travel','Reisen','reisen'],['Dungeon','Dungeon','dungeon'],['Castle','Burg','burg'],['Fight','Kampf','kampf']];
 const FX=[['truhe','Schatztruhe öffnen'],['kuh','Cliffhanger-Kuh'],['avengers','Avengers'],['ziege','Bertha (solo)'],['qadd','Quest hinzugefügt'],['qdone','Quest abgeschlossen']];
 const CH={music:['Musik','Music'],bg:['Hintergrundgeräusche','Sounds']};
-let st=null,lib=null,compact=false;const pl=new Player();
+let st=null,lib=null;const pl=new Player();
+const starting={music:null,bg:null}; // Titel, der gerade gestartet wurde und noch lädt
 const IMG=(k,alt='')=>`<img class="ic" src="${ICON(k)}" alt="${esc(alt)}">`;
 const cmd=b=>api('/api/sound/cmd',{method:'POST',body:b}).catch(e=>toast(e.message));
 try{$('#hear').checked=localStorage.getItem('hh-hear')!=='0'}catch(e){$('#hear').checked=true}
 pl.enabled=$('#hear').checked;
+document.addEventListener('pointerdown',()=>pl.unlock(),{once:true}); // Effekt-Spieler beim ersten Klick freischalten
 pl.onEnded=k=>cmd({action:'ended',ch:k});
+pl.onStatus=k=>updateStatus(k);
 $('#hear').onchange=e=>{pl.enabled=e.target.checked;try{localStorage.setItem('hh-hear',e.target.checked?'1':'0')}catch(_){};if(st)pl.apply(st)};
 
 function renderScenes(){
-  $('#scenes').className='scenes'+(compact?' compact':'');
-  $('#scenes').innerHTML=`<button data-menu title="Menü">${IMG('menu')}<span>Menü</span></button>`+
-   SCENES.map(([k,l,i])=>`<button data-sc="${k}" aria-current="${st&&k===st.scene}" title="${l}">${IMG(i)}<span>${l}</span></button>`).join('')+
+  $('#scenes').innerHTML=SCENES.map(([k,l,i])=>`<button data-sc="${k}" aria-current="${st&&k===st.scene}" title="${l}">${IMG(i)}<span>${l}</span></button>`).join('')+
    `<hr><button data-folder title="Dateiordner">${IMG('ordner')}<span>Dateiordner</span></button><button data-fx="pizza" title="${lib&&lib.fx.pizza!=='ok'?'Pizza: '+esc(lib.fx.pizza==='fehlt'?'Datei fehlt in /data/audio/Effects':lib.fx.pizza):'Pizza'}"${lib&&lib.fx.pizza!=='ok'?' disabled':''}>${IMG('pizza')}<span>Pizza</span></button>`;
 }
 function renderFx(){$('#fx').innerHTML=FX.map(([k,l])=>{const s=lib&&lib.fx[k],ok=s==='ok'||s===true;
@@ -200,51 +201,78 @@ function lev(a,b){if(Math.abs(a.length-b.length)>2)return 9;let p=[...Array(b.le
 function fuzzy(q,name){q=norm(q);if(!q)return true;const n=norm(name);if(n.includes(q))return true;const words=n.split(' ');
   return q.split(' ').every(t=>{const tol=t.length>=7?2:t.length>=4?1:0;
     return words.some(w=>w.startsWith(t)||(t.length>2&&w.includes(t))||lev(t,w)<=tol||lev(t,w.slice(0,t.length))<=tol)})}
+/** Liste (nur bei Szene/Bibliothek/Suche/Titelwechsel neu) und Steuerleiste (bei jedem Zustand) getrennt zeichnen */
 function renderList(id){
   if(!st||!lib)return;const c=st.ch[id],[title,dir]=CH[id],el=$(`.plist[data-ch="${id}"]`),all=lib[dir]||[],items=all.filter(n=>fuzzy(qs[id],n));
-  // Neu zeichnen ohne Sprung: Scrollposition und Suchfeld (Fokus, Cursor) merken
   const oldUl=el.querySelector('ul'),scroll=oldUl?oldUl.scrollTop:0,inp=el.querySelector('.lsearch'),focused=inp&&document.activeElement===inp,caret=focused?inp.selectionStart:0;
-  const cur=c.file&&c.file.startsWith(dir+'/'+st.scene+'/')?c.file.split('/').pop():null;
-  const a=pl.a[id];
   el.innerHTML=`<div class="head"><h3>${title}</h3><span class="small mut mono">/data/audio/${dir}/${esc(st.scene)}</span></div>
    <input type="search" class="lsearch" data-ls="${id}" value="${esc(qs[id])}" placeholder="${title} durchsuchen… (${all.length})" aria-label="${title} durchsuchen">
-   <ul>${items.map(n=>`<li><button data-pick="${id}" data-f="${esc(dir+'/'+st.scene+'/'+n)}" aria-current="${n===cur}" class="${sel[id]===dir+'/'+st.scene+'/'+n?'sel':''}" title="Klick: auswählen · Doppelklick oder Play: abspielen">${n===cur&&c.playing?'▶ ':''}${esc(n.replace(/\.mp3$/i,''))}</button></li>`).join('')||`<li class="empty small">${all.length?'Kein Treffer.':'Keine MP3 in diesem Ordner.'}</li>`}</ul>
-   <div class="small"><span class="mono" data-pos="${id}">--:-- / --:--</span> ${c.file?esc(c.file.split('/').pop().replace(/\.mp3$/i,'')):'<span class="mut">nichts gewählt</span>'}</div>
-   <div class="prog"><i data-prog="${id}"></i></div>
+   <ul>${items.map(n=>`<li><button data-pick="${id}" data-f="${esc(dir+'/'+st.scene+'/'+n)}" title="Klick: auswählen · Doppelklick oder Play: abspielen"><span class="mk"></span>${esc(n.replace(/\.mp3$/i,''))}</button></li>`).join('')||`<li class="empty small">${all.length?'Kein Treffer.':'Keine MP3 in diesem Ordner.'}</li>`}</ul>
+   <div class="small"><span class="mono" data-pos="${id}">--:-- / --:--</span> <span data-now="${id}"></span> <span class="loading" data-load="${id}" hidden>lädt …</span></div>
+   <input type="range" class="seek" data-seek="${id}" min="0" max="0" step="1" value="0" aria-label="${title}: Position">
    <div class="pbar">
-     <button class="ib" data-act="play" data-ch="${id}" title="Abspielen" aria-pressed="${c.playing}">${IMG('play','Abspielen')}</button>
-     <button class="ib" data-act="pause" data-ch="${id}" title="Pause">${IMG('pause','Pause')}</button>
+     <button class="ib tog" data-act="toggle" data-ch="${id}" title="Abspielen / Pause"></button>
      <span title="Lautstärke">${IMG('vol','Lautstärke')}</span><input type="range" min="0" max="100" value="${c.volume}" data-chvol="${id}" aria-label="Lautstärke ${title}"><span class="mono small" data-volv="${id}">${c.volume}</span>
-     <button class="ib" data-act="rep" data-ch="${id}" title="Wiederholen" aria-pressed="${c.repeat}">${IMG('rep1','Wiederholen')}</button>
-     <button class="ib" data-act="once" data-ch="${id}" title="Einmal abspielen" aria-pressed="${!c.repeat}">${IMG('once','Einmal')}</button>
+     <button class="ib tog" data-act="repeat" data-ch="${id}"></button>
    </div>`;
   el.querySelector('ul').scrollTop=scroll;
   if(focused){const n=el.querySelector('.lsearch');n.focus();n.setSelectionRange(caret,caret)}
+  updateList(id);fitLists();
 }
-function renderSound(){renderScenes();renderFx();renderList('music');renderList('bg');
+/** Markierungen, Knöpfe und Anzeige aktualisieren, ohne die Liste neu zu bauen */
+function updateList(id){if(!st)return;const c=st.ch[id],el=$(`.plist[data-ch="${id}"]`);if(!el||!el.querySelector('ul'))return;
+  el.querySelectorAll('[data-pick]').forEach(b=>{const cur=b.dataset.f===c.file;b.setAttribute('aria-current',cur);b.classList.toggle('sel',sel[id]===b.dataset.f);
+    b.classList.toggle('starting',starting[id]===b.dataset.f);b.querySelector('.mk').textContent=cur&&c.playing?'▶ ':starting[id]===b.dataset.f?'… ':''});
+  const tg=el.querySelector('[data-act="toggle"]');tg.innerHTML=c.playing?IMG('pause','Pause'):IMG('play','Abspielen');tg.setAttribute('aria-pressed',c.playing);tg.title=c.playing?'Pause':'Abspielen';
+  const rp=el.querySelector('[data-act="repeat"]');rp.innerHTML=c.repeat?IMG('rep1','Wiederholen'):IMG('once','Einmal');rp.setAttribute('aria-pressed',c.repeat);rp.title=c.repeat?'Wiederholen (klicken: nur einmal spielen)':'Einmal spielen (klicken: wiederholen)';
+  el.querySelector(`[data-now="${id}"]`).textContent=c.file?c.file.split('/').pop().replace(/\.mp3$/i,''):'nichts gewählt';
+  const vol=el.querySelector('[data-chvol]');if(document.activeElement!==vol){vol.value=c.volume;el.querySelector('[data-volv]').textContent=c.volume}
+  updateStatus(id)}
+function updateStatus(id){const c=st&&st.ch[id],a=pl.a[id],l=$(`[data-load="${id}"]`);if(!l||!c)return;
+  const loading=c.playing&&pl.enabled&&(a.readyState<3||a.seeking);l.hidden=!(loading||starting[id]);
+  if(starting[id]&&c.file===starting[id]&&(!pl.enabled||(!a.paused&&a.readyState>=3))){starting[id]=null;updateList(id)}}
+/** Listen bis zum unteren Fensterrand strecken */
+function fitLists(){if($('#m-sound').hidden)return;$$('.plist ul').forEach(ul=>{const card=ul.closest('.plist'),below=card.getBoundingClientRect().bottom-ul.getBoundingClientRect().bottom;
+  ul.style.height=Math.max(180,innerHeight-ul.getBoundingClientRect().top-below-24)+'px'})}
+addEventListener('resize',fitLists);
+let lastLib='',lastFile={music:null,bg:null};
+function renderSound(){renderScenes();renderFx();
+  for(const id of ['music','bg']){const key=JSON.stringify([st&&st.scene,lib&&lib[CH[id][1]],qs[id]]);
+    if(key!==lastFile[id+'k']){lastFile[id+'k']=key;renderList(id)}else updateList(id)}
   if(st){$('#onair').hidden=!(st.ch.music.playing||st.ch.bg.playing);$('#lstn').textContent=st.listeners+' Zuhörer';$('#bertha').checked=st.berthaAt>0;if(document.activeElement!==$('#fxvol')){$('#fxvol').value=st.fxVolume;$('#fxvolv').textContent=st.fxVolume}}}
 async function loadLib(){try{lib=await api('/api/sound/library?scene='+encodeURIComponent(st.scene))}catch(e){toast(e.message)}renderSound()}
 const sel={music:null,bg:null}; // Auswahl pro Tab, läuft erst nach Play/Doppelklick
-$('#m-sound').addEventListener('dblclick',e=>{const b=e.target.closest('[data-pick]');if(!b)return;sel[b.dataset.pick]=b.dataset.f;cmd({action:'pick',ch:b.dataset.pick,file:b.dataset.f})});
+function start(id,file){starting[id]=file;sel[id]=file;updateList(id);cmd({action:'pick',ch:id,file})}
+$('#m-sound').addEventListener('dblclick',e=>{const b=e.target.closest('[data-pick]');if(b)start(b.dataset.pick,b.dataset.f)});
 $('#m-sound').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||b.disabled)return;
-  if(b.dataset.menu!==undefined){compact=!compact;renderScenes()}
-  else if(b.dataset.sc)cmd({action:'scene',scene:b.dataset.sc});
+  if(b.classList.contains('tog')){b.classList.remove('bump');void b.offsetWidth;b.classList.add('bump')}
+  if(b.dataset.sc)cmd({action:'scene',scene:b.dataset.sc});
   else if(b.dataset.folder!==undefined)showUpl();
   else if(b.dataset.fx){b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),600);cmd({action:'fx',key:b.dataset.fx})}
-  else if(b.dataset.pick){sel[b.dataset.pick]=b.dataset.f;$$(`[data-pick="${b.dataset.pick}"]`).forEach(x=>x.classList.toggle('sel',x===b))} // nur auswählen; nicht neu zeichnen, sonst kommt der Doppelklick nicht an
-  else if(b.dataset.act){const k=b.dataset.ch,a=b.dataset.act;
-    if(a==='play'&&sel[k]&&sel[k]!==st.ch[k].file){cmd({action:'pick',ch:k,file:sel[k]});return} // ausgewählten Titel starten
-    cmd(a==='rep'||a==='once'?{action:'repeat',ch:k,value:a==='rep'}:{action:a,ch:k})}
+  else if(b.dataset.pick){sel[b.dataset.pick]=b.dataset.f;updateList(b.dataset.pick)} // nur auswählen
+  else if(b.dataset.act==='toggle'){const k=b.dataset.ch,c=st.ch[k];
+    if(c.playing){pl.pauseNow(k);st.ch[k]={...c,playing:false};updateList(k);cmd({action:'pause',ch:k,pos:pl.a[k].currentTime||undefined})} // sofort still, ohne auf den Server zu warten
+    else if(sel[k]&&sel[k]!==c.file)start(k,sel[k]);
+    else if(c.file){starting[k]=c.file;updateList(k);cmd({action:'play',ch:k})}
+    else toast('Erst einen Titel wählen')}
+  else if(b.dataset.act==='repeat'){const k=b.dataset.ch,c=st.ch[k],a=pl.a[k];
+    const pos=pl.enabled&&!a.paused?a.currentTime:(a.duration&&isFinite(a.duration)?pl.pos(k)%a.duration:undefined);
+    cmd({action:'repeat',ch:k,value:!c.repeat,pos})}
 });
-$('#m-sound').addEventListener('input',e=>{const id=e.target.dataset.ls;if(!id)return;qs[id]=e.target.value;renderList(id)});
-let volT;$('#m-sound').addEventListener('input',e=>{const id=e.target.dataset.chvol;if(!id)return;$(`[data-volv="${id}"]`).textContent=e.target.value;
-  clearTimeout(volT);volT=setTimeout(()=>cmd({action:'volume',ch:id,value:+e.target.value}),120)});
+$('#m-sound').addEventListener('input',e=>{const t=e.target;
+  if(t.dataset.ls){qs[t.dataset.ls]=t.value;renderList(t.dataset.ls)}
+  if(t.dataset.chvol){const id=t.dataset.chvol;$(`[data-volv="${id}"]`).textContent=t.value;pl.setVolumeNow(id,+t.value); // sofort hörbar
+    clearTimeout(volT[id]);volT[id]=setTimeout(()=>cmd({action:'volume',ch:id,value:+t.value}),120)}
+  if(t.dataset.seek){seeking[t.dataset.seek]=true;$(`[data-pos="${t.dataset.seek}"]`).textContent=mmss(+t.value)+' / '+mmss(pl.a[t.dataset.seek].duration)}});
+const volT={},seeking={};
+$('#m-sound').addEventListener('change',e=>{const t=e.target;if(!t.dataset.seek)return;const id=t.dataset.seek;seeking[id]=false;
+  const a=pl.a[id];if(pl.enabled){try{a.currentTime=+t.value}catch(_){}}cmd({action:'seek',ch:id,pos:+t.value})});
 /* Upload */
 function showUpl(){setTimeout(fxDiag,0);$('#upl').hidden=false;const sc=SCENES.find(s=>s[0]===st.scene);$('#uplScene').textContent=sc?sc[1]:st.scene;
-  const t=$('#uplTarget').value;$('#uplPath').textContent=t==='Effects'?'/data/audio/Effects/':`/data/audio/${t}/${st.scene}/`}
+  const t=$('#uplTarget').value;$('#uplPath').textContent=`/data/audio/${t}/${st.scene}/`}
 $('#uplTarget').onchange=showUpl;
-async function fxDiag(){if($('#uplTarget').value!=='Effects'){$('#fxDiag').innerHTML='';return}let r;try{r=await api('/api/sound/fxinfo')}catch(e){return}
+async function fxDiag(){let r;try{r=await api('/api/sound/fxinfo')}catch(e){return}
   $('#fxDiag').innerHTML=`<div class="tw"><table class="small"><thead><tr><th>Effekt-Datei</th><th>Format</th><th>Größe</th><th>Prüfsumme</th><th></th></tr></thead><tbody>${r.map(x=>`<tr>
     <td class="mono">${esc(x.file)}${x.similar&&x.similar.length?`<div class="err">Gefunden mit anderer Schreibweise: ${x.similar.map(esc).join(', ')}</div>`:''}</td>
     <td>${x.status==='ok'?'<span class="pill ok">MP3 ok</span>':`<span class="pill warn">${esc(x.status)}</span>`}</td>
@@ -272,9 +300,11 @@ $('#logout').onclick=async e=>{e.preventDefault();await api('/api/admin/logout',
 let fxT;$('#fxvol').oninput=e=>{$('#fxvolv').textContent=e.target.value;clearTimeout(fxT);fxT=setTimeout(()=>cmd({action:'fxvolume',value:+e.target.value}),120)};
 $('#bertha').onchange=e=>cmd({action:'bertha',on:e.target.checked});
 setInterval(()=>{if(!st||!st.berthaAt){$('#berthaCd').textContent='--:--';return}$('#berthaCd').textContent=mmss((st.berthaAt-(Date.now()+pl.skew))/1000)},50);
-setInterval(()=>{for(const id in pl.a){const a=pl.a[id],p=$(`[data-pos="${id}"]`),g=$(`[data-prog="${id}"]`);if(!p||!st)continue;
-  const c=st.ch[id];let pos=pl.enabled&&!a.paused?a.currentTime:(c.playing?c.pos+(Date.now()+pl.skew-st.serverNow)/1000:c.pos);if(a.duration&&c.repeat)pos=pos%a.duration;
-  p.textContent=c.file?mmss(pos)+' / '+mmss(a.duration):'--:-- / --:--';if(g)g.style.width=a.duration?Math.min(100,pos/a.duration*100)+'%':'0'}},500);
+setInterval(()=>{for(const id in pl.a){const a=pl.a[id],p=$(`[data-pos="${id}"]`),s=$(`[data-seek="${id}"]`);if(!p||!st)continue;
+  const c=st.ch[id];let pos=pl.enabled&&!a.paused?a.currentTime:pl.pos(id);const d=a.duration&&isFinite(a.duration)?a.duration:0;if(d&&c.repeat)pos=pos%d;if(d&&!c.repeat)pos=Math.min(pos,d);
+  if(seeking[id])continue;
+  p.textContent=c.file?mmss(pos)+' / '+mmss(d||NaN):'--:-- / --:--';if(s){s.max=Math.floor(d);s.value=Math.floor(pos);s.disabled=!c.file||!d}
+  updateStatus(id)}},500);
 const setDark=d=>{document.documentElement.dataset.theme=d?'dark':'light';$('#darkm').checked=d;try{localStorage.setItem('hh-dark',d?'1':'0')}catch(_){}};
 $('#darkm').onchange=e=>setDark(e.target.checked);
 try{setDark(localStorage.getItem('hh-dark')!=='0')}catch(_){setDark(true)}
