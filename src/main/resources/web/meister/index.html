@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119h">
+<link rel="stylesheet" href="/common/app.css?v=20261119i">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -111,7 +111,7 @@
         <form class="row" id="accForm"><input type="text" id="accName" placeholder="Name" style="width:180px" aria-label="Name" autocomplete="off">
           <input type="text" id="accPw" placeholder="Startpasswort" style="width:240px" aria-label="Startpasswort" autocomplete="off">
           <button class="btn sm pri" type="submit">Anlegen</button></form></div>
-      <div class="card tw"><table><thead><tr><th>Name</th><th>Mail</th><th>Angelegt</th><th>Helden</th><th>XML-Upload</th><th></th></tr></thead><tbody id="acctab"></tbody></table></div>
+      <div class="card tw"><table><thead><tr><th>Name</th><th>Mail</th><th>Zuletzt da</th><th>Letzte Anmeldung</th><th>Helden</th><th>XML-Upload</th><th></th></tr></thead><tbody id="acctab"></tbody></table></div>
       <p class="small mut">Spieler melden sich mit Name und Passwort an und können das Passwort selbst ändern. Die Mail-Adresse hinterlegen sie selbst; sie gilt erst nach Klick auf den Bestätigungslink.</p>
     </section>
 
@@ -170,7 +170,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119h"></script>
+<script src="/common/common.js?v=20261119i"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -185,7 +185,8 @@ const CH={music:['Musik','Music'],bg:['Hintergrundgeräusche','Sounds']};
 let st=null,lib=null;const pl=new Player();
 const starting={music:null,bg:null}; // Titel, der gerade gestartet wurde und noch lädt
 const IMG=(k,alt='')=>`<img class="ic" src="${ICON(k)}" alt="${esc(alt)}">`;
-const cmd=b=>api('/api/sound/cmd',{method:'POST',body:b}).catch(e=>toastErr(e.message));
+// Antwort ist der neue Zustand: sofort anzeigen, nicht erst auf die Live-Verbindung warten
+const cmd=b=>api('/api/sound/cmd',{method:'POST',body:b}).then(s=>{if(s&&s.type==='state')onSound(s);return s}).catch(e=>toastErr(e.message));
 try{$('#hear').checked=localStorage.getItem('hh-hear')!=='0'}catch(e){$('#hear').checked=true}
 pl.enabled=$('#hear').checked;
 document.addEventListener('pointerdown',()=>pl.unlock(),{once:true}); // Effekt-Spieler beim ersten Klick freischalten
@@ -327,10 +328,11 @@ const setDark=d=>{document.documentElement.dataset.theme=d?'dark':'light';$('#da
 $('#darkm').onchange=e=>setDark(e.target.checked);
 try{setDark(localStorage.getItem('hh-dark')!=='0')}catch(_){setDark(true)}
 
-const es=new EventSource('/api/sound/events');
-es.addEventListener('msg',ev=>{const m=JSON.parse(ev.data);
+function onSound(m){
   if(m.type==='fx'){pl.fx(m.file);return}
-  const sceneChanged=!st||st.scene!==m.scene;st=m;pl.apply(m);if(sceneChanged)loadLib();else renderSound()});
+  if(st&&m.serverNow<st.serverNow)return; // ältere Nachricht nach einer schnelleren Befehlsantwort
+  const sceneChanged=!st||st.scene!==m.scene;st=m;pl.apply(m);if(sceneChanged)loadLib();else renderSound()}
+liveEvents('/api/sound/events',onSound,ok=>{const l=$('#lstn');if(l)l.classList.toggle('warn',!ok);if(!ok&&l)l.textContent='Verbindung weg, verbinde neu…'});
 
 /* ---------- Helden ---------- */
 let heroes=[],selHero=null;
@@ -502,8 +504,8 @@ function renderAccounts(){
     const act=accConfirm===a.id?`<span class="small">Konto löschen? Helden bleiben erhalten.</span><button class="btn sm danger" data-adel="${a.id}">Ja, löschen</button><button class="btn sm" data-ano>Nein</button>`
       :accPwOpen===a.id?`<input type="text" id="apw-${a.id}" placeholder="neues Passwort" style="width:180px" aria-label="Neues Passwort"><button class="btn sm pri" data-apwset="${a.id}">Setzen</button><button class="btn sm" data-ano>Abbrechen</button>`
       :`<button class="btn sm" data-apw="${a.id}">Passwort setzen</button><button class="btn sm danger" data-aask="${a.id}">Löschen</button>`;
-    return `<tr><td><b>${esc(a.name)}</b></td><td class="small">${mail}</td><td class="mono small">${esc(a.created||'')}</td><td>${n}</td><td><label class="small" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" data-aup="${a.id}"${a.can_upload==1?' checked':''}> darf</label></td><td><div class="row" style="flex-wrap:nowrap">${act}</div></td></tr>`}).join('')
-    ||'<tr><td colspan="6" class="empty">Noch keine Spieler. Oben anlegen.</td></tr>'}
+    return `<tr><td><b>${esc(a.name)}</b></td><td class="small">${mail}</td><td class="mono small">${esc(a.last_seen||'noch nie')}</td><td class="mono small" title="Angelegt ${esc(a.created||'')}">${esc(a.last_login||'noch nie')}</td><td>${n}</td><td><label class="small" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" data-aup="${a.id}"${a.can_upload==1?' checked':''}> darf</label></td><td><div class="row" style="flex-wrap:nowrap">${act}</div></td></tr>`}).join('')
+    ||'<tr><td colspan="7" class="empty">Noch keine Spieler. Oben anlegen.</td></tr>'}
 $('#accForm').onsubmit=async e=>{e.preventDefault();
   try{await api('/api/accounts',{method:'POST',body:{name:$('#accName').value,password:$('#accPw').value}});toast('Spieler angelegt. Name und Startpasswort weitergeben.');$('#accName').value='';$('#accPw').value='';loadAccounts()}catch(x){toastErr(x.message)}};
 $('#acctab').onclick=async e=>{const b=e.target.closest('button');if(!b)return;

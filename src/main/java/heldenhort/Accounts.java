@@ -22,10 +22,12 @@ public final class Accounts {
         db.exec("CREATE TABLE IF NOT EXISTS account(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE COLLATE NOCASE, pw TEXT, "
                 + "tokver INTEGER DEFAULT 0, email TEXT, email_pending TEXT, email_token TEXT, created TEXT)");
         try { db.exec("ALTER TABLE account ADD COLUMN can_upload INTEGER DEFAULT 0"); } catch (RuntimeException alreadyThere) { }
+        try { db.exec("ALTER TABLE account ADD COLUMN last_login TEXT"); } catch (RuntimeException alreadyThere) { }
+        try { db.exec("ALTER TABLE account ADD COLUMN last_seen TEXT"); } catch (RuntimeException alreadyThere) { }
     }
 
     public List<Map<String, Object>> list() {
-        return db.query("SELECT id,name,email,email_pending,created,can_upload FROM account ORDER BY name COLLATE NOCASE");
+        return db.query("SELECT id,name,email,email_pending,created,can_upload,last_login,last_seen FROM account ORDER BY name COLLATE NOCASE");
     }
 
     public long create(String name, String pw) {
@@ -58,7 +60,11 @@ public final class Accounts {
     public Long login(String name, String pw) {
         var r = db.query("SELECT id,pw FROM account WHERE name=?", name == null ? "" : name.trim());
         if (r.isEmpty()) { hash("x"); return null; } // gleiche Laufzeit wie ein echter Versuch
-        return verify(pw, (String) r.get(0).get("pw")) ? ((Number) r.get(0).get("id")).longValue() : null;
+        if (!verify(pw, (String) r.get(0).get("pw"))) return null;
+        long id = ((Number) r.get(0).get("id")).longValue();
+        String now = LocalDateTime.now().format(Heroes.TS);
+        db.exec("UPDATE account SET last_login=?, last_seen=? WHERE id=?", now, now, id);
+        return id;
     }
 
     public boolean checkOld(long id, String pw) {
@@ -111,8 +117,21 @@ public final class Accounts {
             String body = p[0] + "." + p[1];
             if (!MessageDigest.isEqual(App.hmac(db, "acc|" + body).getBytes(), p[2].getBytes())) return null;
             Map<String, Object> a = get(Long.parseLong(p[0]));
-            return a != null && String.valueOf(a.get("tokver")).equals(p[1]) ? a : null;
+            if (a == null || !String.valueOf(a.get("tokver")).equals(p[1])) return null;
+            seen(((Number) a.get("id")).longValue());
+            return a;
         } catch (Exception e) { return null; }
+    }
+
+    private final Map<Long, Long> seenAt = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** „Zuletzt da“: höchstens einmal pro Minute in die DB schreiben. */
+    private void seen(long id) {
+        long now = System.currentTimeMillis();
+        Long last = seenAt.get(id);
+        if (last != null && now - last < 60_000) return;
+        seenAt.put(id, now);
+        db.exec("UPDATE account SET last_seen=? WHERE id=?", LocalDateTime.now().format(Heroes.TS), id);
     }
 
     // --- Passwörter: PBKDF2 aus der Standardbibliothek

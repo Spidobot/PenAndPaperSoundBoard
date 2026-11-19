@@ -40,8 +40,11 @@ class Player{
       if(!this.enabled||!c.file||!c.playing){if(!el.paused)el.pause();continue}
       el.preload='auto';
       const sync=()=>{if(g!==this.gen[k])return; // inzwischen kam eine neuere Anweisung
+        // Während eines laufenden Spulvorgangs nichts anfassen: die Dauer ist dann oft nur geschätzt,
+        // ein p%d mit falscher Dauer warf die Position an den Anfang und der Titel hing.
+        if(el.seeking){el.play().catch(()=>{});return}
         let p=this.pos(k);const d=el.duration;
-        if(d&&isFinite(d)){if(c.repeat)p=p%d;else if(p>=d){el.pause();return}}
+        if(d&&isFinite(d)&&p>=d){if(c.repeat)p=p%d;else{el.pause();return}}
         if(Math.abs(el.currentTime-p)>2){try{el.currentTime=p}catch(e){}}
         el.play().catch(()=>{})};
       if(el.readyState>=1)sync();else el.addEventListener('loadedmetadata',sync,{once:true});
@@ -98,3 +101,18 @@ function pdfLink(base,id){return `<span class="row" style="gap:6px;flex-wrap:now
   <label class="small" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="${id}" checked> Backgroundstory anhängen</label></span>`}
 document.addEventListener('click',e=>{const a=e.target.closest('a[data-pdf]');if(!a)return;
   const c=document.getElementById(a.dataset.pdfbg);a.href=a.dataset.pdf+'/pdf'+(c&&c.checked?'?bg=1':'');toast('PDF wird von der helden.jar erzeugt…')});
+
+/**
+ * Live-Verbindung zum Soundboard, die sich selbst heilt. Der Server schickt alle 15 s ein Lebenszeichen.
+ * Kommt 35 s nichts, oder hat der Browser aufgegeben (z. B. nach einem 5xx vom Proxy), wird neu verbunden.
+ * Ohne das blieb die Seite nach einem Verbindungsabbruch stumm, bis man F5 drückte.
+ */
+function liveEvents(url,onMsg,onStatus=()=>{}){let es=null,last=Date.now(),stopped=false;
+  const open=()=>{if(es)es.close();es=new EventSource(url);last=Date.now();
+    es.addEventListener('msg',ev=>{last=Date.now();onStatus(true);let m;try{m=JSON.parse(ev.data)}catch(_){return}if(m.type!=='ping')onMsg(m)});
+    es.onopen=()=>{last=Date.now();onStatus(true)};
+    es.onerror=()=>{onStatus(false);if(es.readyState===2)setTimeout(()=>{if(!stopped)open()},2000)}};
+  const dog=setInterval(()=>{if(!stopped&&Date.now()-last>35000){onStatus(false);open()}},5000);
+  document.addEventListener('visibilitychange',()=>{if(!stopped&&!document.hidden&&Date.now()-last>20000)open()});
+  open();
+  return {close(){stopped=true;clearInterval(dog);if(es)es.close()}}}

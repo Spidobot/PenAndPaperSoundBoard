@@ -76,7 +76,13 @@ public final class Sound {
     }
 
     /** Befehl vom Meister. Wirft bei unbekannten Werten, damit Fehler im UI sichtbar werden. */
-    public synchronized void command(Map<String, Object> c) {
+    public void command(Map<String, Object> c) {
+        Map<String, Object> out;
+        synchronized (this) { out = apply(c); }
+        broadcast(out);
+    }
+
+    private Map<String, Object> apply(Map<String, Object> c) {
         String action = String.valueOf(c.get("action"));
         if (action.equals("scene")) {
             String s = String.valueOf(c.get("scene"));
@@ -89,8 +95,7 @@ public final class Sound {
         } else if (action.equals("fx")) {
             String f = FX.get(String.valueOf(c.get("key")));
             if (f == null) throw new IllegalArgumentException("Effekt unbekannt");
-            broadcast(Map.of("type", "fx", "file", fxUrl(f)));
-            return;
+            return Map.of("type", "fx", "file", fxUrl(f));
         } else {
             Channel k = ch.get(String.valueOf(c.get("ch")));
             if (k == null) throw new IllegalArgumentException("Kanal unbekannt");
@@ -118,7 +123,7 @@ public final class Sound {
                 default -> throw new IllegalArgumentException("Aktion unbekannt: " + action);
             }
         }
-        broadcast(state());
+        return state();
     }
 
     public synchronized Map<String, Object> state() {
@@ -193,6 +198,44 @@ public final class Sound {
         } catch (Exception e) { return "nicht lesbar: " + e.getMessage(); }
     }
 
+    /**
+     * MP3 ausliefern. Javalins writeSeekableStream schickt pro Anfrage nur 128 KB; über Cloudflare heißt das
+     * hunderte Rundreisen für einen langen Titel. Hier geht der angefragte Bereich (bei "bytes=X-" der ganze Rest)
+     * in einem Stück raus, direkt per FileChannel.transferTo. Abbruch durch den Browser (Spulen, Titelwechsel) ist normal.
+     */
+    static void serve(io.javalin.http.Context ctx, Path p) throws Exception {
+        long size = Files.size(p), start = 0, end = size - 1;
+        var res = ctx.res();
+        res.setContentType("audio/mpeg");
+        res.setHeader("Accept-Ranges", "bytes");
+        res.setHeader("Cache-Control", "no-cache"); // ersetzte Dateien sofort hören
+        String range = ctx.header("Range");
+        if (range != null && range.startsWith("bytes=") && !range.contains(",")) {
+            String[] r = range.substring(6).trim().split("-", -1);
+            try {
+                if (r[0].isEmpty()) start = Math.max(0, size - Long.parseLong(r[1]));   // bytes=-500
+                else { start = Long.parseLong(r[0]); if (!r[1].isEmpty()) end = Math.min(end, Long.parseLong(r[1])); }
+            } catch (NumberFormatException e) { start = 0; end = size - 1; }
+            if (start >= size || start > end) {
+                res.setStatus(416); res.setHeader("Content-Range", "bytes */" + size); return;
+            }
+            res.setStatus(206);
+            res.setHeader("Content-Range", "bytes " + start + "-" + end + "/" + size);
+        } else res.setStatus(200);
+        long len = end - start + 1;
+        res.setContentLengthLong(len);
+        if ("HEAD".equals(ctx.method().name())) return;
+        try (var fc = java.nio.channels.FileChannel.open(p, StandardOpenOption.READ)) {
+            var out = java.nio.channels.Channels.newChannel(res.getOutputStream());
+            for (long pos = start, left = len; left > 0; ) {
+                long n = fc.transferTo(pos, Math.min(left, 1 << 20), out);
+                if (n <= 0) break;
+                pos += n; left -= n;
+            }
+            res.flushBuffer();
+        } catch (java.io.IOException clientGone) { /* Browser hat abgebrochen */ }
+    }
+
     /** Pfad unter /data/audio, ohne Ausbruch nach oben. */
     public Path resolve(String rel) {
         Path p = root.resolve(rel).normalize();
@@ -201,7 +244,15 @@ public final class Sound {
         return p;
     }
 
+    private long ticks;
+
+    /** Läuft jede Sekunde. Eine Ausnahme würde den Zeitplan für immer stoppen (auch Bertha), daher alles abfangen. */
     private void tick() {
+        try { tickNow(); } catch (Throwable e) { System.err.println("Soundboard-Takt: " + e); }
+    }
+
+    private void tickNow() {
+        if (++ticks % 15 == 0) broadcast(Map.of("type", "ping", "serverNow", System.currentTimeMillis()));
         if (berthaAt > 0 && System.currentTimeMillis() >= berthaAt) {
             berthaAt = System.currentTimeMillis() + 3_600_000;
             broadcast(Map.of("type", "fx", "file", fxUrl(FX.get("ziege"))));

@@ -6,7 +6,7 @@
 <title>Heldenhort</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119h">
+<link rel="stylesheet" href="/common/app.css?v=20261119i">
 <style>
 html,body{margin:0}
 .pl .inner{width:min(1200px,100%)}
@@ -121,7 +121,7 @@ html,body{margin:0}
 </div></div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119h"></script>
+<script src="/common/common.js?v=20261119i"></script>
 <script>
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const VIEWS=['s-login','s-home','s-drafts','s-create','s-mine','s-konto','s-stream','s-termine'];
@@ -370,9 +370,8 @@ $('#pollList').onclick=async e=>{const b=e.target.closest('button');if(!b)return
 const pl=new Player();let es=null;
 $('#wave').innerHTML='<i></i>'.repeat(16);
 pl.setMaster(LS.get('hh-vol',70)/100);$('#pvol').value=LS.get('hh-vol',70);
-function startStream(){pl.enabled=true;if(es)return;es=new EventSource('/api/sound/events');
-  es.addEventListener('msg',ev=>{const m=JSON.parse(ev.data);if(m.type==='fx')pl.fx(m.file);else{pl.apply(m);sstat(m)}});
-  es.onerror=()=>{$('#pstat').textContent='Verbindung unterbrochen, verbinde neu…'}}
+function startStream(){pl.enabled=true;if(es)return;
+  es=liveEvents('/api/sound/events',m=>{if(m.type==='fx')pl.fx(m.file);else{pl.apply(m);sstat(m)}},ok=>{if(!ok)$('#pstat').textContent='Verbindung unterbrochen, verbinde neu…'})}
 function stopStream(){pl.enabled=false;if(es){es.close();es=null}for(const k in pl.a)pl.a[k].pause()}
 function sstat(m){$('#pstat').textContent=(m.ch.music.playing||m.ch.bg.playing)?'Verbunden. Du hörst den Spieltisch.':'Verbunden. Gerade ist es still.'}
 pl.onFxError=(file,why)=>toast('Effekt konnte nicht abgespielt werden: '+why);

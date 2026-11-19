@@ -43,9 +43,7 @@ public final class App {
             a.exception(IllegalStateException.class, (e, ctx) -> ctx.status(409).json(Map.of("error", e.getMessage())));
             a.get("/audio/<path>", ctx -> {
                 Path p = sound.resolve(ctx.pathParam("path"));
-                ctx.contentType("audio/mpeg");
-                ctx.header("Cache-Control", "no-cache"); // ersetzte Dateien sofort hören
-                ctx.writeSeekableStream(Files.newInputStream(p), "audio/mpeg", Files.size(p));
+                Sound.serve(ctx, p);
             });
             a.get("/api/sound/library", ctx -> ctx.json(sound.library(ctx.queryParamAsClass("scene", String.class).getOrDefault(sound.scene))));
         }
