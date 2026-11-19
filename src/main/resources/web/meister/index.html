@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119m">
+<link rel="stylesheet" href="/common/app.css?v=20261119n">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -40,6 +40,7 @@
         <nav class="scenes" id="scenes" aria-label="Szenen"></nav>
         <div class="sbmain">
           <div class="fxrow"><div class="fx" id="fx"></div>
+            <label class="sbsess" id="sbsessW" hidden>Session <select id="sbsess" aria-label="Session für die Rubrik Session"></select></label>
             <label class="fxvol" title="Lautstärke der Effekt-Knöpfe"><img class="ic" src="/common/icons/vol.png" alt=""> Effekte <input type="range" id="fxvol" min="0" max="100" value="80" aria-label="Lautstärke Effekte"><span class="mono small" id="fxvolv">80</span></label></div>
           <div class="card" id="upl" hidden>
             <div class="spread"><h3>Dateiordner: <span id="uplScene"></span></h3><button class="btn sm" id="uplClose">Schließen</button></div>
@@ -170,7 +171,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119m"></script>
+<script src="/common/common.js?v=20261119n"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -181,8 +182,15 @@ addEventListener('hashchange',route);
 /* ---------- Soundboard ---------- */
 const SCENES=[['Village','Dorf / Stadt','dorf'],['Travel','Reisen','reisen'],['Dungeon','Dungeon','dungeon'],['Castle','Burg','burg'],['Fight','Kampf','kampf'],['Session','Session','session']];
 let sessSet=new Set(); // Titel in der Session-Liste (volle Pfade)
-async function loadSess(){try{const l=await api('/api/sound/library?scene=Session');libs.Session=l;sessSet=new Set([...l.Music,...l.Sounds]);
-  if(st&&st.scene==='Session')lib=l;lastFile.musick=lastFile.bgk=null;renderSound()}catch(e){}}
+// gewählte Session (aus „Sessions“) für die Rubrik Session; im Browser gemerkt, sonst die neueste
+let sbSessions=[],sid=null;try{sid=localStorage.getItem('hh-sbsess')}catch(_){}
+async function loadSess(){try{sbSessions=await api('/api/sessions');
+    if(!sbSessions.some(s=>String(s.id)===String(sid)))sid=sbSessions[0]?String(sbSessions[0].id):null;
+    $('#sbsess').innerHTML=sbSessions.map(s=>`<option value="${s.id}"${String(s.id)===sid?' selected':''}>${esc(s.name)}</option>`).join('')||'<option value="">Erst unter „Sessions“ eine anlegen</option>';
+    const l=sid?await api('/api/sound/library?scene=Session&sid='+sid):{Music:[],Sounds:[],fx:lib?lib.fx:{}};
+    libs.Session=l;sessSet=new Set([...l.Music,...l.Sounds]);
+    if(st&&st.scene==='Session')lib=l;lastFile.musick=lastFile.bgk=null;renderSound()}catch(e){toastErr(e.message)}}
+$('#sbsess').onchange=e=>{sid=e.target.value;try{localStorage.setItem('hh-sbsess',sid)}catch(_){}loadSess()};
 const FX=[['truhe','Schatztruhe öffnen'],['kuh','Cliffhanger-Kuh'],['avengers','Avengers'],['ziege','Bertha (solo)'],['qadd','Quest hinzugefügt'],['qdone','Quest abgeschlossen']];
 const CH={music:['Musik','Music'],bg:['Hintergrundgeräusche','Sounds']};
 let st=null,lib=null;const pl=new Player();
@@ -197,7 +205,7 @@ pl.onEnded=k=>cmd({action:'ended',ch:k});
 pl.onStatus=k=>updateStatus(k);
 $('#hear').onchange=e=>{pl.enabled=e.target.checked;try{localStorage.setItem('hh-hear',e.target.checked?'1':'0')}catch(_){};if(st)pl.apply(st)};
 
-function renderScenes(){
+function renderScenes(){$('#sbsessW').hidden=!(st&&st.scene==='Session');
   $('#scenes').innerHTML=SCENES.map(([k,l,i])=>`<button data-sc="${k}" aria-current="${st&&k===st.scene}" title="${l}">${IMG(i)}<span>${l}</span></button>`).join('')+
    `<hr><button data-folder title="Dateiordner">${IMG('ordner')}<span>Dateiordner</span></button><button data-fx="pizza" title="${lib&&lib.fx.pizza!=='ok'?'Pizza: '+esc(lib.fx.pizza==='fehlt'?'Datei fehlt in /data/audio/Effects':lib.fx.pizza):'Pizza'}"${lib&&lib.fx.pizza!=='ok'?' disabled':''}>${IMG('pizza')}<span>Pizza</span></button>`;
 }
@@ -230,7 +238,7 @@ function renderList(id){
    <input type="search" class="lsearch" data-ls="${id}" value="${esc(qs[id])}" placeholder="${title} durchsuchen… (${all.length})" aria-label="${title} durchsuchen">
    <ul>${items.map(n=>{const f=full(n),inS=sessSet.has(f);return `<li class="srow"><button data-pick="${id}" data-f="${esc(f)}" title="${ses?esc(f.split('/')[1])+' · ':''}Klick: auswählen · Doppelklick oder Play: abspielen"><span class="mk"></span>${esc(base(n).replace(/\.mp3$/i,''))}</button>`+
      (ses?`<button class="sadd" data-sdel="${esc(f)}" title="Aus der Session-Liste nehmen" aria-label="Aus der Session-Liste nehmen">✕</button>`
-         :`<button class="sadd${inS?' in':''}" data-sadd="${esc(f)}" title="${inS?'Ist in der Session-Liste (klicken: herausnehmen)':'In die Session-Liste'}" aria-label="Session-Liste" aria-pressed="${inS}">${inS?'★':'☆'}</button>`)+`</li>`}).join('')
+         :`<button class="sadd${inS?' in':''}" data-sadd="${esc(f)}" title="${inS?'Ist in der Session-Liste':'In die Session-Liste'} „${esc((sbSessions.find(s=>String(s.id)===sid)||{}).name||'–')}“${inS?' (klicken: herausnehmen)':''}" aria-label="Session-Liste" aria-pressed="${inS}">${inS?'★':'☆'}</button>`)+`</li>`}).join('')
      ||`<li class="empty small">${ses?'Noch leer. In den anderen Szenen mit ☆ Titel hierher holen.':all.length?'Kein Treffer.':'Keine MP3 in diesem Ordner.'}</li>`}</ul>`;
   el.querySelector('ul').scrollTop=scroll;
   if(focused){const n=el.querySelector('.lsearch');n.focus();n.setSelectionRange(caret,caret)}
@@ -268,6 +276,7 @@ function renderSound(){renderScenes();renderFx();
 // Listen je Szene im Browser merken: Szenenwechsel zeigt sofort die bekannte Liste, die frische kommt nach
 const libs={};
 async function loadLib(){const sc=st.scene;if(libs[sc]){lib=libs[sc];renderSound()}
+  if(sc==='Session')return loadSess();
   try{const l=await api('/api/sound/library?scene='+encodeURIComponent(sc));libs[sc]=l;if(st.scene===sc){lib=l;renderSound()}}catch(e){toastErr(e.message)}}
 const sel={music:null,bg:null}; // Auswahl pro Tab, läuft erst nach Play/Doppelklick
 function start(id,file){starting[id]=file;sel[id]=file;updateList(id);cmd({action:'pick',ch:id,file})}
@@ -280,9 +289,9 @@ $('#m-sound').addEventListener('click',e=>{
   else if(b.dataset.fx){b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),600);cmd({action:'fx',key:b.dataset.fx})}
   else if(b.dataset.pick){sel[b.dataset.pick]=b.dataset.f;updateList(b.dataset.pick)} // nur auswählen
   else if(b.dataset.sadd!==undefined){const f=b.dataset.sadd,add=!sessSet.has(f);add?sessSet.add(f):sessSet.delete(f);lastFile.musick=lastFile.bgk=null;renderSound();
-    api('/api/sound/session',{method:'POST',body:{file:f,add}}).then(()=>toast(add?'In der Session-Liste':'Aus der Session-Liste genommen')).catch(x=>{toastErr(x.message);loadSess()})}
-  else if(b.dataset.sdel!==undefined){api('/api/sound/session',{method:'POST',body:{file:b.dataset.sdel,add:false}}).catch(x=>toastErr(x.message))}
-  else if(b.dataset.sclear){if(b.dataset.ask!=='1'){b.dataset.ask='1';b.textContent='Wirklich leeren?';return}api('/api/sound/session',{method:'DELETE'}).catch(x=>toastErr(x.message))}
+    (sid?api('/api/sound/session',{method:'POST',body:{sid,file:f,add}}):Promise.reject(new Error('Erst unter „Sessions“ eine Session anlegen'))).then(()=>toast(add?'In der Session-Liste':'Aus der Session-Liste genommen')).catch(x=>{toastErr(x.message);loadSess()})}
+  else if(b.dataset.sdel!==undefined){api('/api/sound/session',{method:'POST',body:{sid,file:b.dataset.sdel,add:false}}).catch(x=>toastErr(x.message))}
+  else if(b.dataset.sclear){if(b.dataset.ask!=='1'){b.dataset.ask='1';b.textContent='Wirklich leeren?';return}api('/api/sound/session?sid='+sid,{method:'DELETE'}).catch(x=>toastErr(x.message))}
   else if(b.dataset.act==='toggle'){const k=b.dataset.ch,c=st.ch[k];
     if(c.playing){pl.pauseNow(k);st.ch[k]={...c,playing:false};updateList(k);cmd({action:'pause',ch:k,pos:pl.a[k].currentTime||undefined})} // sofort still, ohne auf den Server zu warten
     else if(sel[k]&&sel[k]!==c.file)start(k,sel[k]);
@@ -403,14 +412,14 @@ function renderSessions(){
         :`<button class="btn sm" data-open="${s.id}">Öffnen</button><button class="btn sm danger" data-ask="${s.id}">Löschen</button>`}</div></td></tr>`}).join('')
     ||'<tr><td colspan="4" class="empty">Noch keine Session. Oben anlegen.</td></tr>'}
 $('#sessForm').onsubmit=async e=>{e.preventDefault();const n=$('#sessName').value.trim();if(!n)return toast('Name der Session fehlt');
-  try{await api('/api/sessions',{method:'POST',body:{name:n}});$('#sessName').value='';toast('Session angelegt');loadSessions()}catch(x){toastErr(x.message)}};
+  try{await api('/api/sessions',{method:'POST',body:{name:n}});$('#sessName').value='';toast('Session angelegt');loadSess();loadSessions()}catch(x){toastErr(x.message)}};
 $('#sesstab').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
   if(b.dataset.open){openSess=+b.dataset.open;location.hash='m-session'}
   else if(b.dataset.ask){confirmDel=+b.dataset.ask;renderSessions()}
   else if(b.dataset.nodel!==undefined){confirmDel=null;renderSessions()}
-  else if(b.dataset.del){try{await api('/api/sessions/'+b.dataset.del,{method:'DELETE'});confirmDel=null;toast('Session gelöscht');loadSessions()}catch(x){toastErr(x.message)}}};
+  else if(b.dataset.del){try{await api('/api/sessions/'+b.dataset.del,{method:'DELETE'});confirmDel=null;loadSess();toast('Session gelöscht');loadSessions()}catch(x){toastErr(x.message)}}};
 $('#sesstab').addEventListener('change',async e=>{const id=e.target.dataset.ren;if(!id)return;
-  try{await api('/api/sessions/'+id,{method:'PUT',body:{name:e.target.value}});toast('Umbenannt')}catch(x){toastErr(x.message);loadSessions()}});
+  try{await api('/api/sessions/'+id,{method:'PUT',body:{name:e.target.value}});toast('Umbenannt');loadSess()}catch(x){toastErr(x.message);loadSessions()}});
 $('#hpick').onchange=async()=>{const files=$$('#hpick input:checked').map(i=>i.dataset.s);
   try{await api('/api/sessions/'+cur,{method:'PUT',body:{heroes:files}});sessions.find(s=>s.id===cur).heroes=JSON.stringify(files);renderSearch();renderAttr();renderAward()}catch(e){toastErr(e.message)}};
 const quick=['Sinnenschärfe','Gefahreninstinkt','Selbstbeherrschung','Schwimmen','Menschenkenntnis','Schleichen','IN','MU'];

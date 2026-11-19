@@ -68,8 +68,11 @@ public final class Sound {
      * Grund: auf Unraid schläft die Platte oft, das Aufwecken dauert Sekunden und hat den Szenenwechsel blockiert.
      * Hat sich etwas geändert, bekommen alle eine "lib"-Nachricht und laden die Liste neu.
      */
-    public Map<String, Object> library(String scene) throws Exception {
-        if (SESSION.equals(scene)) return sessionLib();
+    public Map<String, Object> library(String scene) throws Exception { return library(scene, null); }
+
+    /** sid = gewählte Session (aus „Sessions“) für die Rubrik Session. */
+    public Map<String, Object> library(String scene, String sid) throws Exception {
+        if (SESSION.equals(scene)) return sessionLib(sid);
         if (!SCENES.contains(scene)) throw new IllegalArgumentException("Szene unbekannt");
         Map<String, Object> c = libCache.get(scene);
         if (c == null) { c = scan(scene); libCache.put(scene, c); }
@@ -88,9 +91,15 @@ public final class Sound {
     // ---------------- Session-Liste ----------------
 
     @SuppressWarnings("unchecked")
-    private Map<String, List<String>> sessionList() {
+    /** Je Session eine eigene Liste. */
+    private static String key(String sid) {
+        if (sid == null || !sid.matches("\\d{1,9}")) throw new IllegalArgumentException("Bitte eine Session auswählen");
+        return "sessionSounds:" + sid;
+    }
+
+    private Map<String, List<String>> sessionList(String sid) {
         try {
-            Map<String, List<String>> m = json.readValue(db.get("sessionSounds", "{}"), Map.class);
+            Map<String, List<String>> m = json.readValue(db.get(key(sid), "{}"), Map.class);
             Map<String, List<String>> out = new LinkedHashMap<>();
             for (String d : List.of("Music", "Sounds")) out.put(d, new ArrayList<>(m.getOrDefault(d, List.of())));
             return out;
@@ -98,9 +107,10 @@ public final class Sound {
     }
 
     /** Wie library(), aber Einträge sind volle Pfade (Music/Fight/x.mp3). Gelöschte Dateien fallen raus. */
-    private Map<String, Object> sessionLib() {
+    private Map<String, Object> sessionLib(String sid) {
         Map<String, Object> out = new LinkedHashMap<>();
-        sessionList().forEach((d, l) -> out.put(d, l.stream().filter(f -> Files.isRegularFile(root.resolve(f))).toList()));
+        if (sid == null || sid.isBlank()) { out.put("Music", List.of()); out.put("Sounds", List.of()); }
+        else sessionList(sid).forEach((d, l) -> out.put(d, l.stream().filter(f -> Files.isRegularFile(root.resolve(f))).toList()));
         Map<String, String> fx = new LinkedHashMap<>();
         FX.forEach((k, f) -> fx.put(k, check(root.resolve("Effects").resolve(f))));
         out.put("fx", fx);
@@ -109,19 +119,19 @@ public final class Sound {
     }
 
     /** Titel in die Session-Liste aufnehmen/entfernen; file = Music/... oder Sounds/... */
-    public synchronized void sessionEdit(String file, boolean add) throws Exception {
+    public synchronized void sessionEdit(String sid, String file, boolean add) throws Exception {
         String type = file.split("/")[0];
         if (!List.of("Music", "Sounds").contains(type)) throw new IllegalArgumentException("Nur Musik oder Hintergrundgeräusche");
         if (add) resolve(file);
-        Map<String, List<String>> m = sessionList();
+        Map<String, List<String>> m = sessionList(sid);
         m.get(type).remove(file);
         if (add) m.get(type).add(file);
-        db.put("sessionSounds", json.writeValueAsString(m));
+        db.put(key(sid), json.writeValueAsString(m));
         broadcast(Map.of("type", "lib", "scene", SESSION));
     }
 
-    public synchronized void sessionClear() throws Exception {
-        db.put("sessionSounds", "{}");
+    public synchronized void sessionClear(String sid) throws Exception {
+        db.put(key(sid), "{}");
         broadcast(Map.of("type", "lib", "scene", SESSION));
     }
 

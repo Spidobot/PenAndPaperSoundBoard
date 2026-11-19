@@ -224,3 +224,6 @@ main:has(> #m-sound:not([hidden])){padding-bottom:16px}
 .plist .sadd:hover{color:var(--acc);background:var(--panel2)}
 .plist .sadd.in{color:var(--acc)}
 .plist li.srow>[data-pick]{flex:1 1 auto;width:auto;min-width:0}.plist li.srow>.sadd{width:auto;flex:0 0 auto;display:grid;place-items:center}
+.sbsess{display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--mut)}
+.sbsess select{width:auto;min-width:180px}
+.fxrow{gap:14px}
