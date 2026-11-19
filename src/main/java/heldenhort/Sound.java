@@ -42,8 +42,16 @@ public final class Sound {
 
     public Sound(Path root) throws Exception {
         this.root = root;
-        for (String d : List.of("Music", "Sounds")) for (String s : SCENES) Files.createDirectories(root.resolve(d).resolve(s));
-        Files.createDirectories(root.resolve("Effects"));
+        // Fehlende Ordner anlegen, wenn möglich. Fehlende Schreibrechte (z. B. Nextcloud-Ordner) dürfen den Start nicht verhindern.
+        List<Path> dirs = new ArrayList<>();
+        for (String d : List.of("Music", "Sounds")) for (String s : SCENES) dirs.add(root.resolve(d).resolve(s));
+        dirs.add(root.resolve("Effects"));
+        for (Path d : dirs) {
+            if (Files.isDirectory(d)) continue;
+            try { Files.createDirectories(d); }
+            catch (Exception e) { System.err.println("WARNUNG: Ordner " + d + " fehlt und kann nicht angelegt werden (" + e + "). Schreibrechte des Containers prüfen."); }
+        }
+        if (!Files.isWritable(root)) System.err.println("WARNUNG: " + root + " ist nicht beschreibbar. Abspielen geht, Hochladen nicht.");
         Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(this::tick, 1, 1, TimeUnit.SECONDS);
     }
 
@@ -54,7 +62,9 @@ public final class Sound {
         if (!SCENES.contains(scene)) throw new IllegalArgumentException("Szene unbekannt");
         Map<String, Object> out = new LinkedHashMap<>();
         for (String d : List.of("Music", "Sounds")) {
-            try (var s = Files.list(root.resolve(d).resolve(scene))) {
+            Path dir = root.resolve(d).resolve(scene);
+            if (!Files.isDirectory(dir)) { out.put(d, List.of()); continue; }
+            try (var s = Files.list(dir)) {
                 out.put(d, s.map(p -> p.getFileName().toString()).filter(n -> n.toLowerCase().endsWith(".mp3")).sorted().toList());
             }
         }

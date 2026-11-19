@@ -69,6 +69,8 @@ public final class App {
             if (!List.of("Music", "Sounds", "Effects").contains(target)) throw new IllegalArgumentException("Ziel unbekannt");
             Path dir = target.equals("Effects") ? sound.root().resolve("Effects") : sound.root().resolve(target).resolve(String.valueOf(scene));
             if (!target.equals("Effects") && !Sound.SCENES.contains(scene)) throw new IllegalArgumentException("Szene unbekannt");
+            try { Files.createDirectories(dir); } catch (Exception e) { throw new IllegalStateException("Ordner " + dir + " kann nicht angelegt werden: keine Schreibrechte für den Container"); }
+            if (!Files.isWritable(dir)) throw new IllegalStateException("Keine Schreibrechte auf " + dir + ". In Unraid den Container ohne --user starten oder die Rechte des Ordners anpassen.");
             List<String> saved = new ArrayList<>();
             for (var f : ctx.uploadedFiles("files")) {
                 String name = Path.of(f.filename()).getFileName().toString().replaceAll("[\\\\/:*?\"<>|]", "_").trim();
