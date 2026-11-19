@@ -16,6 +16,7 @@
     <a href="#m-helden" data-v="m-helden">Helden <span class="pill new" id="hBadge" hidden></span></a>
     <a href="#m-freigaben" data-v="m-freigaben">Freigaben <span class="pill new" id="fgBadge" hidden></span></a>
     <a href="#m-session" data-v="m-session">Session</a>
+    <a href="#m-sessions" data-v="m-sessions">Sessions</a>
     <a href="#m-config" data-v="m-config">Konfiguration</a>
     <a href="#" id="logout">Abmelden</a>
     <div class="foot">Jeder Bereich hat eine eigene Adresse. Mehrere Tabs gleichzeitig möglich.<br><br>Icons: <a href="https://icons8.com" target="_blank" rel="noopener" style="display:inline;padding:0">Icons8</a></div>
@@ -69,16 +70,25 @@
 
     <section class="view" id="m-session" hidden>
       <div class="spread"><h1>Session</h1>
-        <div class="row"><select id="sessSel" style="width:auto"></select><input type="text" id="sessNew" placeholder="Neue Session" style="width:180px"><button class="btn sm" id="sessAdd">Anlegen</button></div>
+        <div class="row"><select id="sessSel" style="width:auto" aria-label="Session"></select><a class="btn sm" href="#m-sessions">Sessions verwalten</a></div>
       </div>
       <div class="card"><span class="label">Helden in dieser Session</span><div class="hpick" id="hpick"></div></div>
       <div class="card">
-        <div class="field"><label class="label" for="q">Wert suchen (Talent, Eigenschaft, Vorteil, Sonderfertigkeit)</label>
-          <input type="text" id="q" placeholder="z. B. Sinnenschärfe, Gefahreninstinkt, KL, Schwimmen…" value="Sinnenschärfe"></div>
+        <div class="field"><label class="label" for="q">Suchen: alles am Helden (Eigenschaften, Talente, Zauber, Vor-/Nachteile, Sonderfertigkeiten, Kampfwerte, Ausrüstung, Geld …)</label>
+          <div class="row" style="flex-wrap:nowrap"><input type="text" id="q" list="qlist" autocomplete="off" placeholder="z. B. Sinnenschärfe, Gefahreninstinkt, KL, Langschwert, Balsam…" value="Sinnenschärfe">
+          <select id="qcat" style="width:auto" aria-label="Art"><option value="">Alle Arten</option></select></div></div>
+        <datalist id="qlist"></datalist>
         <div class="chips" id="quick"></div>
-        <div class="tw"><table><thead><tr><th>Held</th><th>Treffer</th><th>Art</th><th>Wert</th><th style="width:30%"></th></tr></thead><tbody id="rbody"></tbody></table></div>
+        <div class="tw"><table><thead><tr><th>Held</th><th>Treffer</th><th>Art</th><th>Wert</th><th style="width:18%"></th><th>Details</th></tr></thead><tbody id="rbody"></tbody></table></div>
       </div>
       <div class="card"><div class="spread"><h3>Schnellblick Eigenschaften</h3><span class="small mut">Bester Wert markiert</span></div><div class="tw"><table id="attrtab"></table></div></div>
+    </section>
+
+    <section class="view" id="m-sessions" hidden>
+      <div class="spread"><h1>Sessions</h1>
+        <form class="row" id="sessForm"><input type="text" id="sessName" placeholder="z. B. 2026.12.19 Schweiz online A181" style="width:280px" aria-label="Name der neuen Session"><button class="btn sm pri" type="submit">Anlegen</button></form></div>
+      <div class="card tw"><table><thead><tr><th>Name</th><th>Angelegt</th><th>Helden</th><th></th></tr></thead><tbody id="sesstab"></tbody></table></div>
+      <p class="small mut">Die Session-Ansicht öffnet immer die neueste Session. Ältere wählst du dort oben aus oder hier mit „Öffnen“.</p>
     </section>
 
     <section class="view" id="m-config" hidden>
@@ -113,6 +123,7 @@
     </section>
   </main>
 </div>
+<dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
 <script src="/common/common.js"></script>
@@ -120,7 +131,7 @@
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
   $$('.side a[data-v]').forEach(a=>a.dataset.v===h?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'));
-  ({'m-helden':loadHeroes,'m-freigaben':loadFg,'m-session':loadSession,'m-config':loadCfg})[h]?.();}
+  ({'m-helden':loadHeroes,'m-freigaben':loadFg,'m-session':loadSession,'m-sessions':loadSessions,'m-config':loadCfg})[h]?.();}
 addEventListener('hashchange',route);
 
 /* ---------- Soundboard ---------- */
@@ -217,18 +228,9 @@ function renderHeroes(){
   $('#htab').innerHTML=heroes.map(h=>`<tr${h.file===selHero?' class="best"':''}><td><b>${esc(h.name)}</b>${h.error?` <span class="err small">${esc(h.error)}</span>`:''}</td><td>${esc(h.player)}</td><td>${esc(h.profession)}</td><td class="mono small">${esc(h.received)}</td>
    <td><span class="pill ${h.status==='neu'?'new':'ok'}">${esc(h.status)}</span></td><td><button class="btn sm" data-h="${esc(h.file)}">Öffnen</button></td></tr>`).join('')||'<tr><td colspan="6" class="empty">Noch keine Helden. Spieler schicken sie über die Spieler-UI, oder du legst XML-Dateien per FTP ab.</td></tr>';
   const h=heroes.find(x=>x.file===selHero);$('#hdet').hidden=!h;if(!h)return;
-  $('#hdet').innerHTML=`<div class="spread"><h2>${esc(h.name)}</h2><div class="row">
-     <a class="btn sm" href="/api/heroes/${encodeURIComponent(h.file)}/xml">XML herunterladen</a>
-     ${h.status==='neu'?'<button class="btn sm pri" data-take>Übernehmen</button>':''}</div></div>
-   <div class="grid2"><div><span class="label">Datei</span><div class="mono small">/data/helden/${esc(h.file)}</div></div>
-     <div><span class="label">Rasse / Kultur</span><div class="small">${esc(h.rasse)} / ${esc(h.kultur)}</div></div></div>
-   ${h.meistergenehmigung&&h.meistergenehmigung.length?`<div><span class="label">Meistergenehmigung laut XML</span><ul class="small">${h.meistergenehmigung.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
-   <div><span class="label">Hintergrundgeschichte</span><div style="margin-top:6px" id="bgview"></div></div>`;
-  // Hintergrund ist serverseitig bereinigt (jsoup Safelist), trotzdem nur in ein eigenes Element einsetzen
-  $('#bgview').innerHTML=h.background||'<span class="mut">keine (per FTP abgelegt)</span>';
+  $('#hdet').innerHTML=sheetHtml(h,false);fillSheet($('#hdet'),h);
 }
 $('#htab').onclick=e=>{const b=e.target.closest('[data-h]');if(b){selHero=b.dataset.h;renderHeroes()}};
-$('#hdet').onclick=async e=>{if(e.target.closest('[data-take]')){try{await api('/api/heroes/'+encodeURIComponent(selHero)+'/accept',{method:'POST'});toast('Held übernommen');loadHeroes()}catch(x){toast(x.message)}}};
 
 /* ---------- Freigaben ---------- */
 const ST={offen:'warn',freigegeben:'ok',geändert:'ok',abgelehnt:'warn'};
@@ -250,9 +252,10 @@ $('#fglist').onclick=async e=>{const b=e.target.closest('[data-fg]');if(!b)retur
 setInterval(loadFg,10000);setInterval(()=>{if(location.hash==='#m-helden')loadHeroes()},15000);
 
 /* ---------- Session ---------- */
-let sessions=[],cur=null;
+let sessions=[],cur=null,openSess=null;
 async function loadSession(){try{[sessions,heroes]=await Promise.all([api('/api/sessions'),api('/api/heroes')])}catch(e){return toast(e.message)}
-  if(!cur||!sessions.find(s=>s.id===cur))cur=sessions[0]?.id??null;
+  if(openSess!=null&&sessions.find(s=>s.id===openSess))cur=openSess;else cur=sessions[0]?.id??null; // immer die neueste, außer explizit geöffnet
+  openSess=null;
   $('#sessSel').innerHTML=sessions.map(s=>`<option value="${s.id}"${s.id===cur?' selected':''}>${esc(s.name)}</option>`).join('')||'<option>Keine Session</option>';
   renderPick();renderSearch();renderAttr()}
 const inSess=()=>{const s=sessions.find(x=>x.id===cur);return new Set(s?JSON.parse(s.heroes||'[]'):[])};
@@ -260,32 +263,87 @@ const sessHeroes=()=>{const set=inSess();return heroes.filter(h=>set.has(h.file)
 function renderPick(){const set=inSess();
   $('#hpick').innerHTML=cur==null?'<span class="mut small">Erst eine Session anlegen.</span>':heroes.filter(h=>!h.error).map(h=>`<label><input type="checkbox" data-s="${esc(h.file)}"${set.has(h.file)?' checked':''}> ${esc(h.name)} <span class="mut small">${esc(h.player)}</span>${h.status==='neu'?' <span class="pill new">neu</span>':''}</label>`).join('')||'<span class="mut small">Noch keine Helden.</span>'}
 $('#sessSel').onchange=e=>{cur=+e.target.value;renderPick();renderSearch();renderAttr()};
-$('#sessAdd').onclick=async()=>{const n=$('#sessNew').value.trim();if(!n)return toast('Name der Session fehlt');try{const r=await api('/api/sessions',{method:'POST',body:{name:n}});cur=r.id;$('#sessNew').value='';loadSession()}catch(e){toast(e.message)}};
+/* ---------- Sessions verwalten ---------- */
+let confirmDel=null;
+async function loadSessions(){try{[sessions,heroes]=await Promise.all([api('/api/sessions'),api('/api/heroes')])}catch(e){return toast(e.message)}renderSessions()}
+function renderSessions(){
+  $('#sesstab').innerHTML=sessions.map(s=>{const n=JSON.parse(s.heroes||'[]').length;
+    return `<tr><td><input type="text" value="${esc(s.name)}" data-ren="${s.id}" aria-label="Name"></td><td class="mono small">${esc(s.created||'–')}</td><td>${n}</td>
+      <td><div class="row" style="flex-wrap:nowrap">${confirmDel===s.id
+        ?`<span class="small">Wirklich löschen?</span><button class="btn sm danger" data-del="${s.id}">Ja, löschen</button><button class="btn sm" data-nodel>Nein</button>`
+        :`<button class="btn sm" data-open="${s.id}">Öffnen</button><button class="btn sm danger" data-ask="${s.id}">Löschen</button>`}</div></td></tr>`}).join('')
+    ||'<tr><td colspan="4" class="empty">Noch keine Session. Oben anlegen.</td></tr>'}
+$('#sessForm').onsubmit=async e=>{e.preventDefault();const n=$('#sessName').value.trim();if(!n)return toast('Name der Session fehlt');
+  try{await api('/api/sessions',{method:'POST',body:{name:n}});$('#sessName').value='';toast('Session angelegt');loadSessions()}catch(x){toast(x.message)}};
+$('#sesstab').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.open){openSess=+b.dataset.open;location.hash='m-session'}
+  else if(b.dataset.ask){confirmDel=+b.dataset.ask;renderSessions()}
+  else if(b.dataset.nodel!==undefined){confirmDel=null;renderSessions()}
+  else if(b.dataset.del){try{await api('/api/sessions/'+b.dataset.del,{method:'DELETE'});confirmDel=null;toast('Session gelöscht');loadSessions()}catch(x){toast(x.message)}}};
+$('#sesstab').addEventListener('change',async e=>{const id=e.target.dataset.ren;if(!id)return;
+  try{await api('/api/sessions/'+id,{method:'PUT',body:{name:e.target.value}});toast('Umbenannt')}catch(x){toast(x.message);loadSessions()}});
 $('#hpick').onchange=async()=>{const files=$$('#hpick input:checked').map(i=>i.dataset.s);
   try{await api('/api/sessions/'+cur,{method:'PUT',body:{heroes:files}});sessions.find(s=>s.id===cur).heroes=JSON.stringify(files);renderSearch();renderAttr()}catch(e){toast(e.message)}};
 const quick=['Sinnenschärfe','Gefahreninstinkt','Selbstbeherrschung','Schwimmen','Menschenkenntnis','Schleichen','IN','MU'];
 $('#quick').innerHTML=quick.map(q=>`<button class="chip" data-q="${q}">${q}</button>`).join('');
-$('#quick').onclick=e=>{const b=e.target.closest('[data-q]');if(b){$('#q').value=b.dataset.q;renderSearch()}};
-$('#q').oninput=renderSearch;
-function hits(h,q){const r=[],ql=q.toLowerCase();
-  for(const[k,v]of Object.entries(h.E||{}))if(k.toLowerCase()===ql)r.push({k,v,t:'Eigenschaft',max:21});
-  for(const[k,v]of Object.entries(h.T||{}))if(k.toLowerCase().includes(ql))r.push({k,v,t:'Talent',max:18});
-  for(const x of h.V||[])if(x.name.toLowerCase().includes(ql)){const n=parseInt(x.value);r.push({k:x.name+(x.value&&isNaN(n)?' ('+x.value+')':''),v:isNaN(n)?null:n,t:'Vorteil/Nachteil',max:18})}
-  for(const k of h.SF||[])if(k.toLowerCase().includes(ql))r.push({k,v:null,t:'Sonderfertigkeit'});
+$('#quick').onclick=e=>{const b=e.target.closest('[data-q]');if(b){$('#q').value=b.dataset.q;$('#qcat').value='';renderSearch()}};
+$('#q').oninput=renderSearch;$('#qcat').onchange=renderSearch;
+const ATTR=['MU','KL','IN','CH','FF','GE','KO','KK'];
+const MAX={eigenschaft:21,talent:18,zauber:18,vorteil:15};
+const sections=h=>(h.sheet&&h.sheet.sections)||[];
+/** Vorschläge und Arten aus allen Helden der Session */
+function fillSuggest(){const hs=sessHeroes(),names=new Set(ATTR),cats=new Set();
+  hs.forEach(h=>sections(h).forEach(s=>{cats.add(s.title);s.rows.forEach(r=>r.name&&names.add(r.name))}));
+  $('#qlist').innerHTML=[...names].sort((a,b)=>a.localeCompare(b,'de')).map(n=>`<option value="${esc(n)}">`).join('');
+  const cur=$('#qcat').value;$('#qcat').innerHTML='<option value="">Alle Arten</option>'+[...cats].map(c=>`<option${c===cur?' selected':''}>${esc(c)}</option>`).join('')}
+function hits(h,q,cat){const r=[],ql=q.toLowerCase(),code=q.toUpperCase();
+  if(ATTR.includes(code)){if(!cat||cat.startsWith('Eigenschaften'))r.push({k:code,v:h.E[code]??null,raw:h.E[code]??'',t:'Eigenschaft',max:21,d:''});return r} // Kürzel nur als Eigenschaft
+  for(const s of sections(h)){if(cat&&s.title!==cat)continue;
+    for(const x of s.rows){if(!x.name.toLowerCase().includes(ql))continue;const n=parseInt(x.value);
+      r.push({k:x.name,v:/^-?\d+$/.test(x.value)?n:null,raw:x.value,t:s.title,max:MAX[s.tag]||20,d:x.details})}}
   return r}
-function renderSearch(){
-  const q=$('#q').value.trim(),hs=sessHeroes();
-  if(!hs.length){$('#rbody').innerHTML='<tr><td colspan="5" class="empty">Keine Helden in dieser Session.</td></tr>';return}
-  if(q.length<2){$('#rbody').innerHTML='<tr><td colspan="5" class="empty">Mindestens 2 Zeichen eingeben.</td></tr>';return}
-  const rows=[];hs.forEach(h=>{const r=hits(h,q);if(!r.length)rows.push({h,k:null});r.forEach(x=>rows.push({h,...x}))});
-  rows.sort((a,b)=>(b.v??-1)-(a.v??-1));const top=Math.max(...rows.map(r=>r.v??-1));
-  const re=new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','i');
-  $('#rbody').innerHTML=rows.map(r=>r.k===null?`<tr><td>${esc(r.h.name)}</td><td colspan="4" class="mut">nicht vorhanden</td></tr>`
-    :`<tr class="${r.v!==null&&r.v===top?'best':''}"><td>${esc(r.h.name)}</td><td>${esc(r.k).replace(re,'<mark>$1</mark>')}</td><td class="small mut">${r.t}</td>
-      <td class="mono">${r.v??'✓'}</td><td>${r.v!==null?`<div class="bar"><i style="width:${Math.min(100,r.v/r.max*100)}%"></i></div>`:''}</td></tr>`).join('')}
+function renderSearch(){fillSuggest();
+  const q=$('#q').value.trim(),cat=$('#qcat').value,hs=sessHeroes();
+  if(!hs.length){$('#rbody').innerHTML='<tr><td colspan="6" class="empty">Keine Helden in dieser Session.</td></tr>';return}
+  if(q.length<2&&!cat){$('#rbody').innerHTML='<tr><td colspan="6" class="empty">Mindestens 2 Zeichen eingeben oder eine Art wählen.</td></tr>';return}
+  const rows=[];hs.forEach(h=>{const r=hits(h,q.length<2?'':q,cat);if(!r.length)rows.push({h,k:null});r.forEach(x=>rows.push({h,...x}))});
+  rows.sort((a,b)=>(b.v??-999)-(a.v??-999));const top=Math.max(...rows.map(r=>r.v??-999));
+  const re=q.length>=2?new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','i'):null;
+  const nm=h=>`<button class="link" data-sheet="${esc(h.file)}">${esc(h.name)}</button>`;
+  $('#rbody').innerHTML=rows.map(r=>r.k===null?`<tr><td>${nm(r.h)}</td><td colspan="5" class="mut">nicht vorhanden</td></tr>`
+    :`<tr class="${r.v!==null&&r.v===top&&top>-999?'best':''}"><td>${nm(r.h)}</td><td>${re?esc(r.k).replace(re,'<mark>$1</mark>'):esc(r.k)}</td><td class="small mut">${esc(r.t)}</td>
+      <td class="mono">${r.raw===''||r.raw==null?'✓':esc(r.raw)}</td><td>${r.v!==null?`<div class="bar"><i style="width:${Math.max(0,Math.min(100,r.v/r.max*100))}%"></i></div>`:''}</td><td class="small mut">${esc(r.d)}</td></tr>`).join('')}
 function renderAttr(){const hs=sessHeroes(),ks=['MU','KL','IN','CH','FF','GE','KO','KK'];
   $('#attrtab').innerHTML=hs.length?'<thead><tr><th>Held</th>'+ks.map(k=>`<th class="mono">${k}</th>`).join('')+'</tr></thead><tbody>'+
-   hs.map(h=>'<tr><td>'+esc(h.name)+'</td>'+ks.map(k=>{const best=Math.max(...hs.map(x=>x.E[k]??0));return`<td class="mono${h.E[k]===best?' best':''}">${h.E[k]??''}</td>`}).join('')+'</tr>').join('')+'</tbody>':''}
+   hs.map(h=>'<tr><td><button class="link" data-sheet="'+esc(h.file)+'">'+esc(h.name)+'</button></td>'+ks.map(k=>{const best=Math.max(...hs.map(x=>x.E[k]??0));return`<td class="mono${h.E[k]===best?' best':''}">${h.E[k]??''}</td>`}).join('')+'</tr>').join('')+'</tbody>':''}
+
+/* ---------- Heldenbogen ---------- */
+function sheetHtml(h,dialog){const s=h.sheet||{basis:{},sections:[],notizen:[]};
+  const basis={'Spieler':h.player,'Profession':h.profession,...s.basis,'Eingang':h.received,'Datei':h.file};
+  return `<div class="spread"><h2>${esc(h.name)}</h2><div class="row">
+      <input type="search" class="sq" placeholder="Im Bogen suchen…" aria-label="Im Bogen suchen" style="width:220px">
+      <a class="btn sm" href="/api/heroes/${encodeURIComponent(h.file)}/xml">XML</a>
+      ${h.status==='neu'?'<button class="btn sm pri" data-take>Übernehmen</button>':''}
+      ${dialog?'<button class="btn sm" data-close>Schließen</button>':''}</div></div>
+    <dl class="kv">${Object.entries(basis).filter(([k,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+    <div class="attr">${ATTR.map(k=>`<div class="a"><span class="label">${k}</span><b>${h.E&&h.E[k]!=null?h.E[k]:'–'}</b></div>`).join('')}</div>
+    ${h.meistergenehmigung&&h.meistergenehmigung.length?`<div class="note"><b>Meistergenehmigung laut XML:</b><ul class="small">${h.meistergenehmigung.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
+    ${s.sections.map(sec=>`<details open class="sec"><summary><b>${esc(sec.title)}</b> <span class="mut small">${sec.rows.length}</span></summary>
+      <div class="tw"><table class="small"><tbody>${sec.rows.map(r=>`<tr data-txt="${esc((r.name+' '+r.value+' '+r.details).toLowerCase())}"><td><b>${esc(r.name)}</b></td><td class="mono">${esc(r.value)}</td><td class="mut">${esc(r.details)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')||'<p class="mut">Keine Werte in der XML gefunden.</p>'}
+    ${s.notizen&&s.notizen.length?`<details open class="sec"><summary><b>Notizen</b></summary><ul class="small">${s.notizen.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></details>`:''}
+    <details open class="sec"><summary><b>Hintergrundgeschichte</b></summary><div class="bgview"></div></details>`}
+function fillSheet(root,h){
+  // Hintergrund ist serverseitig bereinigt (jsoup Safelist)
+  root.querySelector('.bgview').innerHTML=h.background||'<span class="mut">keine (per FTP abgelegt)</span>';
+  const sq=root.querySelector('.sq');sq.oninput=()=>{const q=sq.value.trim().toLowerCase();
+    root.querySelectorAll('details.sec').forEach(d=>{let any=false;d.querySelectorAll('tr[data-txt]').forEach(tr=>{const ok=!q||tr.dataset.txt.includes(q);tr.hidden=!ok;any=any||ok});
+      if(d.querySelector('tr[data-txt]'))d.hidden=!any;if(q&&any)d.open=true})};
+  root.onclick=async e=>{if(e.target.closest('[data-close]'))$('#sheet').close();
+    if(e.target.closest('[data-take]')){try{await api('/api/heroes/'+encodeURIComponent(h.file)+'/accept',{method:'POST'});toast('Held übernommen');h.status='übernommen';loadHeroes()}catch(x){toast(x.message)}}}}
+function openSheet(file){const h=heroes.find(x=>x.file===file);if(!h)return;const d=$('#sheet');
+  $('#sheetbody').innerHTML=sheetHtml(h,true);fillSheet($('#sheetbody'),h);if(!d.open)d.showModal();$('#sheetbody .sq').focus()}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-sheet]');if(b)openSheet(b.dataset.sheet)});
+$('#sheet').addEventListener('click',e=>{if(e.target===$('#sheet'))$('#sheet').close()});
 
 /* ---------- Konfiguration ---------- */
 const CFG=['playerPassword','mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];

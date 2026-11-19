@@ -17,6 +17,7 @@ public final class Db {
             s.execute("CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT)");
             s.execute("CREATE TABLE IF NOT EXISTS hero(file TEXT PRIMARY KEY, player TEXT, received TEXT, status TEXT, background TEXT)");
             s.execute("CREATE TABLE IF NOT EXISTS session(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, heroes TEXT)");
+            try { s.execute("ALTER TABLE session ADD COLUMN created TEXT"); } catch (SQLException alreadyThere) { }
             s.execute("CREATE TABLE IF NOT EXISTS approval(id INTEGER PRIMARY KEY AUTOINCREMENT, hero TEXT, player TEXT, created TEXT)");
             s.execute("CREATE TABLE IF NOT EXISTS approval_item(id INTEGER PRIMARY KEY AUTOINCREMENT, approval INTEGER, kind TEXT, text TEXT, status TEXT, comment TEXT)");
         }

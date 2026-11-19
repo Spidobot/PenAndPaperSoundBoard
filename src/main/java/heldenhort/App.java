@@ -122,11 +122,21 @@ public final class App {
         m.post("/api/sessions", ctx -> {
             String name = String.valueOf(ctx.bodyAsClass(Map.class).get("name")).trim();
             if (name.isEmpty() || name.equals("null")) throw new IllegalArgumentException("Name fehlt");
-            ctx.json(Map.of("id", db.exec("INSERT INTO session(name,heroes) VALUES(?,?)", name, "[]")));
+            ctx.json(Map.of("id", db.exec("INSERT INTO session(name,heroes,created) VALUES(?,?,?)", name, "[]", java.time.LocalDateTime.now().format(Heroes.TS))));
         });
         m.put("/api/sessions/{id}", ctx -> {
-            List<?> h = (List<?>) ctx.bodyAsClass(Map.class).get("heroes");
-            db.exec("UPDATE session SET heroes=? WHERE id=?", new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(h), ctx.pathParam("id"));
+            Map<?, ?> b = ctx.bodyAsClass(Map.class);
+            if (b.get("heroes") instanceof List<?> h)
+                db.exec("UPDATE session SET heroes=? WHERE id=?", new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(h), ctx.pathParam("id"));
+            if (b.get("name") != null) {
+                String name = String.valueOf(b.get("name")).trim();
+                if (name.isEmpty()) throw new IllegalArgumentException("Name fehlt");
+                db.exec("UPDATE session SET name=? WHERE id=?", name, ctx.pathParam("id"));
+            }
+            ctx.json(Map.of("ok", true));
+        });
+        m.delete("/api/sessions/{id}", ctx -> {
+            if (db.exec("DELETE FROM session WHERE id=?", ctx.pathParam("id")) == 0) throw new NotFoundResponse("Session unbekannt");
             ctx.json(Map.of("ok", true));
         });
 

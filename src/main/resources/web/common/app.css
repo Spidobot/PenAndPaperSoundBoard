@@ -159,3 +159,12 @@ mark{background:var(--acc-soft);color:inherit;padding:0 2px}
 .kv dt{color:var(--mut)}
 .kv dd{margin:0;overflow-wrap:anywhere}
 #jarinfo p{overflow-wrap:anywhere}
+.link{background:none;border:0;padding:0;color:inherit;font:inherit;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px;cursor:pointer;text-align:left}
+.link:hover{text-decoration-color:var(--acc)}
+.sheetdlg{width:min(1100px,calc(100vw - 32px));max-height:calc(100vh - 48px);border:1px solid var(--line);border-radius:var(--r);background:var(--bg);color:var(--fg);padding:20px}
+.sheetdlg::backdrop{background:rgba(0,0,0,.55)}
+#sheetbody,#hdet{display:grid;gap:14px}
+details.sec{border-top:1px solid var(--line);padding-top:8px}
+details.sec summary{cursor:pointer;padding:4px 0}
+details.sec td{vertical-align:top}
+details.sec td:first-child{white-space:nowrap}
