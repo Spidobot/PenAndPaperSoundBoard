@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119e">
+<link rel="stylesheet" href="/common/app.css?v=20261119g">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -171,12 +171,12 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119e"></script>
+<script src="/common/common.js?v=20261119g"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
   $$('.side a[data-v]').forEach(a=>a.dataset.v===h?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'));
-  ({'m-helden':loadHeroes,'m-freigaben':loadFg,'m-session':loadSession,'m-sessions':loadSessions,'m-spieler':loadAccounts,'m-termine':loadPolls,'m-config':loadCfg})[h]?.();}
+  ({'m-helden':loadHeroes,'m-freigaben':loadFg,'m-session':loadSession,'m-sessions':loadSessions,'m-spieler':loadAccounts,'m-termine':loadPolls,'m-config':loadCfg})[h]?.();if(h==='m-sound')setTimeout(fitLists,0);}
 addEventListener('hashchange',route);
 
 /* ---------- Soundboard ---------- */
@@ -249,6 +249,10 @@ function fitLists(){if($('#m-sound').hidden)return;const uls=$$('.plist ul');if(
   const sec=$('#m-sound'),pad=parseFloat(getComputedStyle(sec.parentElement).paddingBottom)||0,over=sec.getBoundingClientRect().bottom+scrollY+pad-innerHeight;
   const h=Math.max(80,Math.floor(H-over/(stacked?uls.length:1))-1);uls.forEach(u=>u.style.height=h+'px')}
 addEventListener('resize',fitLists);
+// Schriften laden nach, Kopfzeilen brechen um, Fenster wird verschoben: bei jeder Größenänderung neu einpassen
+document.fonts&&document.fonts.ready.then(fitLists);
+{let q=0;new ResizeObserver(()=>{if(q)return;q=requestAnimationFrame(()=>{q=0;fitLists()})}).observe(document.querySelector('#m-sound .fxrow'));
+ new ResizeObserver(()=>{if(q)return;q=requestAnimationFrame(()=>{q=0;fitLists()})}).observe(document.querySelector('#m-sound > .spread'));}
 let lastLib='',lastFile={music:null,bg:null};
 function renderSound(){renderScenes();renderFx();
   for(const id of ['music','bg']){const key=JSON.stringify([st&&st.scene,lib&&lib[CH[id][1]],qs[id]]);

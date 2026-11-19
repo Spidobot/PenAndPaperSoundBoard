@@ -216,3 +216,4 @@ a.btn{text-decoration:none;color:inherit;display:inline-flex;align-items:center}
 .plist .head{display:grid;gap:2px}
 .pctl{display:grid;gap:4px;padding:8px 10px;border:1px solid var(--line);border-radius:4px;background:var(--panel2)}
 .pctl .hvol{flex:1;min-width:0}
+main:has(> #m-sound:not([hidden])){padding-bottom:16px}

@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119e">
+<link rel="stylesheet" href="/common/app.css?v=20261119g">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -22,7 +22,7 @@
     <p class="footlinks"><button type="button" onclick="showImpressum()">Impressum</button></p>
   </div>
 </div></div>
-<script src="/common/common.js?v=20261119e"></script>
+<script src="/common/common.js?v=20261119g"></script>
 <script>
 $('#f').onsubmit=async e=>{e.preventDefault();$('#err').hidden=true;
   try{await api('/api/admin/login',{method:'POST',body:{password:$('#pw').value}});location.href='/'}
