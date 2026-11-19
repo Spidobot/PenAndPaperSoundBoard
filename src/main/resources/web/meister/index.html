@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Heldenhort Meister</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/common/app.css">
+<style>html,body{margin:0}</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="side" aria-label="Meister-Navigation">
+    <div class="brand">Heldenhort</div>
+    <a href="#m-sound" data-v="m-sound">Soundboard</a>
+    <a href="#m-helden" data-v="m-helden">Helden <span class="pill new" id="hBadge" hidden></span></a>
+    <a href="#m-freigaben" data-v="m-freigaben">Freigaben <span class="pill new" id="fgBadge" hidden></span></a>
+    <a href="#m-session" data-v="m-session">Session</a>
+    <a href="#m-config" data-v="m-config">Konfiguration</a>
+    <a href="#" id="logout">Abmelden</a>
+    <div class="foot">Jeder Bereich hat eine eigene Adresse. Mehrere Tabs gleichzeitig möglich.<br><br>Icons: <a href="https://icons8.com" target="_blank" rel="noopener" style="display:inline;padding:0">Icons8</a></div>
+  </nav>
+  <main>
+
+    <section class="view" id="m-sound">
+      <div class="spread">
+        <div class="row"><h1>Soundboard</h1><span class="onair" id="onair" hidden>Live an Spieler</span><span class="pill" id="lstn">0 Zuhörer</span></div>
+        <div class="row">
+          <label class="sw hear" title="Mehrere Meister-Tabs offen? Nur in einem den Ton einschalten."><input type="checkbox" id="hear"> Ton in diesem Tab</label>
+          <label class="sw"><input type="checkbox" id="bertha"> Bertha, die Stundenziege</label>
+          <span class="mono cd" id="berthaCd">--:--</span>
+          <label class="sw"><input type="checkbox" id="darkm"> Dark Mode</label>
+        </div>
+      </div>
+      <div class="sb">
+        <nav class="scenes" id="scenes" aria-label="Szenen"></nav>
+        <div class="sbmain">
+          <div class="fx" id="fx"></div>
+          <div class="card" id="upl" hidden>
+            <div class="spread"><h3>Dateiordner: <span id="uplScene"></span></h3><button class="btn sm" id="uplClose">Schließen</button></div>
+            <div class="grid2">
+              <div class="field"><label class="label" for="uplTarget">Ziel</label><select id="uplTarget"><option value="Music">Musik</option><option value="Sounds">Hintergrundgeräusche</option><option value="Effects">Effekte (Schatztruhe.mp3, Kuh.mp3 …)</option></select></div>
+              <div class="field"><span class="label">Ordner</span><div class="mono small" id="uplPath"></div></div>
+            </div>
+            <label class="drop" for="upfile" id="drop">MP3 hierher ziehen oder klicken<input type="file" id="upfile" multiple accept=".mp3,audio/mpeg" hidden></label>
+            <div class="prog" id="uplProg" hidden><i></i></div>
+            <p class="small mut">Nur MP3. Gleichnamige Dateien werden ersetzt. Effekt-Knöpfe brauchen genau diese Namen: Schatztruhe, Kuh, Avengers, Bertha, QuestHinzugefuegt, QuestAbgeschlossen, Pizza (.mp3).</p>
+          </div>
+          <div class="plists">
+            <div class="card plist" data-ch="music"></div>
+            <div class="card plist" data-ch="bg"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="m-helden" hidden>
+      <div class="spread"><h1>Helden</h1><span class="small mut">XML-Dateien, die du per FTP in den Helden-Ordner legst, erscheinen hier automatisch.</span></div>
+      <div class="card tw"><table><thead><tr><th>Held</th><th>Spieler</th><th>Profession</th><th>Eingang</th><th>Status</th><th></th></tr></thead><tbody id="htab"></tbody></table></div>
+      <div class="card" id="hdet" hidden></div>
+    </section>
+
+    <section class="view" id="m-freigaben" hidden>
+      <div class="spread"><h1>Meisterfreigaben</h1><span class="small mut">Neue Anfragen kommen zusätzlich per Mail.</span></div>
+      <p class="small mut">Die Punkte kommen aus der Regelprüfung der helden.jar (Art „Meistergenehmigung“). Der Spieler sieht deine Entscheidung und deinen Kommentar automatisch.</p>
+      <div id="fglist" style="display:grid;gap:14px"></div>
+    </section>
+
+    <section class="view" id="m-session" hidden>
+      <div class="spread"><h1>Session</h1>
+        <div class="row"><select id="sessSel" style="width:auto"></select><input type="text" id="sessNew" placeholder="Neue Session" style="width:180px"><button class="btn sm" id="sessAdd">Anlegen</button></div>
+      </div>
+      <div class="card"><span class="label">Helden in dieser Session</span><div class="hpick" id="hpick"></div></div>
+      <div class="card">
+        <div class="field"><label class="label" for="q">Wert suchen (Talent, Eigenschaft, Vorteil, Sonderfertigkeit)</label>
+          <input type="text" id="q" placeholder="z. B. Sinnenschärfe, Gefahreninstinkt, KL, Schwimmen…" value="Sinnenschärfe"></div>
+        <div class="chips" id="quick"></div>
+        <div class="tw"><table><thead><tr><th>Held</th><th>Treffer</th><th>Art</th><th>Wert</th><th style="width:30%"></th></tr></thead><tbody id="rbody"></tbody></table></div>
+      </div>
+      <div class="card"><div class="spread"><h3>Schnellblick Eigenschaften</h3><span class="small mut">Bester Wert markiert</span></div><div class="tw"><table id="attrtab"></table></div></div>
+    </section>
+
+    <section class="view" id="m-config" hidden>
+      <h1>Konfiguration</h1>
+      <form id="cfg" class="grid2">
+        <div class="card">
+          <h3>Spielerzugang</h3>
+          <div class="field"><label class="label" for="playerPassword">Spieler-Passwort</label><input type="text" id="playerPassword" autocomplete="off"></div>
+          <p class="small mut">Ein gemeinsames Passwort für alle Spieler. Änderung meldet alle Spieler ab. Leer = kein Zugang.</p>
+        </div>
+        <div class="card">
+          <h3>Benachrichtigung</h3>
+          <div class="field"><label class="label" for="mailTo">Mail an Meister</label><input type="email" id="mailTo"></div>
+          <div class="grid2"><div class="field"><label class="label" for="smtpHost">SMTP-Server</label><input type="text" id="smtpHost"></div><div class="field"><label class="label" for="smtpPort">Port</label><input type="number" id="smtpPort"></div></div>
+          <div class="grid2"><div class="field"><label class="label" for="smtpUser">SMTP-Benutzer</label><input type="text" id="smtpUser" autocomplete="off"></div><div class="field"><label class="label" for="smtpPass">SMTP-Passwort</label><input type="password" id="smtpPass" autocomplete="new-password"></div></div>
+          <div class="field"><label class="label" for="smtpFrom">Absender (leer = SMTP-Benutzer)</label><input type="email" id="smtpFrom"></div>
+          <button class="btn sm" type="button" id="testmail" style="justify-self:start">Testmail senden</button>
+        </div>
+        <div class="card">
+          <h3>helden.jar</h3>
+          <div id="jarinfo" class="small"></div>
+          <div class="field"><label class="label" for="updateTime">Tägliche Update-Prüfung (Serverzeit)</label><input type="time" id="updateTime"></div>
+          <p class="small mut">Prüfung und Austausch macht der eingebaute Updater der helden.jar. Der Server startet ihn nur einmal täglich zu dieser Uhrzeit.</p>
+          <button class="btn sm" type="button" id="updnow" style="justify-self:start">Jetzt prüfen</button>
+        </div>
+        <div class="card">
+          <h3>Speicherorte im Container</h3>
+          <p class="small mut">Alles unter <span class="mono">/data</span> liegt auf Unraid-Volumes und bleibt bei Container-Updates erhalten.</p>
+          <table class="small">
+            <tr><td class="mono">/data/audio/Music/&lt;Szene&gt;</td><td>Musik (Village, Travel, Dungeon, Castle, Fight)</td></tr>
+            <tr><td class="mono">/data/audio/Sounds/&lt;Szene&gt;</td><td>Hintergrundgeräusche</td></tr>
+            <tr><td class="mono">/data/audio/Effects</td><td>Effekt-Knöpfe (Schatztruhe.mp3, Kuh.mp3 …)</td></tr>
+            <tr><td class="mono">/data/audio/…</td><td>Upload über „Dateiordner“ im Soundboard oder per FTP</td></tr>
+            <tr><td class="mono">/data/helden</td><td>Helden-XML, per FTP befüllbar</td></tr>
+            <tr><td class="mono">/data/db/heldenhort.sqlite</td><td>Einstellungen, Sessions, Freigaben</td></tr>
+            <tr><td class="mono">/data/jar/helden.jar</td><td>ersetzt sich selbst über ihren Updater</td></tr>
+          </table>
+        </div>
+        <div class="row"><button class="btn pri" type="submit">Speichern</button></div>
+      </form>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="/common/common.js"></script>
+<script>
+/* ---------- Routing ---------- */
+function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
+  $$('.side a[data-v]').forEach(a=>a.dataset.v===h?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'));
+  ({'m-helden':loadHeroes,'m-freigaben':loadFg,'m-session':loadSession,'m-config':loadCfg})[h]?.();}
+addEventListener('hashchange',route);
+
+/* ---------- Soundboard ---------- */
+const SCENES=[['Village','Dorf / Stadt','dorf'],['Travel','Reisen','reisen'],['Dungeon','Dungeon','dungeon'],['Castle','Burg','burg'],['Fight','Kampf','kampf']];
+const FX=[['truhe','Schatztruhe öffnen'],['kuh','Cliffhanger-Kuh'],['avengers','Avengers'],['ziege','Bertha (solo)'],['qadd','Quest hinzugefügt'],['qdone','Quest abgeschlossen']];
+const CH={music:['Musik','Music'],bg:['Hintergrundgeräusche','Sounds']};
+let st=null,lib=null,compact=false;const pl=new Player();
+const IMG=(k,alt='')=>`<img class="ic" src="${ICON(k)}" alt="${esc(alt)}">`;
+const cmd=b=>api('/api/sound/cmd',{method:'POST',body:b}).catch(e=>toast(e.message));
+try{$('#hear').checked=localStorage.getItem('hh-hear')!=='0'}catch(e){$('#hear').checked=true}
+pl.enabled=$('#hear').checked;
+pl.onEnded=k=>cmd({action:'ended',ch:k});
+$('#hear').onchange=e=>{pl.enabled=e.target.checked;try{localStorage.setItem('hh-hear',e.target.checked?'1':'0')}catch(_){};if(st)pl.apply(st)};
+
+function renderScenes(){
+  $('#scenes').className='scenes'+(compact?' compact':'');
+  $('#scenes').innerHTML=`<button data-menu title="Menü">${IMG('menu')}<span>Menü</span></button>`+
+   SCENES.map(([k,l,i])=>`<button data-sc="${k}" aria-current="${st&&k===st.scene}" title="${l}">${IMG(i)}<span>${l}</span></button>`).join('')+
+   `<hr><button data-folder title="Dateiordner">${IMG('ordner')}<span>Dateiordner</span></button><button data-fx="pizza" title="Pizza"${lib&&!lib.fx.pizza?' disabled':''}>${IMG('pizza')}<span>Pizza</span></button>`;
+}
+function renderFx(){$('#fx').innerHTML=FX.map(([k,l])=>{const ok=lib&&lib.fx[k];return `<button data-fx="${k}" title="${ok?l:l+': Datei fehlt in /data/audio/Effects'}" aria-label="${l}"${ok?'':' disabled'}>${IMG(k)}</button>`}).join('')}
+function renderList(id){
+  if(!st||!lib)return;const c=st.ch[id],[title,dir]=CH[id],el=$(`.plist[data-ch="${id}"]`),items=lib[dir]||[];
+  const cur=c.file&&c.file.startsWith(dir+'/'+st.scene+'/')?c.file.split('/').pop():null;
+  const a=pl.a[id];
+  el.innerHTML=`<div class="spread"><h3>${title}</h3><span class="small mut mono">/data/audio/${dir}/${esc(st.scene)}</span></div>
+   <ul>${items.map(n=>`<li><button data-pick="${id}" data-f="${esc(dir+'/'+st.scene+'/'+n)}" aria-current="${n===cur}">${esc(n.replace(/\.mp3$/i,''))}</button></li>`).join('')||'<li class="empty small">Keine MP3 in diesem Ordner.</li>'}</ul>
+   <div class="small"><span class="mono" data-pos="${id}">--:-- / --:--</span> ${c.file?esc(c.file.split('/').pop().replace(/\.mp3$/i,'')):'<span class="mut">nichts gewählt</span>'}</div>
+   <div class="prog"><i data-prog="${id}"></i></div>
+   <div class="pbar">
+     <button class="ib" data-act="play" data-ch="${id}" title="Abspielen" aria-pressed="${c.playing}">${IMG('play','Abspielen')}</button>
+     <button class="ib" data-act="pause" data-ch="${id}" title="Pause">${IMG('pause','Pause')}</button>
+     <span title="Lautstärke">${IMG('vol','Lautstärke')}</span><input type="range" min="0" max="100" value="${c.volume}" data-chvol="${id}" aria-label="Lautstärke ${title}"><span class="mono small" data-volv="${id}">${c.volume}</span>
+     <button class="ib" data-act="rep" data-ch="${id}" title="Wiederholen" aria-pressed="${c.repeat}">${IMG('rep1','Wiederholen')}</button>
+     <button class="ib" data-act="once" data-ch="${id}" title="Einmal abspielen" aria-pressed="${!c.repeat}">${IMG('once','Einmal')}</button>
+   </div>`;
+}
+function renderSound(){renderScenes();renderFx();renderList('music');renderList('bg');
+  if(st){$('#onair').hidden=!(st.ch.music.playing||st.ch.bg.playing);$('#lstn').textContent=st.listeners+' Zuhörer';$('#bertha').checked=st.berthaAt>0}}
+async function loadLib(){try{lib=await api('/api/sound/library?scene='+encodeURIComponent(st.scene))}catch(e){toast(e.message)}renderSound()}
+$('#m-sound').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b||b.disabled)return;
+  if(b.dataset.menu!==undefined){compact=!compact;renderScenes()}
+  else if(b.dataset.sc)cmd({action:'scene',scene:b.dataset.sc});
+  else if(b.dataset.folder!==undefined)showUpl();
+  else if(b.dataset.fx){b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),600);cmd({action:'fx',key:b.dataset.fx})}
+  else if(b.dataset.pick)cmd({action:'pick',ch:b.dataset.pick,file:b.dataset.f});
+  else if(b.dataset.act){const k=b.dataset.ch,a=b.dataset.act;
+    cmd(a==='rep'||a==='once'?{action:'repeat',ch:k,value:a==='rep'}:{action:a,ch:k})}
+});
+let volT;$('#m-sound').addEventListener('input',e=>{const id=e.target.dataset.chvol;if(!id)return;$(`[data-volv="${id}"]`).textContent=e.target.value;
+  clearTimeout(volT);volT=setTimeout(()=>cmd({action:'volume',ch:id,value:+e.target.value}),120)});
+/* Upload */
+function showUpl(){$('#upl').hidden=false;const sc=SCENES.find(s=>s[0]===st.scene);$('#uplScene').textContent=sc?sc[1]:st.scene;
+  const t=$('#uplTarget').value;$('#uplPath').textContent=t==='Effects'?'/data/audio/Effects/':`/data/audio/${t}/${st.scene}/`}
+$('#uplTarget').onchange=showUpl;$('#uplClose').onclick=()=>$('#upl').hidden=true;
+function upload(files){files=[...files].filter(f=>/\.mp3$/i.test(f.name));if(!files.length)return toast('Nur MP3-Dateien');
+  const fd=new FormData();fd.append('target',$('#uplTarget').value);fd.append('scene',st.scene);files.forEach(f=>fd.append('files',f));
+  const x=new XMLHttpRequest(),bar=$('#uplProg');bar.hidden=false;
+  x.upload.onprogress=e=>{if(e.lengthComputable)bar.firstElementChild.style.width=e.loaded/e.total*100+'%'};
+  x.onload=()=>{bar.hidden=true;let r={};try{r=JSON.parse(x.responseText)}catch(_){}
+    if(x.status===401)return dispatchEvent(new Event('hh401'));
+    if(x.status>=300)return toast(r.error||'Upload fehlgeschlagen ('+x.status+')');toast(r.saved.length+' Datei(en) hochgeladen');loadLib()};
+  x.onerror=()=>{bar.hidden=true;toast('Upload fehlgeschlagen')};x.open('POST','/api/sound/upload');x.send(fd)}
+$('#upfile').onchange=e=>{upload(e.target.files);e.target.value=''};
+const drop=$('#drop');['dragenter','dragover'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',e=>upload(e.dataTransfer.files));
+addEventListener('hh401',()=>location.href='/login.html');
+$('#logout').onclick=async e=>{e.preventDefault();await api('/api/admin/logout',{method:'POST'}).catch(()=>{});location.href='/login.html'};
+$('#bertha').onchange=e=>cmd({action:'bertha',on:e.target.checked});
+setInterval(()=>{if(!st||!st.berthaAt){$('#berthaCd').textContent='--:--';return}$('#berthaCd').textContent=mmss((st.berthaAt-(Date.now()+pl.skew))/1000)},50);
+setInterval(()=>{for(const id in pl.a){const a=pl.a[id],p=$(`[data-pos="${id}"]`),g=$(`[data-prog="${id}"]`);if(!p||!st)continue;
+  const c=st.ch[id];let pos=pl.enabled&&!a.paused?a.currentTime:(c.playing?c.pos+(Date.now()+pl.skew-st.serverNow)/1000:c.pos);if(a.duration&&c.repeat)pos=pos%a.duration;
+  p.textContent=c.file?mmss(pos)+' / '+mmss(a.duration):'--:-- / --:--';if(g)g.style.width=a.duration?Math.min(100,pos/a.duration*100)+'%':'0'}},500);
+const setDark=d=>{document.documentElement.dataset.theme=d?'dark':'light';$('#darkm').checked=d;try{localStorage.setItem('hh-dark',d?'1':'0')}catch(_){}};
+$('#darkm').onchange=e=>setDark(e.target.checked);
+try{setDark(localStorage.getItem('hh-dark')!=='0')}catch(_){setDark(true)}
+
+const es=new EventSource('/api/sound/events');
+es.addEventListener('msg',ev=>{const m=JSON.parse(ev.data);
+  if(m.type==='fx'){pl.fx(m.file);return}
+  const sceneChanged=!st||st.scene!==m.scene;st=m;pl.apply(m);if(sceneChanged)loadLib();else renderSound()});
+
+/* ---------- Helden ---------- */
+let heroes=[],selHero=null;
+async function loadHeroes(){try{heroes=await api('/api/heroes')}catch(e){return toast(e.message)}renderHeroes()}
+function renderHeroes(){
+  const n=heroes.filter(h=>h.status==='neu').length;$('#hBadge').textContent=n;$('#hBadge').hidden=!n;
+  $('#htab').innerHTML=heroes.map(h=>`<tr${h.file===selHero?' class="best"':''}><td><b>${esc(h.name)}</b>${h.error?` <span class="err small">${esc(h.error)}</span>`:''}</td><td>${esc(h.player)}</td><td>${esc(h.profession)}</td><td class="mono small">${esc(h.received)}</td>
+   <td><span class="pill ${h.status==='neu'?'new':'ok'}">${esc(h.status)}</span></td><td><button class="btn sm" data-h="${esc(h.file)}">Öffnen</button></td></tr>`).join('')||'<tr><td colspan="6" class="empty">Noch keine Helden. Spieler schicken sie über die Spieler-UI, oder du legst XML-Dateien per FTP ab.</td></tr>';
+  const h=heroes.find(x=>x.file===selHero);$('#hdet').hidden=!h;if(!h)return;
+  $('#hdet').innerHTML=`<div class="spread"><h2>${esc(h.name)}</h2><div class="row">
+     <a class="btn sm" href="/api/heroes/${encodeURIComponent(h.file)}/xml">XML herunterladen</a>
+     ${h.status==='neu'?'<button class="btn sm pri" data-take>Übernehmen</button>':''}</div></div>
+   <div class="grid2"><div><span class="label">Datei</span><div class="mono small">/data/helden/${esc(h.file)}</div></div>
+     <div><span class="label">Rasse / Kultur</span><div class="small">${esc(h.rasse)} / ${esc(h.kultur)}</div></div></div>
+   ${h.meistergenehmigung&&h.meistergenehmigung.length?`<div><span class="label">Meistergenehmigung laut XML</span><ul class="small">${h.meistergenehmigung.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
+   <div><span class="label">Hintergrundgeschichte</span><div style="margin-top:6px" id="bgview"></div></div>`;
+  // Hintergrund ist serverseitig bereinigt (jsoup Safelist), trotzdem nur in ein eigenes Element einsetzen
+  $('#bgview').innerHTML=h.background||'<span class="mut">keine (per FTP abgelegt)</span>';
+}
+$('#htab').onclick=e=>{const b=e.target.closest('[data-h]');if(b){selHero=b.dataset.h;renderHeroes()}};
+$('#hdet').onclick=async e=>{if(e.target.closest('[data-take]')){try{await api('/api/heroes/'+encodeURIComponent(selHero)+'/accept',{method:'POST'});toast('Held übernommen');loadHeroes()}catch(x){toast(x.message)}}};
+
+/* ---------- Freigaben ---------- */
+const ST={offen:'warn',freigegeben:'ok',geändert:'ok',abgelehnt:'warn'};
+let fg=[];
+async function loadFg(){try{fg=await api('/api/approvals')}catch(e){return}renderFg()}
+function renderFg(){
+  const open=fg.reduce((n,r)=>n+r.items.filter(i=>i.status==='offen').length,0);$('#fgBadge').textContent=open;$('#fgBadge').hidden=!open;
+  if(location.hash!=='#m-freigaben'&&$('#fglist').innerHTML)return;
+  if($('#fglist').contains(document.activeElement))return; // nicht beim Tippen neu zeichnen
+  $('#fglist').innerHTML=fg.map(r=>`<div class="card"><div class="spread"><h3>${esc(r.hero)}</h3><span class="small mut">${esc(r.player)} · ${esc(r.created)}</span></div>
+   ${r.items.map(i=>`<div style="display:grid;gap:8px;border-top:1px solid var(--line);padding-top:10px">
+     <div class="spread"><span>${esc(i.text)}</span><span class="pill ${ST[i.status]}">${esc(i.status)}</span></div>
+     <div class="row" style="flex-wrap:nowrap"><input type="text" placeholder="Kommentar an den Spieler (bei Ändern Pflicht)" value="${esc(i.comment)}" data-fgc="${i.id}">
+       <button class="btn sm pri" data-fg="${i.id}" data-s="freigegeben">Freigeben</button><button class="btn sm" data-fg="${i.id}" data-s="geändert">Ändern</button><button class="btn sm danger" data-fg="${i.id}" data-s="abgelehnt">Ablehnen</button></div>
+   </div>`).join('')}</div>`).join('')||'<p class="mut">Keine Anfragen.</p>';
+}
+$('#fglist').onclick=async e=>{const b=e.target.closest('[data-fg]');if(!b)return;
+  try{await api('/api/approvals/items/'+b.dataset.fg,{method:'POST',body:{status:b.dataset.s,comment:$(`[data-fgc="${b.dataset.fg}"]`).value}});b.blur();toast(b.dataset.s+'. Der Spieler sieht es beim nächsten Abgleich.');loadFg()}catch(x){toast(x.message)}};
+setInterval(loadFg,10000);setInterval(()=>{if(location.hash==='#m-helden')loadHeroes()},15000);
+
+/* ---------- Session ---------- */
+let sessions=[],cur=null;
+async function loadSession(){try{[sessions,heroes]=await Promise.all([api('/api/sessions'),api('/api/heroes')])}catch(e){return toast(e.message)}
+  if(!cur||!sessions.find(s=>s.id===cur))cur=sessions[0]?.id??null;
+  $('#sessSel').innerHTML=sessions.map(s=>`<option value="${s.id}"${s.id===cur?' selected':''}>${esc(s.name)}</option>`).join('')||'<option>Keine Session</option>';
+  renderPick();renderSearch();renderAttr()}
+const inSess=()=>{const s=sessions.find(x=>x.id===cur);return new Set(s?JSON.parse(s.heroes||'[]'):[])};
+const sessHeroes=()=>{const set=inSess();return heroes.filter(h=>set.has(h.file)&&!h.error)};
+function renderPick(){const set=inSess();
+  $('#hpick').innerHTML=cur==null?'<span class="mut small">Erst eine Session anlegen.</span>':heroes.filter(h=>!h.error).map(h=>`<label><input type="checkbox" data-s="${esc(h.file)}"${set.has(h.file)?' checked':''}> ${esc(h.name)} <span class="mut small">${esc(h.player)}</span>${h.status==='neu'?' <span class="pill new">neu</span>':''}</label>`).join('')||'<span class="mut small">Noch keine Helden.</span>'}
+$('#sessSel').onchange=e=>{cur=+e.target.value;renderPick();renderSearch();renderAttr()};
+$('#sessAdd').onclick=async()=>{const n=$('#sessNew').value.trim();if(!n)return toast('Name der Session fehlt');try{const r=await api('/api/sessions',{method:'POST',body:{name:n}});cur=r.id;$('#sessNew').value='';loadSession()}catch(e){toast(e.message)}};
+$('#hpick').onchange=async()=>{const files=$$('#hpick input:checked').map(i=>i.dataset.s);
+  try{await api('/api/sessions/'+cur,{method:'PUT',body:{heroes:files}});sessions.find(s=>s.id===cur).heroes=JSON.stringify(files);renderSearch();renderAttr()}catch(e){toast(e.message)}};
+const quick=['Sinnenschärfe','Gefahreninstinkt','Selbstbeherrschung','Schwimmen','Menschenkenntnis','Schleichen','IN','MU'];
+$('#quick').innerHTML=quick.map(q=>`<button class="chip" data-q="${q}">${q}</button>`).join('');
+$('#quick').onclick=e=>{const b=e.target.closest('[data-q]');if(b){$('#q').value=b.dataset.q;renderSearch()}};
+$('#q').oninput=renderSearch;
+function hits(h,q){const r=[],ql=q.toLowerCase();
+  for(const[k,v]of Object.entries(h.E||{}))if(k.toLowerCase()===ql)r.push({k,v,t:'Eigenschaft',max:21});
+  for(const[k,v]of Object.entries(h.T||{}))if(k.toLowerCase().includes(ql))r.push({k,v,t:'Talent',max:18});
+  for(const x of h.V||[])if(x.name.toLowerCase().includes(ql)){const n=parseInt(x.value);r.push({k:x.name+(x.value&&isNaN(n)?' ('+x.value+')':''),v:isNaN(n)?null:n,t:'Vorteil/Nachteil',max:18})}
+  for(const k of h.SF||[])if(k.toLowerCase().includes(ql))r.push({k,v:null,t:'Sonderfertigkeit'});
+  return r}
+function renderSearch(){
+  const q=$('#q').value.trim(),hs=sessHeroes();
+  if(!hs.length){$('#rbody').innerHTML='<tr><td colspan="5" class="empty">Keine Helden in dieser Session.</td></tr>';return}
+  if(q.length<2){$('#rbody').innerHTML='<tr><td colspan="5" class="empty">Mindestens 2 Zeichen eingeben.</td></tr>';return}
+  const rows=[];hs.forEach(h=>{const r=hits(h,q);if(!r.length)rows.push({h,k:null});r.forEach(x=>rows.push({h,...x}))});
+  rows.sort((a,b)=>(b.v??-1)-(a.v??-1));const top=Math.max(...rows.map(r=>r.v??-1));
+  const re=new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','i');
+  $('#rbody').innerHTML=rows.map(r=>r.k===null?`<tr><td>${esc(r.h.name)}</td><td colspan="4" class="mut">nicht vorhanden</td></tr>`
+    :`<tr class="${r.v!==null&&r.v===top?'best':''}"><td>${esc(r.h.name)}</td><td>${esc(r.k).replace(re,'<mark>$1</mark>')}</td><td class="small mut">${r.t}</td>
+      <td class="mono">${r.v??'✓'}</td><td>${r.v!==null?`<div class="bar"><i style="width:${Math.min(100,r.v/r.max*100)}%"></i></div>`:''}</td></tr>`).join('')}
+function renderAttr(){const hs=sessHeroes(),ks=['MU','KL','IN','CH','FF','GE','KO','KK'];
+  $('#attrtab').innerHTML=hs.length?'<thead><tr><th>Held</th>'+ks.map(k=>`<th class="mono">${k}</th>`).join('')+'</tr></thead><tbody>'+
+   hs.map(h=>'<tr><td>'+esc(h.name)+'</td>'+ks.map(k=>{const best=Math.max(...hs.map(x=>x.E[k]??0));return`<td class="mono${h.E[k]===best?' best':''}">${h.E[k]??''}</td>`}).join('')+'</tr>').join('')+'</tbody>':''}
+
+/* ---------- Konfiguration ---------- */
+const CFG=['playerPassword','mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];
+async function loadCfg(){try{const c=await api('/api/config');CFG.forEach(k=>$('#'+k).value=c[k]??'');loadJar()}catch(e){toast(e.message)}}
+async function loadJar(){try{const j=await api('/api/jar');
+  $('#jarinfo').innerHTML=j.present?`<div class="spread"><span>Installiert</span><span class="mono">${esc(j.version||'?')}</span></div>
+   <div class="spread"><span>Letzte Prüfung</span><span class="mono">${esc(j.lastCheck||'noch nie')}</span></div>
+   <div class="spread"><span>Ergebnis</span><span>${esc(j.lastResult||'–')}</span></div>
+   <p class="small mut mono">Serverzeit: ${esc(j.serverTime)} · ${esc(j.timezone)}</p>`
+   :`<p class="err">helden.jar fehlt. Bitte per FTP nach <span class="mono">${esc(j.path)}</span> legen.</p>`}catch(e){toast(e.message)}}
+$('#cfg').onsubmit=async e=>{e.preventDefault();const b={};CFG.forEach(k=>b[k]=$('#'+k).value);
+  try{await api('/api/config',{method:'PUT',body:b});toast('Gespeichert. Update-Prüfung täglich '+b.updateTime+' Serverzeit');loadJar()}catch(x){toast(x.message)}};
+$('#testmail').onclick=async()=>{toast('Sende Testmail…');try{await api('/api/config/testmail',{method:'POST'});toast('Testmail verschickt')}catch(e){toast('Mail fehlgeschlagen: '+e.message)}};
+$('#updnow').onclick=async()=>{toast('Prüfe… das kann ein paar Minuten dauern');try{const r=await api('/api/jar/update',{method:'POST'});toast(r.result);loadJar()}catch(e){toast(e.message)}};
+
+route();loadFg();loadHeroes();
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>heldenhort</Name>
+  <Repository>ghcr.io/spidobot/heldenhort:latest</Repository>
+  <Registry>https://github.com/spidobot/PenAndPaperSoundBoard/pkgs/container/heldenhort</Registry>
+  <Network>bridge</Network>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Overview>DSA-Spieltisch: Soundboard mit Stream an die Spieler, Heldenerstellung mit der helden.jar, Meisterfreigaben, Session-Suche. Meister-UI und Spieler-UI auf getrennten Ports.</Overview>
+  <Category>MediaServer:Music Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <ExtraParams>--user 99:100</ExtraParams>
+  <Config Name="Meister-UI" Target="8080" Default="8080" Mode="tcp" Description="Meister-Oberfläche (mit Admin-Passwort)" Type="Port" Display="always" Required="true">8080</Config>
+  <Config Name="Spieler-UI" Target="8081" Default="8081" Mode="tcp" Description="Spieler-Oberfläche, hinter den Nginx Proxy Manager" Type="Port" Display="always" Required="true">8081</Config>
+  <Config Name="Daten (appdata)" Target="/data" Default="/mnt/user/appdata/heldenhort" Mode="rw" Description="Datenbank, helden.jar, Einstellungen. Bleibt bei Updates erhalten." Type="Path" Display="always" Required="true">/mnt/user/appdata/heldenhort</Config>
+  <Config Name="Sounds (_DSA)" Target="/data/audio" Default="" Mode="rw" Description="Ordner mit Music/ und Sounds/ (je Village, Travel, Dungeon, Castle, Fight) und Effects/" Type="Path" Display="always" Required="true"></Config>
+  <Config Name="Helden-XML" Target="/data/helden" Default="/mnt/user/appdata/heldenhort/helden" Mode="rw" Description="Helden-XML. Per FTP befüllbar." Type="Path" Display="always" Required="true">/mnt/user/appdata/heldenhort/helden</Config>
+  <Config Name="ADMIN_PASSWORD" Target="ADMIN_PASSWORD" Default="" Mode="" Description="Passwort für die Meister-UI. Ohne Passwort bleibt die Meister-UI gesperrt." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="TZ" Target="TZ" Default="Europe/Vienna" Mode="" Description="Zeitzone (für die tägliche Update-Uhrzeit)" Type="Variable" Display="advanced" Required="false">Europe/Vienna</Config>
+</Container>

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Heldenhort Meister</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/common/app.css">
+<style>html,body{margin:0}</style>
+</head>
+<body>
+<div class="pl"><div class="inner">
+  <div class="login">
+    <h1>Heldenhort · Meister</h1>
+    <form id="f" class="card">
+      <div class="field"><label class="label" for="pw">Admin-Passwort</label><input type="password" id="pw" autocomplete="current-password" required autofocus></div>
+      <button class="btn pri" type="submit">Anmelden</button>
+      <p class="small err" id="err" hidden></p>
+    </form>
+    <p class="small mut">Das Passwort steht in der Docker-Konfiguration (ADMIN_PASSWORD).</p>
+  </div>
+</div></div>
+<script src="/common/common.js"></script>
+<script>
+$('#f').onsubmit=async e=>{e.preventDefault();$('#err').hidden=true;
+  try{await api('/api/admin/login',{method:'POST',body:{password:$('#pw').value}});location.href='/'}
+  catch(x){$('#err').textContent=x.message;$('#err').hidden=false}};
+</script>
+</body>
+</html>
