@@ -118,7 +118,7 @@ public final class App {
             ctx.json(Map.of("ok", true));
         });
         m.delete("/api/sound/session", ctx -> { sound.sessionClear(ctx.queryParam("sid")); ctx.json(Map.of("ok", true)); });
-        m.sse("/api/sound/events", c -> sound.subscribe(c, false));
+        m.get("/api/sound/events", ctx -> ctx.status(410).result("abgeschaltet")); // alte Seiten: Browser hört auf, neu zu verbinden
         m.get("/api/sound/fxinfo", ctx -> ctx.json(sound.fxInfo()));
         // Diagnose: was machen die Threads gerade? Bei Hängern im Browser öffnen und den Text schicken.
         m.get("/api/debug/threads", ctx -> {
@@ -320,10 +320,7 @@ public final class App {
                     + "<div class='pl'><div class='inner'><div class='card'><h2>" + (ok ? "Mail-Adresse bestätigt" : "Link ungültig oder schon benutzt")
                     + "</h2><a class='btn' href='/'>Zu Heldenhort</a></div></div></div>");
         });
-        s.sse("/api/sound/events", c -> {
-            if (accounts.current(c.ctx()) == null) { c.close(); return; }
-            sound.subscribe(c, true);
-        });
+        s.get("/api/sound/events", ctx -> ctx.status(410).result("abgeschaltet"));
 
         // --- Entwürfe (Heldenerstellung), gehören dem Konto
         s.get("/api/drafts", ctx -> ctx.json(db.query("SELECT id,name,status,updated, xml IS NOT NULL AS haupt FROM draft WHERE account=? ORDER BY updated DESC", me(accounts, ctx))));

@@ -1,7 +1,6 @@
 package heldenhort;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.javalin.http.sse.SseClient;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -37,7 +36,6 @@ public final class Sound {
 
     private final Path root;
     private final ObjectMapper json = new ObjectMapper();
-    private final Set<SseClient> clients = ConcurrentHashMap.newKeySet();
     public final Map<String, Channel> ch = new LinkedHashMap<>(Map.of("music", new Channel(70), "bg", new Channel(50)));
     public String scene = "Village";
     public long berthaAt;            // 0 = aus
@@ -216,7 +214,7 @@ public final class Sound {
         });
         Map<String, Object> s = new LinkedHashMap<>();
         s.put("type", "state"); s.put("scene", scene); s.put("ch", chs); s.put("berthaAt", berthaAt); s.put("fxVolume", fxVolume);
-        s.put("serverNow", System.currentTimeMillis()); s.put("listeners", listeners()); s.put("listenerNames", listenerNames()); s.put("fxSeq", fxSeq);
+        s.put("serverNow", System.currentTimeMillis()); s.put("listeners", listeners()); s.put("listenerNames", listenerNames()); s.put("fxSeq", fxSeq); s.put("libSeq", libSeq);
         return s;
     }
 
@@ -243,17 +241,6 @@ public final class Sound {
         return s;
     }
 
-    public void subscribe(SseClient c, boolean player) {
-        // Nginx (Proxy Manager) puffert sonst die Live-Nachrichten und schickt sie verspätet in Blöcken
-        c.ctx().res().setHeader("X-Accel-Buffering", "no");
-        c.ctx().res().setHeader("Cache-Control", "no-cache, no-transform");
-        c.keepAlive();
-        c.onClose(() -> { clients.remove(c); broadcast(state()); });
-        c.ctx().attribute("player", player);
-        clients.add(c);
-        send(c, state());
-        broadcast(state());
-    }
 
     private final Map<Object, Long> pollers = new ConcurrentHashMap<>();
     private final Map<Object, String> pollerNames = new ConcurrentHashMap<>();
@@ -379,7 +366,6 @@ public final class Sound {
     }
 
     private void tickNow() {
-        if (++ticks % 15 == 0) broadcast(Map.of("type", "ping", "serverNow", System.currentTimeMillis()));
         if (berthaAt > 0 && System.currentTimeMillis() >= berthaAt) {
             berthaAt = System.currentTimeMillis() + 3_600_000;
             broadcast(fxEvent(fxUrl(FX.get("ziege"))));
@@ -387,9 +373,12 @@ public final class Sound {
         }
     }
 
-    private void broadcast(Map<String, Object> msg) { for (SseClient c : clients) send(c, msg); }
+    /**
+     * Keine Dauerverbindungen mehr: Browser fragen den Zustand ab (/api/sound/state). Ein Senden an hängende
+     * Live-Verbindungen hat früher Befehle und Abfragen blockiert. Effekte liegen in recentFx, Listenänderungen zählen libSeq hoch.
+     */
+    private volatile long libSeq;
 
-    private void send(SseClient c, Map<String, Object> msg) {
-        try { c.sendEvent("msg", json.writeValueAsString(msg)); } catch (Exception e) { clients.remove(c); }
-    }
+    private void broadcast(Map<String, Object> msg) { if ("lib".equals(msg.get("type"))) libSeq++; }
+
 }

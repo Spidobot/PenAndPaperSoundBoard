@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119v">
+<link rel="stylesheet" href="/common/app.css?v=20261119w">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -174,7 +174,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119v"></script>
+<script src="/common/common.js?v=20261119w"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -388,7 +388,7 @@ try{setDark(localStorage.getItem('hh-dark')!=='0')}catch(_){setDark(true)}
 
 function onSound(m){
   if(m.type==='fx'){pl.fx(m.file);return}
-  if(m.type==='lib'){if(m.scene==='Session'){loadSess();return}delete libs[m.scene];if(st&&st.scene===m.scene)loadLib();return}
+  if(m.type==='state'&&st&&m.libSeq!==st.libSeq){for(const k in libs)delete libs[k];setTimeout(()=>{loadSess();loadLib()},0)} // Listen haben sich geändert
   if(st&&m.serverNow<st.serverNow)return; // ältere Nachricht nach einer schnelleren Befehlsantwort
   const sceneChanged=!st||st.scene!==m.scene;st=m;pl.apply(m);if(sceneChanged)loadLib();else renderSound()}
 // Kleines Fenster mit den Namen der Zuhörer; Klick irgendwo schließt es
