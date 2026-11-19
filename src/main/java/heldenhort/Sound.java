@@ -307,7 +307,9 @@ public final class Sound {
         } catch (Exception e) { return "nicht lesbar: " + e.getMessage(); }
     }
 
-    static final long CHUNK = 2L << 20; // 2 MB ≈ 1–1,5 min Musik
+    // 1 MB ≈ 40–60 s Musik. Klein genug, dass der Browser ein Stück sofort fertig lädt und die Verbindung wieder frei ist
+    // (bei HTTP/1.1 hat er nur 6 Verbindungen pro Adresse; halb geladene Stücke blockierten sonst alle Abfragen).
+    static final long CHUNK = 1L << 20;
 
     /**
      * MP3 ausliefern, in Stücken von CHUNK. Javalins writeSeekableStream schickt nur 128 KB pro Anfrage (hunderte
