@@ -115,7 +115,7 @@ document.addEventListener('click',e=>{const a=e.target.closest('a[data-pdf]');if
  * 2. Abfrage jede Sekunde (/api/sound/state): kommt durch jeden Proxy, höchstens 1 s Verzögerung.
  * Was zuerst ankommt, gilt. Ältere Zustände und schon gespielte Effekte (Nummer) werden verworfen.
  */
-function liveEvents(url,onMsg,onStatus=()=>{}){let es=null,lastSse=Date.now(),lastPoll=0,stopped=false,seenNow=0,lastFx=null,okShown=null;
+function liveEvents(url,onMsg,onStatus=()=>{},query=()=>''){let es=null,lastSse=Date.now(),lastPoll=0,stopped=false,seenNow=0,lastFx=null,okShown=null;
   const status=()=>{const ok=Date.now()-lastPoll<5000||Date.now()-lastSse<20000;if(ok!==okShown){okShown=ok;onStatus(ok)}};
   const fx=e=>{if(lastFx!==null&&e.id<=lastFx)return;lastFx=e.id;onMsg(e)};
   const state=m=>{if(lastFx===null)lastFx=m.fxSeq||0; // alte Effekte beim Öffnen nicht nachspielen
@@ -128,7 +128,7 @@ function liveEvents(url,onMsg,onStatus=()=>{}){let es=null,lastSse=Date.now(),la
     es.onerror=()=>{if(es.readyState===2)setTimeout(()=>{if(!stopped)open()},2000)}};
   let polling=false;
   const poll=async()=>{if(stopped||polling)return;polling=true;
-    try{const r=await fetch('/api/sound/state',{cache:'no-store',credentials:'same-origin'});
+    try{const r=await fetch('/api/sound/state'+query(),{cache:'no-store',credentials:'same-origin'});
       if(r.status===401){dispatchEvent(new Event('hh401'));return}
       if(r.ok){const m=await r.json();lastPoll=Date.now();
         if(lastFx!==null)for(const e of (m.fx||[]))if(m.serverNow-e.at<5000)fx(e); // zu alte Effekte nicht mehr abspielen

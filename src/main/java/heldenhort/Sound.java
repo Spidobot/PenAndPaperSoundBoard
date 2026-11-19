@@ -216,7 +216,7 @@ public final class Sound {
         });
         Map<String, Object> s = new LinkedHashMap<>();
         s.put("type", "state"); s.put("scene", scene); s.put("ch", chs); s.put("berthaAt", berthaAt); s.put("fxVolume", fxVolume);
-        s.put("serverNow", System.currentTimeMillis()); s.put("listeners", listeners()); s.put("fxSeq", fxSeq);
+        s.put("serverNow", System.currentTimeMillis()); s.put("listeners", listeners()); s.put("listenerNames", listenerNames()); s.put("fxSeq", fxSeq);
         return s;
     }
 
@@ -256,17 +256,19 @@ public final class Sound {
     }
 
     private final Map<Object, Long> pollers = new ConcurrentHashMap<>();
+    private final Map<Object, String> pollerNames = new ConcurrentHashMap<>();
 
-    /** Spieler, der gerade abfragt (Konto-ID). */
-    public void polled(Object id) { if (id != null) pollers.put(id, System.currentTimeMillis()); }
+    /** Spieler, der gerade wirklich zuhört (Ton an, Lautstärke > 0). */
+    public void polled(Object id, String name) { if (id != null) { pollers.put(id, System.currentTimeMillis()); pollerNames.put(id, name); } }
 
-    /** Zuhörer: Spieler mit Live-Verbindung oder Abfrage in den letzten 5 s, je nachdem, was mehr ist. */
+    /** Zuhörer: Spieler, die in den letzten 5 s mit eingeschaltetem Ton abgefragt haben. Nur online zählt nicht. */
     long listeners() {
         long now = System.currentTimeMillis();
-        pollers.values().removeIf(t -> now - t > 5000);
-        long sse = clients.stream().filter(c -> Boolean.TRUE.equals(c.ctx().attribute("player"))).count();
-        return Math.max(sse, pollers.size());
+        pollers.entrySet().removeIf(e -> now - e.getValue() > 5000);
+        return pollers.size();
     }
+
+    List<String> listenerNames() { listeners(); return pollers.keySet().stream().map(pollerNames::get).sorted().toList(); }
 
     /** Effekt-Adresse mit Änderungszeit: eine ersetzte Datei bekommt eine neue Adresse, der Browser lädt sie neu. */
     String fxUrl(String f) {
