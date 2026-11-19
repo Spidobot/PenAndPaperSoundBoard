@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119d">
+<link rel="stylesheet" href="/common/app.css?v=20261119e">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -171,7 +171,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119d"></script>
+<script src="/common/common.js?v=20261119e"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -213,16 +213,18 @@ function fuzzy(q,name){q=norm(q);if(!q)return true;const n=norm(name);if(n.inclu
 function renderList(id){
   if(!st||!lib)return;const c=st.ch[id],[title,dir]=CH[id],el=$(`.plist[data-ch="${id}"]`),all=lib[dir]||[],items=all.filter(n=>fuzzy(qs[id],n));
   const oldUl=el.querySelector('ul'),scroll=oldUl?oldUl.scrollTop:0,inp=el.querySelector('.lsearch'),focused=inp&&document.activeElement===inp,caret=focused?inp.selectionStart:0;
-  el.innerHTML=`<div class="spread head"><div><h3>${title}</h3><span class="small mut mono">/data/audio/${dir}/${esc(st.scene)}</span></div>
-     <label class="hvol" title="Lautstärke ${title}">${IMG('vol','Lautstärke')}<input type="range" min="0" max="100" value="${c.volume}" data-chvol="${id}" aria-label="Lautstärke ${title}"><span class="mono small" data-volv="${id}">${c.volume}</span></label></div>
+  el.innerHTML=`<div class="head"><h3>${title}</h3><span class="small mut mono">/data/audio/${dir}/${esc(st.scene)}</span></div>
+   <div class="pctl">
+     <div class="pbar">
+       <button class="ib tog" data-act="toggle" data-ch="${id}" title="Abspielen / Pause"></button>
+       <label class="hvol" title="Lautstärke ${title}">${IMG('vol','Lautstärke')}<input type="range" min="0" max="100" value="${c.volume}" data-chvol="${id}" aria-label="Lautstärke ${title}"><span class="mono small" data-volv="${id}">${c.volume}</span></label>
+       <button class="ib tog" data-act="repeat" data-ch="${id}"></button>
+     </div>
+     <div class="small"><span class="mono" data-pos="${id}">--:-- / --:--</span> <span data-now="${id}"></span> <span class="loading" data-load="${id}" hidden>lädt …</span></div>
+     <input type="range" class="seek" data-seek="${id}" min="0" max="0" step="1" value="0" aria-label="${title}: Position">
+   </div>
    <input type="search" class="lsearch" data-ls="${id}" value="${esc(qs[id])}" placeholder="${title} durchsuchen… (${all.length})" aria-label="${title} durchsuchen">
-   <ul>${items.map(n=>`<li><button data-pick="${id}" data-f="${esc(dir+'/'+st.scene+'/'+n)}" title="Klick: auswählen · Doppelklick oder Play: abspielen"><span class="mk"></span>${esc(n.replace(/\.mp3$/i,''))}</button></li>`).join('')||`<li class="empty small">${all.length?'Kein Treffer.':'Keine MP3 in diesem Ordner.'}</li>`}</ul>
-   <div class="small"><span class="mono" data-pos="${id}">--:-- / --:--</span> <span data-now="${id}"></span> <span class="loading" data-load="${id}" hidden>lädt …</span></div>
-   <input type="range" class="seek" data-seek="${id}" min="0" max="0" step="1" value="0" aria-label="${title}: Position">
-   <div class="pbar">
-     <button class="ib tog" data-act="toggle" data-ch="${id}" title="Abspielen / Pause"></button>
-     <button class="ib tog" data-act="repeat" data-ch="${id}"></button>
-   </div>`;
+   <ul>${items.map(n=>`<li><button data-pick="${id}" data-f="${esc(dir+'/'+st.scene+'/'+n)}" title="Klick: auswählen · Doppelklick oder Play: abspielen"><span class="mk"></span>${esc(n.replace(/\.mp3$/i,''))}</button></li>`).join('')||`<li class="empty small">${all.length?'Kein Treffer.':'Keine MP3 in diesem Ordner.'}</li>`}</ul>`;
   el.querySelector('ul').scrollTop=scroll;
   if(focused){const n=el.querySelector('.lsearch');n.focus();n.setSelectionRange(caret,caret)}
   updateList(id);fitLists();

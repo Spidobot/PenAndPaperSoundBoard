@@ -213,3 +213,6 @@ a.btn{text-decoration:none;color:inherit;display:inline-flex;align-items:center}
 .hvol input[type=range]{flex:1;accent-color:var(--acc)}
 .pbar{justify-content:space-between}
 @media (min-width:761px){.side{position:sticky;top:0;height:100vh;overflow-y:auto}}
+.plist .head{display:grid;gap:2px}
+.pctl{display:grid;gap:4px;padding:8px 10px;border:1px solid var(--line);border-radius:4px;background:var(--panel2)}
+.pctl .hvol{flex:1;min-width:0}
