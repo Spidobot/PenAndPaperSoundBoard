@@ -38,7 +38,9 @@ public final class App {
         String adminPw = env("ADMIN_PASSWORD", "");
         if (adminPw.isBlank()) System.err.println("WARNUNG: ADMIN_PASSWORD ist nicht gesetzt. Die Meister-UI bleibt gesperrt.");
         Javalin m = web("/web/meister", 600_000_000L);
-        Javalin s = web("/web/spieler", 4_000_000L);
+        // gleiche Grenze wie beim Meister: Javalins Multipart-Grenze gilt prozessweit, die zuletzt gesetzte gewinnt (sonst max. 4 MB beim Meister-Upload).
+        // Spieler-Uploads (Helden-XML) prüfen ihre Größe selbst (5 MB).
+        Javalin s = web("/web/spieler", 600_000_000L);
         for (Javalin a : List.of(m, s)) {
             a.get("/api/public", ctx -> ctx.json(Map.of("impressum", db.get("impressum", "").isBlank() ? IMPRESSUM : db.get("impressum", ""))));
             a.exception(IllegalArgumentException.class, (e, ctx) -> ctx.status(400).json(Map.of("error", e.getMessage())));
@@ -47,7 +49,11 @@ public final class App {
                 Path p = sound.resolve(ctx.pathParam("path"));
                 Sound.serve(ctx, p);
             });
-            a.get("/api/sound/state", ctx -> { ctx.header("Cache-Control", "no-store"); ctx.json(sound.snapshot()); });
+            boolean playerSide = a == s;
+            a.get("/api/sound/state", ctx -> {
+                if (playerSide) { var acc = accounts.current(ctx); if (acc != null) sound.polled(acc.get("id")); } // Zuhörer zählen, auch ohne Live-Verbindung
+                ctx.header("Cache-Control", "no-store"); ctx.json(sound.snapshot());
+            });
             a.get("/api/sound/library", ctx -> ctx.json(sound.library(ctx.queryParamAsClass("scene", String.class).getOrDefault(sound.scene), ctx.queryParam("sid"))));
         }
 
@@ -81,10 +87,24 @@ public final class App {
             try { Files.createDirectories(dir); } catch (Exception e) { throw new IllegalStateException("Ordner " + dir + " kann nicht angelegt werden: keine Schreibrechte für den Container"); }
             if (!Files.isWritable(dir)) throw new IllegalStateException("Keine Schreibrechte auf " + dir + ". In Unraid den Container ohne --user starten oder die Rechte des Ordners anpassen.");
             List<String> saved = new ArrayList<>();
+            // Große Dateien kommen in Teilen (Cloudflare lässt nur 100 MB pro Anfrage durch): part=0..parts-1,
+            // die Teile werden an eine .teil-Datei angehängt und erst nach dem letzten Teil umbenannt.
+            int part = ctx.formParam("part") == null ? 0 : Integer.parseInt(ctx.formParam("part"));
+            int parts = ctx.formParam("parts") == null ? 1 : Integer.parseInt(ctx.formParam("parts"));
+            if (part < 0 || parts < 1 || part >= parts || parts > 10_000) throw new IllegalArgumentException("Teilnummer ungültig");
             for (var f : ctx.uploadedFiles("files")) {
-                String name = Path.of(f.filename()).getFileName().toString().replaceAll("[\\\\/:*?\"<>|]", "_").trim();
+                String name = Path.of(ctx.formParam("name") != null ? ctx.formParam("name") : f.filename()).getFileName().toString().replaceAll("[\\\\/:*?\"<>|]", "_").trim();
                 if (!name.toLowerCase().endsWith(".mp3")) throw new IllegalArgumentException("Nur MP3-Dateien: " + name);
-                try (var in = f.content()) { Files.copy(in, dir.resolve(name), StandardCopyOption.REPLACE_EXISTING); }
+                Path tmp = dir.resolve("." + name + ".teil");
+                try (var in = f.content()) {
+                    if (part == 0) Files.copy(in, tmp, StandardCopyOption.REPLACE_EXISTING);
+                    else {
+                        if (!Files.exists(tmp)) throw new IllegalStateException("Teil " + part + " ohne Anfang: bitte neu hochladen");
+                        try (var out = Files.newOutputStream(tmp, StandardOpenOption.APPEND)) { in.transferTo(out); }
+                    }
+                }
+                if (part < parts - 1) { ctx.json(Map.of("partial", true)); return; }
+                Files.move(tmp, dir.resolve(name), StandardCopyOption.REPLACE_EXISTING);
                 saved.add(name);
                 if (ses) sound.sessionEdit(sid, target + "/" + Sound.SESSION + "/" + name, true);
             }

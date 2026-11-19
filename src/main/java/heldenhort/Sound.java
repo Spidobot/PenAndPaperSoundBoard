@@ -255,7 +255,18 @@ public final class Sound {
         broadcast(state());
     }
 
-    long listeners() { return clients.stream().filter(c -> Boolean.TRUE.equals(c.ctx().attribute("player"))).count(); }
+    private final Map<Object, Long> pollers = new ConcurrentHashMap<>();
+
+    /** Spieler, der gerade abfragt (Konto-ID). */
+    public void polled(Object id) { if (id != null) pollers.put(id, System.currentTimeMillis()); }
+
+    /** Zuhörer: Spieler mit Live-Verbindung oder Abfrage in den letzten 5 s, je nachdem, was mehr ist. */
+    long listeners() {
+        long now = System.currentTimeMillis();
+        pollers.values().removeIf(t -> now - t > 5000);
+        long sse = clients.stream().filter(c -> Boolean.TRUE.equals(c.ctx().attribute("player"))).count();
+        return Math.max(sse, pollers.size());
+    }
 
     /** Effekt-Adresse mit Änderungszeit: eine ersetzte Datei bekommt eine neue Adresse, der Browser lädt sie neu. */
     String fxUrl(String f) {
