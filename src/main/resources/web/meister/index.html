@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119g">
+<link rel="stylesheet" href="/common/app.css?v=20261119h">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -45,7 +45,6 @@
             <div class="spread"><h3>Dateiordner: <span id="uplScene"></span></h3><button class="btn sm" id="uplClose">Schließen</button></div>
             <div class="grid2">
               <div class="field"><label class="label" for="uplTarget">Ziel</label><select id="uplTarget"><option value="Music">Musik</option><option value="Sounds">Hintergrundgeräusche</option></select></div>
-              <div class="field"><span class="label">Ordner</span><div class="mono small" id="uplPath"></div></div>
             </div>
             <label class="drop" for="upfile" id="drop">MP3 hierher ziehen oder klicken<input type="file" id="upfile" multiple accept=".mp3,audio/mpeg" hidden></label>
             <div class="prog" id="uplProg" hidden><i></i></div>
@@ -171,7 +170,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119g"></script>
+<script src="/common/common.js?v=20261119h"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -213,7 +212,7 @@ function fuzzy(q,name){q=norm(q);if(!q)return true;const n=norm(name);if(n.inclu
 function renderList(id){
   if(!st||!lib)return;const c=st.ch[id],[title,dir]=CH[id],el=$(`.plist[data-ch="${id}"]`),all=lib[dir]||[],items=all.filter(n=>fuzzy(qs[id],n));
   const oldUl=el.querySelector('ul'),scroll=oldUl?oldUl.scrollTop:0,inp=el.querySelector('.lsearch'),focused=inp&&document.activeElement===inp,caret=focused?inp.selectionStart:0;
-  el.innerHTML=`<div class="head"><h3>${title}</h3><span class="small mut mono">/data/audio/${dir}/${esc(st.scene)}</span></div>
+  el.innerHTML=`<div class="head"><h3>${title}</h3></div>
    <div class="pctl">
      <div class="pbar">
        <button class="ib tog" data-act="toggle" data-ch="${id}" title="Abspielen / Pause"></button>
@@ -288,7 +287,7 @@ $('#m-sound').addEventListener('change',e=>{const t=e.target;if(!t.dataset.seek)
   const a=pl.a[id];if(pl.enabled){try{a.currentTime=+t.value}catch(_){}}cmd({action:'seek',ch:id,pos:+t.value})});
 /* Upload */
 function showUpl(){setTimeout(fxDiag,0);$('#upl').hidden=false;setTimeout(fitLists,0);const sc=SCENES.find(s=>s[0]===st.scene);$('#uplScene').textContent=sc?sc[1]:st.scene;
-  const t=$('#uplTarget').value;$('#uplPath').textContent=`/data/audio/${t}/${st.scene}/`}
+  const t=$('#uplTarget').value;void t}
 $('#uplTarget').onchange=showUpl;
 async function fxDiag(){let r;try{r=await api('/api/sound/fxinfo')}catch(e){return}
   $('#fxDiag').innerHTML=`<div class="tw"><table class="small"><thead><tr><th>Effekt-Datei</th><th>Format</th><th>Größe</th><th>Prüfsumme</th><th></th></tr></thead><tbody>${r.map(x=>`<tr>
