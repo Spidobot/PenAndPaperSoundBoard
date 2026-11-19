@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119n">
+<link rel="stylesheet" href="/common/app.css?v=20261119o">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -49,7 +49,8 @@
             </div>
             <label class="drop" for="upfile" id="drop">MP3 hierher ziehen oder klicken<input type="file" id="upfile" multiple accept=".mp3,audio/mpeg" hidden></label>
             <div class="prog" id="uplProg" hidden><i></i></div>
-            <p class="small mut">Nur MP3. Gleichnamige Dateien werden ersetzt. Effekte werden nicht hier hochgeladen, sondern per FTP nach /data/audio/Effects.</p>
+            <div class="small mut" id="uplInfo"></div>
+            <p class="small mut">Nur MP3, mehrere auf einmal gehen. In der Rubrik Session landen sie in der oben gewählten Session. Gleichnamige Dateien werden ersetzt. Effekte werden nicht hier hochgeladen, sondern per FTP nach /data/audio/Effects.</p>
             <details class="sec"><summary class="small">Effekt-Dateien prüfen</summary><div id="fxDiag"></div></details>
           </div>
           <div class="plists">
@@ -171,7 +172,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119n"></script>
+<script src="/common/common.js?v=20261119o"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -206,6 +207,7 @@ pl.onStatus=k=>updateStatus(k);
 $('#hear').onchange=e=>{pl.enabled=e.target.checked;try{localStorage.setItem('hh-hear',e.target.checked?'1':'0')}catch(_){};if(st)pl.apply(st)};
 
 function renderScenes(){$('#sbsessW').hidden=!(st&&st.scene==='Session');
+  if(st&&!$('#upl').hidden){const sc=SCENES.find(s=>s[0]===st.scene);$('#uplScene').textContent=(sc?sc[1]:st.scene)+(st.scene==='Session'?' „'+((sbSessions.find(s=>String(s.id)===sid)||{}).name||'keine gewählt')+'“':'')}
   $('#scenes').innerHTML=SCENES.map(([k,l,i])=>`<button data-sc="${k}" aria-current="${st&&k===st.scene}" title="${l}">${IMG(i)}<span>${l}</span></button>`).join('')+
    `<hr><button data-folder title="Dateiordner">${IMG('ordner')}<span>Dateiordner</span></button><button data-fx="pizza" title="${lib&&lib.fx.pizza!=='ok'?'Pizza: '+esc(lib.fx.pizza==='fehlt'?'Datei fehlt in /data/audio/Effects':lib.fx.pizza):'Pizza'}"${lib&&lib.fx.pizza!=='ok'?' disabled':''}>${IMG('pizza')}<span>Pizza</span></button>`;
 }
@@ -311,7 +313,7 @@ $('#m-sound').addEventListener('change',e=>{const t=e.target;if(!t.dataset.seek)
   const a=pl.a[id];if(pl.enabled){try{a.currentTime=+t.value}catch(_){}}cmd({action:'seek',ch:id,pos:+t.value})});
 /* Upload */
 function showUpl(){setTimeout(fxDiag,0);$('#upl').hidden=false;setTimeout(fitLists,0);const sc=SCENES.find(s=>s[0]===st.scene);$('#uplScene').textContent=sc?sc[1]:st.scene;
-  const t=$('#uplTarget').value;void t}
+  renderScenes()}
 $('#uplTarget').onchange=showUpl;
 async function fxDiag(){let r;try{r=await api('/api/sound/fxinfo')}catch(e){return}
   $('#fxDiag').innerHTML=`<div class="tw"><table class="small"><thead><tr><th>Effekt-Datei</th><th>Format</th><th>Größe</th><th>Prüfsumme</th><th></th></tr></thead><tbody>${r.map(x=>`<tr>
@@ -325,14 +327,24 @@ $('#fxDiag').addEventListener('click',e=>{const b=e.target.closest('[data-fxtest
   a.onplaying=()=>toast(b.dataset.fxtest+' spielt ('+a.duration.toFixed(1)+' s)');a.play().catch(x=>toastErr('Abspielen blockiert: '+x.message))});
 pl.onFxError=(file,why)=>toast('Effekt '+file+' konnte hier nicht abgespielt werden: '+why);$('#uplClose').onclick=()=>{$('#upl').hidden=true;fitLists()};
 $('#upl').addEventListener('toggle',()=>fitLists(),true);
-function upload(files){files=[...files].filter(f=>/\.mp3$/i.test(f.name));if(!files.length)return toast('Nur MP3-Dateien');
-  const fd=new FormData();fd.append('target',$('#uplTarget').value);fd.append('scene',st.scene);files.forEach(f=>fd.append('files',f));
-  const x=new XMLHttpRequest(),bar=$('#uplProg');bar.hidden=false;
-  x.upload.onprogress=e=>{if(e.lengthComputable)bar.firstElementChild.style.width=e.loaded/e.total*100+'%'};
-  x.onload=()=>{bar.hidden=true;let r={};try{r=JSON.parse(x.responseText)}catch(_){}
-    if(x.status===401)return dispatchEvent(new Event('hh401'));
-    if(x.status>=300)return toast(r.error||'Upload fehlgeschlagen ('+x.status+')');toast(r.saved.length+' Datei(en) hochgeladen');loadLib()};
-  x.onerror=()=>{bar.hidden=true;toast('Upload fehlgeschlagen')};x.open('POST','/api/sound/upload');x.send(fd)}
+// Dateien einzeln nacheinander hochladen: Cloudflare nimmt höchstens 100 MB pro Anfrage, mehrere große MP3s auf einmal scheitern sonst
+async function upload(files){files=[...files].filter(f=>/\.mp3$/i.test(f.name));if(!files.length)return toastErr('Nur MP3-Dateien');
+  if(st.scene==='Session'&&!sid)return toastErr('Erst oben eine Session auswählen (oder unter „Sessions“ anlegen)');
+  const bar=$('#uplProg'),scene=st.scene,target=$('#uplTarget').value,ok=[],bad=[];bar.hidden=false;
+  for(let i=0;i<files.length;i++){const f=files[i];
+    if(f.size>95*1024*1024){bad.push(f.name+': größer als 95 MB, das lässt Cloudflare nicht durch. Bitte per FTP ablegen.');continue}
+    const fd=new FormData();fd.append('target',target);fd.append('scene',scene);if(scene==='Session')fd.append('sid',sid);fd.append('files',f);
+    $('#uplInfo').textContent=`Lade ${i+1} von ${files.length}: ${f.name}`;
+    const r=await new Promise(res=>{const x=new XMLHttpRequest();
+      x.upload.onprogress=e=>{if(e.lengthComputable)bar.firstElementChild.style.width=((i+e.loaded/e.total)/files.length*100)+'%'};
+      x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(_){}res({status:x.status,j})};
+      x.onerror=()=>res({status:0,j:{}});x.open('POST','/api/sound/upload');x.send(fd)});
+    if(r.status===401)return dispatchEvent(new Event('hh401'));
+    if(r.status>=200&&r.status<300)ok.push(f.name);else bad.push(f.name+': '+(r.j.error||(r.status===413?'zu groß für Cloudflare':r.status?'Fehler '+r.status:'Verbindung abgebrochen')))}
+  bar.hidden=true;$('#uplInfo').textContent='';
+  if(ok.length)toast(ok.length+' Datei(en) hochgeladen'+(scene==='Session'?' und in die Session übernommen':''));
+  if(bad.length)toastErr('Nicht hochgeladen:\n'+bad.join('\n'));
+  delete libs[scene];loadLib()}
 $('#upfile').onchange=e=>{upload(e.target.files);e.target.value=''};
 const drop=$('#drop');['dragenter','dragover'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.add('over')}));
 ['dragleave','drop'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.remove('over')}));

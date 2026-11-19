@@ -73,7 +73,10 @@ public final class App {
             String target = ctx.formParam("target"), scene = ctx.formParam("scene");
             if (!List.of("Music", "Sounds").contains(target)) throw new IllegalArgumentException("Ziel unbekannt (Effekte werden nicht über die Oberfläche hochgeladen)");
             Path dir = target.equals("Effects") ? sound.root().resolve("Effects") : sound.root().resolve(target).resolve(String.valueOf(scene));
-            if (!target.equals("Effects") && !Sound.SCENES.contains(scene)) throw new IllegalArgumentException("Szene unbekannt");
+            boolean ses = Sound.SESSION.equals(scene); // Rubrik Session: Datei nach Music/Session bzw. Sounds/Session, Eintrag in die gewählte Session
+            String sid = ctx.formParam("sid");
+            if (ses && (sid == null || !sid.matches("\\d{1,9}"))) throw new IllegalArgumentException("Erst oben eine Session auswählen");
+            if (!target.equals("Effects") && !ses && !Sound.SCENES.contains(scene)) throw new IllegalArgumentException("Szene unbekannt");
             try { Files.createDirectories(dir); } catch (Exception e) { throw new IllegalStateException("Ordner " + dir + " kann nicht angelegt werden: keine Schreibrechte für den Container"); }
             if (!Files.isWritable(dir)) throw new IllegalStateException("Keine Schreibrechte auf " + dir + ". In Unraid den Container ohne --user starten oder die Rechte des Ordners anpassen.");
             List<String> saved = new ArrayList<>();
@@ -82,8 +85,9 @@ public final class App {
                 if (!name.toLowerCase().endsWith(".mp3")) throw new IllegalArgumentException("Nur MP3-Dateien: " + name);
                 try (var in = f.content()) { Files.copy(in, dir.resolve(name), StandardCopyOption.REPLACE_EXISTING); }
                 saved.add(name);
+                if (ses) sound.sessionEdit(sid, target + "/" + Sound.SESSION + "/" + name, true);
             }
-            sound.rescan(scene);
+            if (!ses) sound.rescan(scene);
             ctx.json(Map.of("saved", saved));
         });
         m.post("/api/sound/session", ctx -> {
