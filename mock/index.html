@@ -1,0 +1,539 @@
+<title>Heldenhort Mock</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: App-Shell. Oben Mock-Umschalter, links Navigation (Meister) bzw. zentrierte Kacheln (Spieler). */
+:root{
+  --bg:#eef0ee; --panel:#ffffff; --panel2:#f5f6f4; --line:#d5d9d4; --fg:#1d2420; --mut:#5f6a63;
+  --acc:#8a6a1f; --acc-fg:#ffffff; --acc-soft:#f1e8d2; --ok:#2f7d4f; --warn:#a8641a; --bad:#b03a32;
+  --f-disp:"Spectral SC",Georgia,serif; --f-body:"Source Sans 3",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141917; --panel:#1c2320; --panel2:#232b27; --line:#33403a; --fg:#e4e8e4; --mut:#98a49d;
+  --acc:#d2ab52; --acc-fg:#1a1508; --acc-soft:#3a3120; --ok:#5fbf86; --warn:#e2a25a; --bad:#e2746b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141917; --panel:#1c2320; --panel2:#232b27; --line:#33403a; --fg:#e4e8e4; --mut:#98a49d;
+  --acc:#d2ab52; --acc-fg:#1a1508; --acc-soft:#3a3120; --ok:#5fbf86; --warn:#e2a25a; --bad:#e2746b; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--f-body)}
+h1,h2,h3{font-family:var(--f-disp);font-weight:700;text-wrap:balance;margin:0;letter-spacing:.02em}
+h1{font-size:1.6rem} h2{font-size:1.25rem} h3{font-size:1.05rem}
+p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.mut{color:var(--mut)}
+.small{font-size:.85rem}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700}
+
+/* Mock-Leiste */
+.mockbar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--fg);color:var(--bg);font-size:.85rem}
+.mockbar b{font-family:var(--f-mono);font-weight:600}
+.seg{display:inline-flex;border:1px solid currentColor;border-radius:999px;overflow:hidden}
+.seg button{background:none;border:0;padding:3px 14px}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--fg);font-weight:700}
+
+/* Buttons, Felder */
+.btn{border:1px solid var(--line);background:var(--panel);padding:7px 14px;border-radius:var(--r);display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--acc)}
+.btn.pri{background:var(--acc);color:var(--acc-fg);border-color:var(--acc);font-weight:700}
+.btn.pri:disabled{opacity:.45;cursor:not-allowed}
+.btn.sm{padding:3px 10px;font-size:.85rem}
+.btn.danger{color:var(--bad)}
+input[type=text],input[type=password],input[type=email],input[type=time],input[type=number],select,textarea{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:7px 10px;width:100%}
+.field{display:grid;gap:4px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:12px;min-width:0}
+.pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:.78rem;font-weight:700;background:var(--panel2);border:1px solid var(--line)}
+.pill.ok{color:var(--ok);border-color:currentColor}
+.pill.warn{color:var(--warn);border-color:currentColor}
+.pill.new{background:var(--acc);color:var(--acc-fg);border-color:var(--acc)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.spread{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+.toast{position:fixed;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:var(--r);z-index:50;max-width:min(420px,calc(100vw - 32px))}
+
+/* Meister-Shell */
+.shell{display:grid;grid-template-columns:220px 1fr;min-height:calc(100% - 40px)}
+.side{background:var(--panel);border-right:1px solid var(--line);padding:18px 12px;display:grid;align-content:start;gap:4px}
+.side .brand{font-family:var(--f-disp);font-size:1.2rem;padding:0 8px 12px}
+.side a{display:flex;justify-content:space-between;padding:8px 10px;border-radius:var(--r);color:inherit;text-decoration:none}
+.side a:hover{background:var(--panel2)}
+.side a[aria-current="page"]{background:var(--acc-soft);color:var(--fg);font-weight:700;box-shadow:inset 3px 0 0 var(--acc)}
+.side .foot{margin-top:18px;padding:10px;font-size:.8rem;color:var(--mut);border-top:1px solid var(--line)}
+main{padding-block:22px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px;align-content:start;min-width:0}
+.view{display:grid;gap:18px;max-width:1200px;min-width:0}
+@media (max-width:760px){.shell{grid-template-columns:1fr}.side{grid-auto-flow:column;grid-auto-columns:max-content;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px}.side .brand,.side .foot{display:none}}
+
+/* Mixer */
+.cats{display:flex;flex-wrap:wrap;gap:6px}
+.cats button{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 12px}
+.cats button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.tracks{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.trk{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;background:var(--panel);display:grid;gap:8px}
+.trk.on{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc)}
+.trk .t{font-weight:700;overflow-wrap:anywhere}
+.trk input[type=range]{width:100%;accent-color:var(--acc)}
+.live{display:grid;gap:8px}
+.chan{display:grid;grid-template-columns:minmax(0,1fr) 140px 46px 32px;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.chan input{width:100%;accent-color:var(--acc)}
+.meter{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ok);width:0;transition:width .15s}
+.onair{display:inline-flex;gap:6px;align-items:center;font-weight:700;color:var(--bad)}
+.onair::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor}
+.drop{border:2px dashed var(--line);border-radius:var(--r);padding:18px;text-align:center;color:var(--mut)}
+
+/* Session */
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--panel2);border-radius:999px;padding:2px 10px;font-size:.85rem}
+.hpick{display:flex;flex-wrap:wrap;gap:8px}
+.hpick label{display:flex;gap:6px;align-items:center;border:1px solid var(--line);padding:6px 10px;border-radius:var(--r);background:var(--panel)}
+.best{background:var(--acc-soft);font-weight:700}
+.bar{height:6px;background:var(--panel2);border-radius:3px;min-width:60px}
+.bar i{display:block;height:100%;background:var(--acc);border-radius:3px}
+mark{background:var(--acc-soft);color:inherit;padding:0 2px}
+
+/* Spieler */
+.pl{min-height:calc(100% - 40px);display:grid;place-items:start center;padding-block:40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.pl .inner{width:min(960px,100%);display:grid;gap:22px}
+.login{width:min(380px,100%);margin:6vh auto 0;display:grid;gap:14px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.tile{border:1px solid var(--line);background:var(--panel);border-radius:var(--r);padding:26px 22px;text-align:left;display:grid;gap:8px}
+.tile:hover{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.tile .ico{font-family:var(--f-disp);font-size:2.2rem;color:var(--acc);line-height:1}
+.steps{display:flex;flex-wrap:wrap;gap:4px}
+.steps button{border:0;background:none;padding:6px 10px;border-bottom:2px solid var(--line);color:var(--mut)}
+.steps button[aria-current="step"]{border-color:var(--acc);color:var(--fg);font-weight:700}
+.steps button.done{color:var(--fg)}
+.attr{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+.attr .a{border:1px solid var(--line);border-radius:var(--r);padding:8px;text-align:center;background:var(--panel2)}
+.attr .a b{display:block;font-family:var(--f-mono);font-size:1.4rem}
+.attr .a .row{justify-content:center}
+.tb{display:flex;flex-wrap:wrap;gap:4px;border:1px solid var(--line);border-bottom:0;border-radius:var(--r) var(--r) 0 0;padding:6px;background:var(--panel2)}
+.tb button{border:1px solid transparent;background:none;padding:3px 9px;border-radius:4px;min-width:32px}
+.tb button:hover{border-color:var(--line);background:var(--panel)}
+.ed{min-height:220px;border:1px solid var(--line);border-radius:0 0 var(--r) var(--r);padding:12px 14px;background:var(--panel);overflow-wrap:anywhere}
+.ed:empty::before{content:attr(data-ph);color:var(--mut)}
+.ed h3{margin:.4em 0 .2em}
+.ed blockquote{border-left:3px solid var(--acc);margin:.5em 0;padding-left:10px;color:var(--mut)}
+.stream{display:grid;place-items:center;gap:22px;padding:40px 20px;text-align:center}
+.bigplay{width:120px;height:120px;border-radius:50%;border:2px solid var(--acc);background:var(--panel);font-size:2.4rem;color:var(--acc)}
+.bigplay[aria-pressed="true"]{background:var(--acc);color:var(--acc-fg)}
+.vol{width:min(360px,100%);accent-color:var(--acc)}
+.wave{display:flex;gap:4px;height:34px;align-items:end}
+.wave i{width:6px;background:var(--acc);border-radius:2px;height:4px;transition:height .2s}
+.note{border-left:3px solid var(--warn);background:var(--panel2);padding:8px 12px;font-size:.88rem}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="mockbar">
+  <b>MOCK</b>
+  <span class="seg" role="group" aria-label="Ansicht wählen">
+    <button id="swM" aria-pressed="true">Meister-UI · :8080 lokal</button>
+    <button id="swS" aria-pressed="false">Spieler-UI · :8081 via NPM</button>
+  </span>
+  <span class="small">Kein Backend. Daten sind Beispiele.</span>
+</div>
+
+<!-- ================= MEISTER ================= -->
+<div id="meister" class="shell">
+  <nav class="side" aria-label="Meister-Navigation">
+    <div class="brand">Heldenhort</div>
+    <a href="#m-sound" data-v="m-sound">Soundboard</a>
+    <a href="#m-helden" data-v="m-helden">Helden <span class="pill new">2</span></a>
+    <a href="#m-session" data-v="m-session">Session</a>
+    <a href="#m-config" data-v="m-config">Konfiguration</a>
+    <div class="foot">Jeder Bereich hat eine eigene Adresse. Mehrere Tabs gleichzeitig möglich, z. B. Soundboard links, Session rechts.</div>
+  </nav>
+  <main>
+
+    <!-- Soundboard -->
+    <section class="view" id="m-sound">
+      <div class="spread">
+        <h1>Soundboard</h1>
+        <div class="row"><span class="onair" id="onair">Live an Spieler</span><span class="pill" id="lstn">4 Zuhörer</span></div>
+      </div>
+      <div class="grid2" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+        <div class="card">
+          <div class="spread"><div class="cats" id="cats"></div><input type="text" id="tsearch" placeholder="Sound suchen…" style="max-width:220px"></div>
+          <div class="tracks" id="tracks"></div>
+        </div>
+        <div class="card">
+          <div class="spread"><h3>Mix (läuft)</h3><button class="btn sm danger" id="stopall">Alles stoppen</button></div>
+          <div class="live" id="live"></div>
+          <div class="chan" style="border:0">
+            <b>Master</b><input type="range" id="master" min="0" max="100" value="80" aria-label="Master-Lautstärke"><span class="mono small" id="masterv">80</span><span></span>
+          </div>
+          <p class="small mut">Spieler hören genau diesen Mix. Sie regeln nur ihre eigene Gesamtlautstärke.</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="spread"><h3>Sounds hochladen</h3><span class="small mut mono">Container: /data/sounds/&lt;Kategorie&gt;/</span></div>
+        <div class="grid2">
+          <div class="field"><span class="label">Kategorie</span><select id="upcat"></select></div>
+          <div class="field"><span class="label">Neue Kategorie</span><div class="row" style="flex-wrap:nowrap"><input type="text" id="newcat" placeholder="z. B. Dungeon"><button class="btn" id="addcat">Anlegen</button></div></div>
+        </div>
+        <label class="drop" for="upfile">MP3 / OGG / WAV hierher ziehen oder klicken<input type="file" id="upfile" multiple accept="audio/*" hidden></label>
+      </div>
+    </section>
+
+    <!-- Helden -->
+    <section class="view" id="m-helden" hidden>
+      <h1>Eingegangene Helden</h1>
+      <div class="card tw">
+        <table>
+          <thead><tr><th>Held</th><th>Spieler</th><th>Profession</th><th>Eingang</th><th>Status</th><th></th></tr></thead>
+          <tbody id="htab"></tbody>
+        </table>
+      </div>
+      <div class="card" id="hdet"></div>
+    </section>
+
+    <!-- Session -->
+    <section class="view" id="m-session" hidden>
+      <div class="spread"><h1>Session</h1>
+        <div class="row"><select id="sessSel" style="width:auto"><option>Die Phileasson-Saga · Abend 12</option><option>Neue Session…</option></select></div>
+      </div>
+      <div class="card">
+        <span class="label">Helden in dieser Session</span>
+        <div class="hpick" id="hpick"></div>
+      </div>
+      <div class="card">
+        <div class="field"><span class="label">Wert suchen (Talent, Eigenschaft, Vorteil, Sonderfertigkeit, Gabe)</span>
+          <input type="text" id="q" placeholder="z. B. Sinnenschärfe, Gefahreninstinkt, KL, Schwimmen…" value="Sinnenschärfe"></div>
+        <div class="chips" id="quick"></div>
+        <div class="tw"><table><thead id="rhead"></thead><tbody id="rbody"></tbody></table></div>
+      </div>
+      <div class="card">
+        <div class="spread"><h3>Schnellblick Eigenschaften</h3><span class="small mut">Probenwerte direkt ablesen</span></div>
+        <div class="tw"><table id="attrtab"></table></div>
+      </div>
+    </section>
+
+    <!-- Config -->
+    <section class="view" id="m-config" hidden>
+      <h1>Konfiguration</h1>
+      <div class="grid2">
+        <div class="card">
+          <h3>Spielerzugang</h3>
+          <div class="field"><span class="label">Spieler-Passwort</span><div class="row" style="flex-wrap:nowrap"><input type="password" id="cpw" value="Thorwal1019"><button class="btn sm" id="cpwshow">Zeigen</button></div></div>
+          <p class="small mut">Ein gemeinsames Passwort für alle Spieler. Änderung meldet alle Spieler ab.</p>
+          <div class="field"><span class="label">Öffentliche Adresse (NPM)</span><input type="text" id="curl" value="https://dsa.example.org"></div>
+        </div>
+        <div class="card">
+          <h3>Benachrichtigung</h3>
+          <div class="field"><span class="label">Mail an Meister</span><input type="email" id="cmail" value="meister@example.org"></div>
+          <div class="field"><span class="label">SMTP-Server</span><input type="text" id="csmtp" value="smtp.example.org:587"></div>
+          <div class="grid2"><div class="field"><span class="label">SMTP-Benutzer</span><input type="text" id="csu" value="heldenhort"></div><div class="field"><span class="label">SMTP-Passwort</span><input type="password" id="csp" value="xxxxxxxx"></div></div>
+          <button class="btn sm" id="testmail" style="justify-self:start">Testmail senden</button>
+        </div>
+        <div class="card">
+          <h3>helden.jar</h3>
+          <div class="spread"><span>Installiert</span><span class="mono">5.5.4 <span class="pill ok">aktuell</span></span></div>
+          <div class="spread"><span>Letzte Prüfung</span><span class="mono">19.11.2026 04:00</span></div>
+          <div class="field"><span class="label">Tägliche Update-Prüfung (Serverzeit)</span><input type="time" id="ctime" value="04:00"></div>
+          <p class="small mut mono">Serverzeit jetzt: <span id="srvtime"></span> · TZ=Europe/Vienna</p>
+          <button class="btn sm" id="updnow" style="justify-self:start">Jetzt prüfen</button>
+        </div>
+        <div class="card">
+          <h3>Speicherorte im Container</h3>
+          <table class="small">
+            <tr><td class="mono">/data/sounds</td><td>Sounddateien je Kategorie</td></tr>
+            <tr><td class="mono">/data/helden</td><td>Eingegangene XML + Hintergrund</td></tr>
+            <tr><td class="mono">/data/config</td><td>Einstellungen, Sessions</td></tr>
+            <tr><td class="mono">/app/helden.jar</td><td>wird automatisch ersetzt</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="row"><button class="btn pri" id="savecfg">Speichern</button></div>
+    </section>
+  </main>
+</div>
+
+<!-- ================= SPIELER ================= -->
+<div id="spieler" class="pl" hidden>
+  <div class="inner">
+
+    <div id="s-login" class="login">
+      <h1>Heldenhort</h1>
+      <p class="mut">Zugang für die Spielrunde. Das Passwort bekommst du vom Meister.</p>
+      <form id="lform" class="card">
+        <div class="field"><label class="label" for="lpw">Passwort</label><input type="password" id="lpw" placeholder="Mock: beliebig" autocomplete="current-password"></div>
+        <div class="field"><label class="label" for="lname">Dein Name</label><input type="text" id="lname" placeholder="z. B. Jana"></div>
+        <button class="btn pri" type="submit">Eintreten</button>
+      </form>
+    </div>
+
+    <div id="s-home" hidden>
+      <div class="spread" style="margin-bottom:18px"><h1>Willkommen, <span id="who">Jana</span></h1><button class="btn sm" id="logout">Abmelden</button></div>
+      <div class="tiles">
+        <button class="tile" id="toCreate"><span class="ico">✦</span><h2>Heldenerstellung</h2><span class="mut">Helden bauen, im Browser speichern, mit Hintergrundgeschichte an den Meister senden.</span></button>
+        <button class="tile" id="toStream"><span class="ico">♪</span><h2>Soundstream</h2><span class="mut">Musik und Geräusche vom Spieltisch. Du regelst nur deine Lautstärke.</span></button>
+      </div>
+    </div>
+
+    <!-- Heldenerstellung -->
+    <div id="s-create" hidden>
+      <div class="spread" style="margin-bottom:14px">
+        <div class="row"><button class="btn sm" data-back>← Zurück</button><h1>Heldenerstellung</h1></div>
+        <div class="row small mut"><span>Entwurf im Browser gespeichert</span><select id="drafts" style="width:auto"><option>Thorgrim Eisenfaust</option><option>+ Neuer Held</option></select></div>
+      </div>
+      <div class="note" style="margin-bottom:14px">Regeln, Auswahllisten und GP-Berechnung kommen aus helden.jar (5.5.4). XML-Export ebenfalls von dort.</div>
+      <div class="steps" id="steps"></div>
+      <div class="card" id="stepbody" style="margin-top:12px"></div>
+      <div class="spread" style="margin-top:12px">
+        <button class="btn" id="prev">Zurück</button>
+        <span class="mono small" id="gp"></span>
+        <button class="btn pri" id="next">Weiter</button>
+      </div>
+    </div>
+
+    <!-- Soundstream -->
+    <div id="s-stream" hidden>
+      <div class="row" style="margin-bottom:14px"><button class="btn sm" data-back>← Zurück</button><h1>Soundstream</h1></div>
+      <div class="card stream">
+        <button class="bigplay" id="pplay" aria-pressed="false" aria-label="Stream starten">▶</button>
+        <div class="wave" id="wave" aria-hidden="true"></div>
+        <p id="pstat" class="mut">Tippen zum Verbinden. Der Browser braucht einmal einen Klick, bevor Ton erlaubt ist.</p>
+        <div class="field" style="width:min(360px,100%)"><label class="label" for="pvol">Lautstärke</label><input type="range" class="vol" id="pvol" min="0" max="100" value="70"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const toast=t=>{const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>e.hidden=true,2600)};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- Umschalter / Routing ---------- */
+function mode(m){
+  $('#meister').hidden=m!=='M'; $('#spieler').hidden=m!=='S';
+  $('#swM').setAttribute('aria-pressed',m==='M'); $('#swS').setAttribute('aria-pressed',m==='S');
+}
+$('#swM').onclick=()=>{location.hash='m-sound'}; $('#swS').onclick=()=>{location.hash='s-login'};
+const sViews=['s-login','s-home','s-create','s-stream'];
+function route(){
+  const h=location.hash.slice(1)||'m-sound';
+  if(h.startsWith('s-')){mode('S');sViews.forEach(v=>$('#'+v).hidden=v!==h);if(h==='s-create')renderStep();}
+  else{mode('M');$$('.view').forEach(v=>v.hidden=v.id!==h);$$('.side a').forEach(a=>a.toggleAttribute('aria-current',a.dataset.v===h)&&a.setAttribute('aria-current','page'));}
+  window.scrollTo(0,0);
+}
+addEventListener('hashchange',route);
+
+/* ---------- Soundboard ---------- */
+const cats=['Ambiente','Taverne','Kampf','Musik','Wetter','Effekte'];
+let curCat='Ambiente';
+const sounds=[
+ ['Ambiente','Nachtwald mit Eulen','6:12',1],['Ambiente','Thorwaler Hafen','4:40',1],['Ambiente','Höhle, tropfend','8:03',1],['Ambiente','Marktplatz Gareth','5:25',1],
+ ['Taverne','Gemurmel voll','7:30',1],['Taverne','Krüge klirren','0:04',0],['Taverne','Barde mit Laute','3:58',1],
+ ['Kampf','Schwertkampf klein','2:10',1],['Kampf','Orkhorde naht','1:45',0],['Kampf','Schlachtgetümmel','4:00',1],
+ ['Musik','Spannung leise','3:20',1],['Musik','Nordische Weite','5:02',1],['Musik','Boss-Thema','2:48',1],
+ ['Wetter','Regen stark','10:00',1],['Wetter','Sturm auf See','6:30',1],['Wetter','Gewitterdonner','0:09',0],
+ ['Effekte','Tür knarrt','0:03',0],['Effekte','Wolfsgeheul','0:06',0],['Effekte','Zauber Ignifaxius','0:05',0]
+].map(([c,n,d,l],i)=>({id:i,c,n,d,loop:!!l,on:false,vol:70}));
+sounds[0].on=true;sounds[0].vol=55;sounds[13].on=true;sounds[13].vol=35;sounds[10].on=true;sounds[10].vol=60;
+function renderCats(){
+  $('#cats').innerHTML=cats.map(c=>`<button aria-pressed="${c===curCat}" data-c="${esc(c)}">${esc(c)} <span class="mut small">${sounds.filter(s=>s.c===c).length}</span></button>`).join('');
+  $('#upcat').innerHTML=cats.map(c=>`<option${c===curCat?' selected':''}>${esc(c)}</option>`).join('');
+}
+function renderTracks(){
+  const q=$('#tsearch').value.trim().toLowerCase();
+  const list=sounds.filter(s=>q?s.n.toLowerCase().includes(q):s.c===curCat);
+  $('#tracks').innerHTML=list.map(s=>`<div class="trk${s.on?' on':''}">
+    <div class="spread"><span class="t">${esc(s.n)}</span><span class="mono small mut">${s.d}</span></div>
+    <div class="row small mut">${q?esc(s.c)+' · ':''}<label><input type="checkbox" data-loop="${s.id}"${s.loop?' checked':''}> Schleife</label></div>
+    <input type="range" min="0" max="100" value="${s.vol}" data-vol="${s.id}" aria-label="Lautstärke ${esc(s.n)}">
+    <div class="row"><button class="btn sm${s.on?'':' pri'}" data-tog="${s.id}">${s.on?'■ Stopp':'▶ Abspielen'}</button><button class="btn sm" data-fade="${s.id}">${s.on?'Ausblenden':'Einblenden'}</button></div>
+  </div>`).join('')||'<p class="mut">Nichts gefunden.</p>';
+}
+function renderLive(){
+  const on=sounds.filter(s=>s.on);
+  $('#live').innerHTML=on.length?on.map(s=>`<div class="chan"><div style="min-width:0"><div style="overflow-wrap:anywhere">${esc(s.n)}</div><div class="meter"><i data-m="${s.id}"></i></div></div>
+    <input type="range" min="0" max="100" value="${s.vol}" data-vol="${s.id}" aria-label="Lautstärke ${esc(s.n)}"><span class="mono small">${s.vol}</span><button class="btn sm" data-tog="${s.id}" aria-label="Stopp">■</button></div>`).join(''):'<p class="mut small">Stille. Spieler hören nichts.</p>';
+  $('#onair').hidden=!on.length;
+}
+function renderSound(){renderCats();renderTracks();renderLive()}
+$('#cats').onclick=e=>{const b=e.target.closest('[data-c]');if(b){curCat=b.dataset.c;$('#tsearch').value='';renderSound()}};
+$('#tsearch').oninput=renderTracks;
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-tog],[data-fade]');if(!t)return;
+  const s=sounds[t.dataset.tog??t.dataset.fade];s.on=!s.on;
+  if(t.dataset.fade!==undefined)toast(`${s.n}: ${s.on?'blendet über 3 s ein':'blendet über 3 s aus'}`);
+  renderTracks();renderLive();
+});
+document.addEventListener('input',e=>{
+  const id=e.target.dataset.vol;if(id===undefined)return;sounds[id].vol=+e.target.value;
+  $$(`[data-vol="${id}"]`).forEach(r=>{if(r!==e.target)r.value=e.target.value});
+  const sp=e.target.closest('.chan')?.querySelector('.mono');if(sp)sp.textContent=e.target.value;
+});
+document.addEventListener('change',e=>{if(e.target.dataset.loop!==undefined)sounds[e.target.dataset.loop].loop=e.target.checked});
+$('#stopall').onclick=()=>{sounds.forEach(s=>s.on=false);renderTracks();renderLive();toast('Alle Sounds gestoppt')};
+$('#master').oninput=e=>$('#masterv').textContent=e.target.value;
+$('#addcat').onclick=()=>{const v=$('#newcat').value.trim();if(!v)return;if(!cats.includes(v))cats.push(v);curCat=v;$('#newcat').value='';renderSound();toast(`Kategorie „${v}“ angelegt: /data/sounds/${v}/`)};
+$('#upfile').onchange=e=>{const f=[...e.target.files];f.forEach(x=>sounds.push({id:sounds.length,c:$('#upcat').value,n:x.name.replace(/\.[^.]+$/,''),d:'–',loop:false,on:false,vol:70}));curCat=$('#upcat').value;renderSound();toast(`${f.length} Datei(en) nach ${curCat} hochgeladen`)};
+setInterval(()=>{$$('[data-m]').forEach(m=>{const s=sounds[m.dataset.m];m.style.width=(s.vol*(.55+Math.random()*.45))+'%'})},180);
+
+/* ---------- Heldendaten (Beispiele) ---------- */
+const heroes=[
+ {id:1,n:'Thorgrim Eisenfaust',p:'Jana',prof:'Thorwaler Seefahrer',in:'18.11.2026 21:14',st:'neu',
+  E:{MU:14,KL:10,IN:12,CH:11,FF:11,GE:13,KO:15,KK:15},
+  T:{'Sinnenschärfe':5,'Schwimmen':9,'Zechen':11,'Selbstbeherrschung':6,'Menschenkenntnis':3,'Klettern':7,'Boote fahren':10,'Wettervorhersage':6},
+  V:['Zäher Hund','Kälteresistenz'],SF:['Wuchtschlag','Rüstungsgewöhnung I'],G:[],
+  bg:'<p>Geboren in <b>Prem</b>, aufgewachsen auf der Otta „Sturmbraut“. Sucht seinen verschollenen Bruder Hjaldar.</p>'},
+ {id:2,n:'Yasinthe von Ehrwald',p:'Markus',prof:'Gildenmagierin (Punin)',in:'18.11.2026 19:02',st:'neu',
+  E:{MU:12,KL:15,IN:14,CH:13,FF:12,GE:11,KO:10,KK:9},
+  T:{'Sinnenschärfe':7,'Magiekunde':12,'Selbstbeherrschung':8,'Menschenkenntnis':6,'Etikette':7,'Schwimmen':1,'Sternkunde':9},
+  V:['Astralmacht','Eidetisches Gedächtnis'],SF:['Gedankenschutz','Merkmalskenntnis Hellsicht'],G:[],
+  bg:'<p>Drittgeborene eines verarmten Landadelshauses. <i>Träumt von einem Lehrstuhl in Punin.</i></p>'},
+ {id:3,n:'Fenia Wolfsfährte',p:'Lea',prof:'Waldläuferin',in:'12.11.2026 22:40',st:'übernommen',
+  E:{MU:13,KL:11,IN:15,CH:10,FF:13,GE:14,KO:12,KK:11},
+  T:{'Sinnenschärfe':11,'Fährtensuchen':12,'Schleichen':9,'Wildnisleben':12,'Selbstbeherrschung':4,'Klettern':8,'Schwimmen':5},
+  V:['Richtungssinn','Dämmerungssicht'],SF:['Scharfschütze (Bogen)'],G:['Gefahreninstinkt 6'],
+  bg:'<p>Wuchs bei ihrem Onkel im Reichsforst auf.</p>'},
+ {id:4,n:'Bosper Krötenschlucker',p:'Tobias',prof:'Streuner',in:'05.11.2026 20:11',st:'übernommen',
+  E:{MU:12,KL:12,IN:14,CH:14,FF:15,GE:13,KO:11,KK:10},
+  T:{'Sinnenschärfe':8,'Taschendiebstahl':10,'Gassenwissen':11,'Menschenkenntnis':9,'Überreden':10,'Schwimmen':4,'Schleichen':8},
+  V:['Glück'],SF:['Kampfreflexe'],G:['Gefahreninstinkt 3'],bg:'<p>Kennt jede Schänke in Havena.</p>'}
+];
+let selHero=1;
+
+/* ---------- Meister: Helden ---------- */
+function renderHeroes(){
+  $('#htab').innerHTML=heroes.map(h=>`<tr${h.id===selHero?' class="best"':''}><td><b>${esc(h.n)}</b></td><td>${esc(h.p)}</td><td>${esc(h.prof)}</td><td class="mono small">${h.in}</td>
+   <td><span class="pill ${h.st==='neu'?'new':'ok'}">${h.st}</span></td><td><button class="btn sm" data-h="${h.id}">Öffnen</button></td></tr>`).join('');
+  const h=heroes.find(x=>x.id===selHero);
+  $('#hdet').innerHTML=`<div class="spread"><h2>${esc(h.n)}</h2><div class="row">
+     <button class="btn sm" data-dl>XML herunterladen</button><button class="btn sm" data-hl>In Helden-Software öffnen</button>
+     ${h.st==='neu'?'<button class="btn sm pri" data-take>Übernehmen</button>':''}</div></div>
+   <div class="grid2"><div><span class="label">Datei</span><div class="mono small">/data/helden/${h.n.replace(/\s+/g,'_')}.xml</div></div>
+     <div><span class="label">Mail</span><div class="small">an meister@example.org gesendet ${h.in}</div></div></div>
+   <div><span class="label">Hintergrundgeschichte</span><div style="margin-top:6px">${h.bg}</div></div>`;
+}
+$('#htab').onclick=e=>{const b=e.target.closest('[data-h]');if(b){selHero=+b.dataset.h;renderHeroes()}};
+$('#hdet').onclick=e=>{
+  if(e.target.closest('[data-take]')){heroes.find(x=>x.id===selHero).st='übernommen';renderHeroes();renderPick();toast('Held übernommen, für Sessions verfügbar')}
+  if(e.target.closest('[data-dl]'))toast('Mock: XML-Download');
+  if(e.target.closest('[data-hl]'))toast('Mock: Öffnet die XML in der lokal installierten Helden-Software');
+};
+
+/* ---------- Meister: Session ---------- */
+const inSess=new Set([1,2,3,4]);
+function renderPick(){
+  $('#hpick').innerHTML=heroes.map(h=>`<label><input type="checkbox" data-s="${h.id}"${inSess.has(h.id)?' checked':''}> ${esc(h.n)} <span class="mut small">${esc(h.p)}</span>${h.st==='neu'?' <span class="pill new">neu</span>':''}</label>`).join('');
+}
+$('#hpick').onchange=e=>{const id=+e.target.dataset.s;e.target.checked?inSess.add(id):inSess.delete(id);renderSearch();renderAttr()};
+const quick=['Sinnenschärfe','Gefahreninstinkt','Selbstbeherrschung','Schwimmen','Menschenkenntnis','Schleichen','IN','MU'];
+$('#quick').innerHTML=quick.map(q=>`<button class="chip" data-q="${q}">${q}</button>`).join('');
+$('#quick').onclick=e=>{const b=e.target.closest('[data-q]');if(b){$('#q').value=b.dataset.q;renderSearch()}};
+$('#q').oninput=renderSearch;
+function hits(h,q){
+  const r=[];const ql=q.toLowerCase();
+  for(const[k,v]of Object.entries(h.E))if(k.toLowerCase()===ql)r.push({k,v,t:'Eigenschaft',max:20});
+  for(const[k,v]of Object.entries(h.T))if(k.toLowerCase().includes(ql))r.push({k,v,t:'Talent',max:15});
+  h.G.forEach(g=>{if(g.toLowerCase().includes(ql)){const m=g.match(/(.*)\s(\d+)$/);r.push({k:m?m[1]:g,v:m?+m[2]:null,t:'Gabe',max:15})}});
+  h.V.forEach(k=>{if(k.toLowerCase().includes(ql))r.push({k,v:null,t:'Vorteil'})});
+  h.SF.forEach(k=>{if(k.toLowerCase().includes(ql))r.push({k,v:null,t:'Sonderfertigkeit'})});
+  return r;
+}
+function renderSearch(){
+  const q=$('#q').value.trim();const hs=heroes.filter(h=>inSess.has(h.id));
+  $('#rhead').innerHTML='<tr><th>Held</th><th>Treffer</th><th>Art</th><th>Wert</th><th style="width:30%"></th></tr>';
+  if(q.length<2){$('#rbody').innerHTML='<tr><td colspan="5" class="mut">Mindestens 2 Zeichen eingeben.</td></tr>';return}
+  const rows=[];hs.forEach(h=>{const r=hits(h,q);if(!r.length)rows.push({h,k:null});r.forEach(x=>rows.push({h,...x}))});
+  rows.sort((a,b)=>(b.v??-1)-(a.v??-1));
+  const top=Math.max(...rows.map(r=>r.v??-1));
+  const re=new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','i');
+  $('#rbody').innerHTML=rows.map(r=>r.k===null
+    ?`<tr><td>${esc(r.h.n)}</td><td colspan="4" class="mut">nicht vorhanden</td></tr>`
+    :`<tr class="${r.v!==null&&r.v===top?'best':''}"><td>${esc(r.h.n)}</td><td>${esc(r.k).replace(re,'<mark>$1</mark>')}</td><td class="small mut">${r.t}</td>
+      <td class="mono">${r.v??'✓'}</td><td>${r.v!==null?`<div class="bar"><i style="width:${r.v/r.max*100}%"></i></div>`:''}</td></tr>`).join('');
+}
+function renderAttr(){
+  const hs=heroes.filter(h=>inSess.has(h.id));const ks=['MU','KL','IN','CH','FF','GE','KO','KK'];
+  $('#attrtab').innerHTML='<thead><tr><th>Held</th>'+ks.map(k=>`<th class="mono">${k}</th>`).join('')+'</tr></thead><tbody>'+
+   hs.map(h=>'<tr><td>'+esc(h.n)+'</td>'+ks.map(k=>{const best=Math.max(...hs.map(x=>x.E[k]));return`<td class="mono${h.E[k]===best?' best':''}">${h.E[k]}</td>`}).join('')+'</tr>').join('')+'</tbody>';
+}
+
+/* ---------- Meister: Config ---------- */
+$('#cpwshow').onclick=()=>{const i=$('#cpw');i.type=i.type==='password'?'text':'password'};
+$('#testmail').onclick=()=>toast('Testmail an '+$('#cmail').value+' verschickt (Mock)');
+$('#updnow').onclick=()=>toast('helden.jar 5.5.4 ist aktuell');
+$('#savecfg').onclick=()=>toast('Gespeichert. Nächste Update-Prüfung täglich '+$('#ctime').value+' Serverzeit');
+const tick=()=>$('#srvtime').textContent=new Date().toLocaleTimeString('de-AT');tick();setInterval(tick,1000);
+
+/* ---------- Spieler: Login / Home ---------- */
+$('#lform').onsubmit=e=>{e.preventDefault();if(!$('#lpw').value){toast('Passwort fehlt');return}$('#who').textContent=$('#lname').value.trim()||'Jana';location.hash='s-home'};
+$('#logout').onclick=()=>{location.hash='s-login'};
+$('#toCreate').onclick=()=>location.hash='s-create';
+$('#toStream').onclick=()=>location.hash='s-stream';
+$$('[data-back]').forEach(b=>b.onclick=()=>location.hash='s-home');
+
+/* ---------- Spieler: Heldenerstellung ---------- */
+const steps=['Grunddaten','Rasse · Kultur · Profession','Eigenschaften','Vor- & Nachteile','Talente','Hintergrund','Prüfen & senden'];
+let step=0;const draft={name:'Thorgrim Eisenfaust',sex:'männlich',rasse:'Thorwaler',kultur:'Thorwal',prof:'Seefahrer',E:{MU:14,KL:10,IN:12,CH:11,FF:11,GE:13,KO:15,KK:15},bg:'',sent:false};
+const bgText=()=>draft.bg.replace(/<[^>]+>/g,'').trim();
+function gp(){const e=Object.values(draft.E).reduce((a,b)=>a+b,0);return{used:e-8*8+74,max:110}}
+function renderStep(){
+  $('#steps').innerHTML=steps.map((s,i)=>`<button data-st="${i}"${i===step?' aria-current="step"':''} class="${i<step?'done':''}">${i+1}. ${s}</button>`).join('');
+  const b=$('#stepbody');
+  if(step===0)b.innerHTML=`<h2>Grunddaten</h2><div class="grid2"><div class="field"><label class="label" for="dn">Name</label><input type="text" id="dn" value="${esc(draft.name)}"></div>
+    <div class="field"><label class="label" for="ds">Geschlecht</label><select id="ds"><option>männlich</option><option>weiblich</option><option>divers</option></select></div>
+    <div class="field"><span class="label">Regelwerk</span><select><option>DSA 4.1</option></select></div><div class="field"><span class="label">Startgeld / GP</span><input type="text" value="110 GP" disabled></div></div>`;
+  if(step===1)b.innerHTML=`<h2>Rasse · Kultur · Profession</h2><div class="grid2">
+    ${[['Rasse','rasse',['Thorwaler','Mittelländer','Nivese','Waldelf']],['Kultur','kultur',['Thorwal','Mittelreich','Gjalskerland']],['Profession','prof',['Seefahrer','Krieger','Hetmann','Skalde']]].map(([l,k,o])=>`<div class="field"><span class="label">${l}</span><select data-k="${k}">${o.map(x=>`<option${draft[k]===x?' selected':''}>${x}</option>`).join('')}</select></div>`).join('')}
+    </div><p class="small mut">Liste gefiltert nach Kombinierbarkeit laut helden.jar.</p>`;
+  if(step===2)b.innerHTML=`<h2>Eigenschaften</h2><div class="attr">${Object.entries(draft.E).map(([k,v])=>`<div class="a"><span class="label">${k}</span><b>${v}</b><div class="row"><button class="btn sm" data-e="${k}" data-d="-1" aria-label="${k} senken">−</button><button class="btn sm" data-e="${k}" data-d="1" aria-label="${k} erhöhen">+</button></div></div>`).join('')}</div>
+    <p class="small mut">Grenzen: 8 bis 14, Rassenmodifikatoren eingerechnet (Thorwaler KO/KK bis 15).</p>`;
+  if(step===3)b.innerHTML=`<h2>Vor- & Nachteile</h2><div class="grid2"><div class="field"><span class="label">Vorteile</span>${['Zäher Hund','Kälteresistenz','Gefahreninstinkt (Gabe)','Richtungssinn'].map((x,i)=>`<label><input type="checkbox"${i<2?' checked':''}> ${x}</label>`).join('')}</div>
+    <div class="field"><span class="label">Nachteile</span>${['Jähzorn 6','Aberglaube 5','Goldgier 5','Meeresangst'].map((x,i)=>`<label><input type="checkbox"${i<2?' checked':''}> ${x}</label>`).join('')}</div></div>`;
+  if(step===4)b.innerHTML=`<h2>Talente</h2><div class="tw"><table><thead><tr><th>Talent</th><th>Probe</th><th>TaW</th></tr></thead><tbody>${[['Sinnenschärfe','KL/IN/IN',5],['Schwimmen','GE/KO/KK',9],['Zechen','IN/KO/KK',11],['Klettern','MU/GE/KK',7],['Boote fahren','GE/KO/KK',10]].map(([t,p,v])=>`<tr><td>${t}</td><td class="mono small">${p}</td><td><input type="number" value="${v}" min="0" max="18" style="width:80px"></td></tr>`).join('')}</tbody></table></div>`;
+  if(step===5){b.innerHTML=`<div class="spread"><h2>Hintergrund</h2><span class="pill ${bgText().length>=50?'ok':'warn'}" id="bgst"></span></div>
+    <div><div class="tb" id="tb">
+      <button data-cmd="bold" title="Fett"><b>F</b></button><button data-cmd="italic" title="Kursiv"><i>K</i></button><button data-cmd="underline" title="Unterstrichen"><u>U</u></button>
+      <button data-cmd="formatBlock" data-v="h3" title="Überschrift">Ü</button><button data-cmd="formatBlock" data-v="p" title="Absatz">¶</button>
+      <button data-cmd="insertUnorderedList" title="Liste">• Liste</button><button data-cmd="insertOrderedList" title="Nummeriert">1. Liste</button>
+      <button data-cmd="formatBlock" data-v="blockquote" title="Zitat">„Zitat“</button><button data-cmd="removeFormat" title="Formatierung entfernen">⌫ Format</button></div>
+    <div class="ed" id="ed" contenteditable="true" data-ph="Woher kommt dein Held? Was treibt ihn an? Familie, Feinde, Geheimnisse…">${draft.bg}</div></div>`;
+    const upd=()=>{draft.bg=$('#ed').innerHTML;const n=bgText().length;$('#bgst').textContent=n>=50?`${n} Zeichen · ok`:`${n}/50 Zeichen Minimum`;$('#bgst').className='pill '+(n>=50?'ok':'warn')};
+    $('#ed').oninput=upd;upd();
+    $('#tb').onmousedown=e=>e.preventDefault();
+    $('#tb').onclick=e=>{const t=e.target.closest('[data-cmd]');if(!t)return;document.execCommand(t.dataset.cmd,false,t.dataset.v?`<${t.dataset.v}>`:null);upd()};}
+  if(step===6){const ok=bgText().length>=50;
+    b.innerHTML=`<h2>Prüfen & senden</h2><table class="small"><tr><td>Name</td><td><b>${esc(draft.name)}</b></td></tr><tr><td>Rasse / Kultur / Profession</td><td>${draft.rasse} / ${draft.kultur} / ${draft.prof}</td></tr>
+      <tr><td>GP</td><td class="mono">${gp().used} / ${gp().max} ${gp().used<=gp().max?'<span class="pill ok">ok</span>':'<span class="pill warn">zu viel</span>'}</td></tr>
+      <tr><td>Hintergrund</td><td>${ok?'<span class="pill ok">ausgefüllt</span>':'<span class="pill warn">fehlt</span> mindestens 50 Zeichen nötig'}</td></tr></table>
+      <div class="row"><button class="btn" id="dlxml">XML für mich herunterladen</button><button class="btn pri" id="send"${ok&&!draft.sent?'':' disabled'}>${draft.sent?'Gesendet ✓':'An Meister senden'}</button></div>
+      ${ok?'':'<p class="small" style="color:var(--warn)">Senden ist gesperrt, bis die Hintergrundgeschichte ausgefüllt ist.</p>'}`;
+    $('#send').onclick=()=>{draft.sent=true;heroes.unshift({id:99,n:draft.name+' (neu)',p:$('#who').textContent,prof:draft.rasse+' '+draft.prof,in:new Date().toLocaleString('de-AT').slice(0,-3),st:'neu',E:{...draft.E},T:{'Sinnenschärfe':5},V:[],SF:[],G:[],bg:draft.bg});renderHeroes();renderPick();renderStep();toast('Held an den Meister gesendet. Mail ist raus.')};
+    $('#dlxml').onclick=()=>toast('Mock: XML-Download (erzeugt von helden.jar)');}
+  const g=gp();$('#gp').textContent=`GP ${g.used} / ${g.max}`;
+  $('#prev').disabled=step===0;$('#next').hidden=step===steps.length-1;
+}
+$('#steps').onclick=e=>{const b=e.target.closest('[data-st]');if(b){step=+b.dataset.st;renderStep()}};
+$('#prev').onclick=()=>{step=Math.max(0,step-1);renderStep()};
+$('#next').onclick=()=>{step=Math.min(steps.length-1,step+1);renderStep()};
+$('#stepbody').addEventListener('input',e=>{if(e.target.id==='dn')draft.name=e.target.value;if(e.target.dataset.k)draft[e.target.dataset.k]=e.target.value});
+$('#stepbody').addEventListener('change',e=>{if(e.target.dataset.k)draft[e.target.dataset.k]=e.target.value});
+$('#stepbody').addEventListener('click',e=>{const t=e.target.closest('[data-e]');if(!t)return;const k=t.dataset.e,mx=(k==='KO'||k==='KK')?15:14;draft.E[k]=Math.min(mx,Math.max(8,draft.E[k]+ +t.dataset.d));renderStep()});
+
+/* ---------- Spieler: Stream ---------- */
+$('#wave').innerHTML='<i></i>'.repeat(16);
+let playing=false;
+$('#pplay').onclick=()=>{playing=!playing;const b=$('#pplay');b.setAttribute('aria-pressed',playing);b.textContent=playing?'❚❚':'▶';
+  $('#pstat').textContent=playing?'Verbunden. Du hörst den Spieltisch.':'Pausiert.'};
+$('#pvol').oninput=e=>toast('Lautstärke '+e.target.value+' %');
+setInterval(()=>{$$('#wave i').forEach(i=>i.style.height=(playing?4+Math.random()*30*($('#pvol').value/100):4)+'px')},200);
+
+/* ---------- Start ---------- */
+renderSound();renderHeroes();renderPick();renderSearch();renderAttr();route();
+</script>
