@@ -188,22 +188,13 @@ mark{background:var(--acc-soft);color:inherit;padding:0 2px}
             <div class="card plist" data-ch="music"></div>
             <div class="card plist" data-ch="bg"></div>
           </div>
-          <div class="card" id="upl" hidden>
-            <div class="spread"><h3>Dateiordner: <span id="uplScene"></span></h3><button class="btn sm" id="uplClose">Schließen</button></div>
-            <div class="grid2">
-              <div class="field"><span class="label">Ziel</span><select id="uplTarget"><option value="Music">Musik</option><option value="Sounds">Hintergrundgeräusche</option></select></div>
-              <div class="field"><span class="label">Pfad im Container</span><div class="mono small" id="uplPath"></div></div>
-            </div>
-            <label class="drop" for="upfile">MP3 hierher ziehen oder klicken<input type="file" id="upfile" multiple accept=".mp3,audio/mpeg" hidden></label>
-            <p class="small mut">Wie bisher werden nur MP3-Dateien angezeigt.</p>
-          </div>
         </div>
       </div>
     </section>
 
     <!-- Helden -->
     <section class="view" id="m-helden" hidden>
-      <h1>Eingegangene Helden</h1>
+      <div class="spread"><h1>Eingegangene Helden</h1><span class="small mut">XML-Dateien, die du per FTP nach <span class="mono">/data/helden</span> legst, erscheinen hier automatisch.</span></div>
       <div class="card tw">
         <table>
           <thead><tr><th>Held</th><th>Spieler</th><th>Profession</th><th>Eingang</th><th>Status</th><th></th></tr></thead>
@@ -247,9 +238,8 @@ mark{background:var(--acc-soft);color:inherit;padding:0 2px}
       <div class="grid2">
         <div class="card">
           <h3>Spielerzugang</h3>
-          <div class="field"><span class="label">Spieler-Passwort</span><div class="row" style="flex-wrap:nowrap"><input type="password" id="cpw" value="Thorwal1019"><button class="btn sm" id="cpwshow">Zeigen</button></div></div>
+          <div class="field"><span class="label">Spieler-Passwort</span><input type="text" id="cpw" value="Thorwal1019"></div>
           <p class="small mut">Ein gemeinsames Passwort für alle Spieler. Änderung meldet alle Spieler ab.</p>
-          <div class="field"><span class="label">Öffentliche Adresse (NPM)</span><input type="text" id="curl" value="https://dsa.example.org"></div>
         </div>
         <div class="card">
           <h3>Benachrichtigung</h3>
@@ -274,7 +264,7 @@ mark{background:var(--acc-soft);color:inherit;padding:0 2px}
             <tr><td class="mono">/data/audio/Music/&lt;Szene&gt;</td><td>Musik (Village, Travel, Dungeon, Castle, Fight)</td></tr>
             <tr><td class="mono">/data/audio/Sounds/&lt;Szene&gt;</td><td>Hintergrundgeräusche</td></tr>
             <tr><td class="mono">/data/db/heldenhort.sqlite</td><td>Einstellungen, Sessions, Freigaben, Helden-Status</td></tr>
-            <tr><td class="mono">/data/helden</td><td>Eingegangene XML + Hintergrund</td></tr>
+            <tr><td class="mono">/data/helden</td><td>Helden-XML. Eigenes Mapping, per FTP befüllbar</td></tr>
             <tr><td class="mono">/app/helden.jar</td><td>ersetzt sich selbst über ihren Updater</td></tr>
           </table>
         </div>
@@ -396,7 +386,7 @@ function renderScenes(){
   $('#scenes').className='scenes'+(compact?' compact':'');
   $('#scenes').innerHTML=`<button data-menu title="Menü">${ICN('menu')}<span>Menü</span></button>`+
    scenes.map(([k,l,i])=>`<button data-sc="${k}" aria-current="${k===scene}" title="${l}">${ICN(i)}<span>${l}</span></button>`).join('')+
-   `<hr><button data-folder title="Dateiordner">${ICN('ordner')}<span>Dateiordner</span></button><button data-pizza title="Pizza">${ICN('pizza')}<span>Pizza</span></button>`;
+   `<hr><button data-pizza title="Pizza">${ICN('pizza')}<span>Pizza</span></button>`;
 }
 function renderFx(){$('#fx').innerHTML=fx.map(([k,l])=>`<button data-fx="${k}" title="${l}" aria-label="${l}">${ICN(k)}</button>`).join('')}
 function renderList(id){
@@ -417,8 +407,7 @@ function renderSound(){renderScenes();renderFx();renderList('music');renderList(
 $('#m-sound').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.menu!==undefined){compact=!compact;renderScenes()}
-  else if(b.dataset.sc){scene=b.dataset.sc;renderSound();if(!$('#upl').hidden)showUpl()}
-  else if(b.dataset.folder!==undefined)showUpl();
+  else if(b.dataset.sc){scene=b.dataset.sc;renderSound()}
   else if(b.dataset.pizza!==undefined)toast('Pizza! (Effekt an alle Spieler)');
   else if(b.dataset.fx){b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),600);toast(b.title+' (Effekt an alle Spieler)')}
   else if(b.dataset.pick){const c=ch[b.dataset.pick];c.t=[b.dataset.n,+b.dataset.d];c.pos=0;c.play=true;renderSound()}
@@ -429,9 +418,6 @@ $('#m-sound').addEventListener('click',e=>{
     renderSound()}
 });
 $('#m-sound').addEventListener('input',e=>{const id=e.target.dataset.chvol;if(!id)return;ch[id].vol=+e.target.value;$(`[data-volv="${id}"]`).textContent=e.target.value});
-function showUpl(){$('#upl').hidden=false;$('#uplScene').textContent=scenes.find(s=>s[0]===scene)[1];$('#uplPath').textContent=`/data/audio/${$('#uplTarget').value}/${scene}/`}
-$('#uplTarget').onchange=showUpl;$('#uplClose').onclick=()=>$('#upl').hidden=true;
-$('#upfile').onchange=e=>{const f=[...e.target.files].filter(x=>/\.mp3$/i.test(x.name));const t=$('#uplTarget').value;f.forEach(x=>lib[scene][t].push([x.name.replace(/\.mp3$/i,''),0]));renderSound();toast(`${f.length} MP3 nach ${t}/${scene} hochgeladen`)};
 setInterval(()=>{for(const id in ch){const c=ch[id];if(!c.play||!c.t)continue;c.pos++;
   if(c.pos>=c.t[1]){c.pos=0;if(!c.rep){c.play=false;renderSound();continue}}
   const p=$(`[data-pos="${id}"]`);if(p)p.textContent=mmss(c.pos)+' / '+mmss(c.t[1]);const g=$(`[data-prog="${id}"]`);if(g)g.style.width=c.pos/c.t[1]*100+'%'}},1000);
@@ -545,7 +531,6 @@ function renderAttr(){
 }
 
 /* ---------- Meister: Config ---------- */
-$('#cpwshow').onclick=()=>{const i=$('#cpw');i.type=i.type==='password'?'text':'password'};
 $('#testmail').onclick=()=>toast('Testmail an '+$('#cmail').value+' verschickt (Mock)');
 $('#updnow').onclick=()=>toast('helden.jar 5.5.4 ist aktuell');
 $('#savecfg').onclick=()=>toast('Gespeichert. Nächste Update-Prüfung täglich '+$('#ctime').value+' Serverzeit');
