@@ -19,6 +19,8 @@ public final class Polls {
         this.db = db; this.mail = mail; this.accounts = accounts;
         db.exec("CREATE TABLE IF NOT EXISTS poll(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, session INTEGER, note TEXT, created TEXT, closed INTEGER DEFAULT 0, allnotified INTEGER DEFAULT 0)");
         db.exec("CREATE TABLE IF NOT EXISTS poll_option(id INTEGER PRIMARY KEY AUTOINCREMENT, poll INTEGER, label TEXT)");
+        try { db.exec("ALTER TABLE poll ADD COLUMN fixed INTEGER"); } catch (RuntimeException alreadyThere) { }
+        try { db.exec("ALTER TABLE poll ADD COLUMN fixed_hours REAL"); } catch (RuntimeException alreadyThere) { }
         db.exec("CREATE TABLE IF NOT EXISTS poll_vote(poll INTEGER, option INTEGER, account INTEGER, answer TEXT, at TEXT, PRIMARY KEY(option, account))");
     }
 
@@ -71,6 +73,32 @@ public final class Polls {
             db.exec("UPDATE poll SET closed=? WHERE id=?", Boolean.TRUE.equals(ctx.bodyAsClass(Map.class).get("closed")) ? 1 : 0, ctx.pathParam("id"));
             ctx.json(Map.of("ok", true));
         });
+        meister.post("/api/polls/{id}/fix", ctx -> {
+            var p = db.query("SELECT * FROM poll WHERE id=?", ctx.pathParam("id"));
+            if (p.isEmpty()) throw new NotFoundResponse("Abstimmung unbekannt");
+            Map<?, ?> b = ctx.bodyAsClass(Map.class);
+            var opt = db.query("SELECT * FROM poll_option WHERE id=? AND poll=?", b.get("option"), ctx.pathParam("id"));
+            if (opt.isEmpty()) throw new IllegalArgumentException("Termin unbekannt");
+            double hours = b.get("hours") instanceof Number n ? n.doubleValue() : 4;
+            if (hours <= 0 || hours > 48) throw new IllegalArgumentException("Dauer zwischen 0 und 48 Stunden");
+            java.time.LocalDateTime start;
+            try { start = java.time.LocalDateTime.parse(String.valueOf(opt.get(0).get("label"))); }
+            catch (Exception e) { throw new IllegalArgumentException("Der Termin hat kein lesbares Datum"); }
+            db.exec("UPDATE poll SET fixed=?, fixed_hours=?, closed=1 WHERE id=?", opt.get(0).get("id"), hours, p.get(0).get("id"));
+            var f = full(db.query("SELECT * FROM poll WHERE id=?", p.get(0).get("id")).get(0));
+            String title = String.valueOf(p.get(0).get("title")), note = App.str(p.get(0).get("note"));
+            String ics = ics("heldenhort-poll-" + p.get(0).get("id"), title, note, start, hours);
+            String when = start.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, dd.MM.yyyy 'um' HH:mm", java.util.Locale.GERMAN));
+            String text = "Der Termin für „" + title + "“ steht fest: " + when + " (" + (hours % 1 == 0 ? String.valueOf((int) hours) : String.valueOf(hours)) + " Stunden)."
+                    + (note.isEmpty() ? "" : "\n" + note) + "\n\nDie Einladung hängt als Kalenderdatei an.";
+            List<String> sent = new ArrayList<>();
+            for (Object v : (List<?>) f.get("voters")) {
+                String to = accounts.email(((Map<?, ?>) v).get("id"));
+                if (to != null) { mail.notifyIcs(to, "Termin: " + title, text, ics); sent.add(String.valueOf(((Map<?, ?>) v).get("name"))); }
+            }
+            mail.notifyIcs(db.get("mailTo", ""), "Termin: " + title, text, ics);
+            ctx.json(Map.of("sent", sent));
+        });
         meister.delete("/api/polls/{id}", ctx -> {
             String id = ctx.pathParam("id");
             db.exec("DELETE FROM poll_vote WHERE poll=?", id);
@@ -83,7 +111,7 @@ public final class Polls {
         spieler.get("/api/polls", ctx -> {
             Object me = accounts.current(ctx).get("id");
             List<Map<String, Object>> out = new ArrayList<>();
-            for (var p : db.query("SELECT * FROM poll WHERE closed=0 ORDER BY id DESC")) {
+            for (var p : db.query("SELECT * FROM poll WHERE closed=0 OR fixed IS NOT NULL ORDER BY id DESC LIMIT 30")) {
                 var f = full(p);
                 if (((List<?>) f.get("voters")).stream().anyMatch(v -> Objects.equals(String.valueOf(((Map<?, ?>) v).get("id")), String.valueOf(me)))) out.add(f);
             }
@@ -122,6 +150,21 @@ public final class Polls {
             ctx.json(full(p.get(0)));
         });
     }
+
+    /** Kalendereinladung (RFC 5545); Zeit in der Zeitzone des Servers (TZ), als UTC geschrieben. */
+    static String ics(String uid, String title, String note, java.time.LocalDateTime start, double hours) {
+        var z = java.time.ZoneId.systemDefault();
+        var f = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
+        var s = start.atZone(z).withZoneSameInstant(java.time.ZoneOffset.UTC);
+        var e = s.plusMinutes(Math.round(hours * 60));
+        var now = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC);
+        return String.join("\r\n",
+                "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Heldenhort//DE", "METHOD:REQUEST", "BEGIN:VEVENT",
+                "UID:" + uid + "@heldenhort", "DTSTAMP:" + now.format(f), "DTSTART:" + s.format(f), "DTEND:" + e.format(f),
+                "SUMMARY:" + escIcs(title), "DESCRIPTION:" + escIcs(note), "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR", "");
+    }
+
+    static String escIcs(String s) { return s.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n"); }
 
     static String summary(Map<String, Object> f) {
         StringBuilder sb = new StringBuilder();

@@ -26,7 +26,17 @@ public final class Mail {
 
     public void send(String subject, String text) throws MessagingException { send(db.get("mailTo", ""), subject, text); }
 
-    public void send(String to, String subject, String text) throws MessagingException {
+    public void send(String to, String subject, String text) throws MessagingException { send(to, subject, text, null); }
+
+    /** Einladung mit Kalenderdatei; landet in Outlook/Google/Apple als Termin-Einladung. */
+    public void notifyIcs(String to, String subject, String text, String ics) {
+        if (to == null || to.isBlank()) return;
+        bg.submit(() -> {
+            try { send(to, subject, text, ics); } catch (Exception e) { System.err.println("Mail fehlgeschlagen: " + e.getMessage()); }
+        });
+    }
+
+    public void send(String to, String subject, String text, String ics) throws MessagingException {
         String host = db.get("smtpHost", "");
         if (host.isBlank() || to.isBlank()) throw new MessagingException("SMTP-Server oder Empfänger fehlt in der Konfiguration");
         int port = Integer.parseInt(db.get("smtpPort", "587"));
@@ -50,7 +60,18 @@ public final class Mail {
         m.setFrom(new InternetAddress(from.isBlank() ? (user.contains("@") ? user : to) : from));
         m.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to));
         m.setSubject("[Heldenhort] " + subject, "UTF-8");
-        m.setText(text, "UTF-8");
+        if (ics == null) m.setText(text, "UTF-8");
+        else {
+            MimeMultipart mp = new MimeMultipart("mixed");
+            MimeBodyPart body = new MimeBodyPart();
+            body.setText(text, "UTF-8");
+            MimeBodyPart cal = new MimeBodyPart();
+            cal.setContent(ics, "text/calendar; charset=UTF-8; method=REQUEST");
+            cal.setFileName("termin.ics");
+            mp.addBodyPart(body);
+            mp.addBodyPart(cal);
+            m.setContent(mp);
+        }
         Transport.send(m);
     }
 }

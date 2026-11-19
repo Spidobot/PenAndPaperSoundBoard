@@ -322,8 +322,9 @@ let polls=[],pdraft={};
 async function loadPolls(){try{polls=await api('/api/polls')}catch(e){return toast(e.message)}renderPolls()}
 function renderPolls(){const myId=me&&me.id;
   $('#pollList').innerHTML=polls.map(p=>`<div class="card" data-poll="${p.id}"><h3>${esc(p.title)}</h3>${p.note?`<p class="small mut">${esc(p.note)}</p>`:''}
-    ${pollMatrix({...p,options:p.options.map(o=>({...o,label:fmtTermin(o.label)}))},myId,pdraft[p.id])}
-    <div class="row"><button class="btn pri" data-save="${p.id}">Stimme speichern</button><span class="small mut">Du kannst deine Stimme jederzeit ändern.</span></div></div>`).join('')
+    ${p.fixed?`<p><span class="pill ok">Termin steht</span> <b>${esc(fmtTermin((p.options.find(o=>o.id===p.fixed)||{}).label||''))}</b>, ${p.fixed_hours} Stunden. Die Einladung kommt per Mail, falls du eine bestätigte Adresse hast.</p>`
+      :`${pollMatrix({...p,options:p.options.map(o=>({...o,label:fmtTermin(o.label)}))},myId,pdraft[p.id])}
+    <div class="row"><button class="btn pri" data-save="${p.id}">Stimme speichern</button><span class="small mut">Du kannst deine Stimme jederzeit ändern.</span></div>`}</div>`).join('')
     ||'<p class="mut">Gerade keine offene Abstimmung für dich.</p>'}
 $('#pollList').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
   const card=b.closest('[data-poll]'),pid=card&&card.dataset.poll;
