@@ -27,6 +27,8 @@ public final class App {
         HeldenJar jar = new HeldenJar(db, data.resolve("jar"));
         Creation creation = new Creation(jar);
         Accounts accounts = new Accounts(db);
+        jar.selfTest = probe -> { try { return creation.selfTest(probe); } catch (Exception e) { return "FEHLER " + e.getMessage(); } };
+        jar.onRejected = msg -> mail.notifyMeister("helden.jar-Update zurückgehalten", msg);
         Heroes heroes = new Heroes(db, data.resolve("helden"));
         Sound sound = new Sound(data.resolve("audio"));
         if (db.get("secret", null) == null) db.put("secret", HexFormat.of().formatHex(SecureRandom.getInstanceStrong().generateSeed(32)));
@@ -106,6 +108,11 @@ public final class App {
         });
         m.get("/api/jar", ctx -> ctx.json(jar.status()));
         m.post("/api/jar/update", ctx -> ctx.json(Map.of("result", jar.update())));
+        m.post("/api/jar/selftest", ctx -> { // prüft die laufende Jar mit demselben Test wie vor einem Update
+            try (var probe = new java.net.URLClassLoader(new java.net.URL[]{data.resolve("jar/helden.jar").toUri().toURL()}, App.class.getClassLoader())) {
+                ctx.json(Map.of("result", creation.selfTest(probe)));
+            }
+        });
 
         m.get("/api/heroes", ctx -> ctx.json(heroes.list()));
         m.get("/api/heroes/{file}/xml", ctx -> {

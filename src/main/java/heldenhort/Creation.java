@@ -36,8 +36,9 @@ public final class Creation {
     // ------------------------------------------------------------------ Abschnitt 1
 
     /** Spielt die Angaben durch und liefert Auswahllisten, offene Auswahl oder den fertigen Entwurf. */
-    public synchronized Map<String, Object> rkp(Map<String, Object> in) throws Exception {
-        ClassLoader l = init();
+    public synchronized Map<String, Object> rkp(Map<String, Object> in) throws Exception { return rkp(init(), in); }
+
+    private Map<String, Object> rkp(ClassLoader l, Map<String, Object> in) throws Exception {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("version", jar.version());
 
@@ -232,8 +233,9 @@ public final class Creation {
     // ------------------------------------------------------------------ Abschnitt 2
 
     /** Wendet Änderungen auf den Entwurf an und liefert neuen Entwurf + Zustand. */
-    public synchronized Map<String, Object> edit(String draft, List<?> ops) throws Exception {
-        ClassLoader l = init();
+    public synchronized Map<String, Object> edit(String draft, List<?> ops) throws Exception { return edit(init(), draft, ops); }
+
+    private Map<String, Object> edit(ClassLoader l, String draft, List<?> ops) throws Exception {
         String xml = draft;
         // Vor- und Nachteile: über die Entwurfs-XML (Wert setzen ist in der Jar verschleiert)
         for (Object o : ops == null ? List.of() : ops) {
@@ -281,8 +283,70 @@ public final class Creation {
     }
 
     /** Fertiger Held als XML plus Meldungen der Regelprüfung. */
-    public synchronized Map<String, Object> finish(String draft, String name) throws Exception {
-        ClassLoader l = init();
+    public synchronized Map<String, Object> finish(String draft, String name) throws Exception { return finish(init(), draft, name); }
+
+    /**
+     * Selbsttest für eine neue helden.jar, in eigenem ClassLoader: einen Helden komplett bauen
+     * (Rasse/Kultur/Profession mit Varianten, alle Auswahlen, Werte ändern, abschließen, XML).
+     * Wirft, wenn irgendein Schritt der Anbindung nicht mehr passt.
+     */
+    public String selfTest(java.net.URLClassLoader l) throws Exception {
+        ClassLoader old = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(l);
+        try {
+            l.loadClass("helden.framework.settings.Setting").getMethod("initAll").invoke(null);
+            Map<String, Object> in = new LinkedHashMap<>(Map.of("name", "Selbsttest", "geschlecht", "männlich"));
+            List<Object> answers = new ArrayList<>();
+            in.put("answers", answers);
+            Map<String, Object> r = null;
+            for (int guard = 0; guard < 40; guard++) {
+                r = rkp(l, in);
+                String next = str(r.get("next"));
+                if (next.equals("haupt")) break;
+                if (next.equals("auswahl")) {
+                    Map<?, ?> p = (Map<?, ?>) r.get("pending");
+                    int idx = ((Number) p.get("index")).intValue();
+                    if (p.get("error") != null && answers.size() > idx) throw new IllegalStateException("Auswahl lässt sich nicht beantworten: " + p.get("title"));
+                    Map<String, Object> ans = new LinkedHashMap<>();
+                    Set<Object> cols = new HashSet<>();
+                    for (Object o : (List<?>) p.get("controls")) {
+                        Map<?, ?> c = (Map<?, ?>) o;
+                        String id = String.valueOf(c.get("id"));
+                        if ("list".equals(c.get("type"))) ans.put(id, List.of(0));
+                        if ("radio".equals(c.get("type")) && Boolean.TRUE.equals(c.get("enabled")) && cols.add(c.get("grid") + "-" + c.get("col"))) ans.put(id, true);
+                    }
+                    while (answers.size() <= idx) answers.add(null);
+                    answers.set(idx, ans);
+                    continue;
+                }
+                Map<?, ?> st = (Map<?, ?>) r.get(next);
+                if (st == null) throw new IllegalStateException("Schritt fehlt: " + next);
+                Map<String, Object> sel = new LinkedHashMap<>();
+                if (st.get("name") == null) {
+                    List<?> opts = (List<?>) st.get("options");
+                    if (opts.isEmpty()) throw new IllegalStateException("Keine Optionen für " + next);
+                    Object pick = opts.get(0);
+                    for (Object o : opts) if (Boolean.TRUE.equals(((Map<?, ?>) o).get("ueblich"))) { pick = o; break; }
+                    sel.put("name", ((Map<?, ?>) pick).get("name"));
+                } else {
+                    sel.put("name", st.get("name"));
+                    List<?> vs = (List<?>) st.get("varianten");
+                    if (Boolean.TRUE.equals(st.get("varianteNoetig")) && !vs.isEmpty()) sel.put("varianten", List.of(vs.get(0)));
+                }
+                in.put(next, sel);
+            }
+            if (r == null || r.get("draft") == null) throw new IllegalStateException("Herkunft/Profession nicht abschließbar");
+            Map<String, Object> e = edit(l, (String) r.get("draft"), List.of());
+            List<?> eig = (List<?>) e.get("eigenschaften");
+            Map<?, ?> mu = (Map<?, ?>) eig.get(0);
+            e = edit(l, (String) e.get("draft"), List.of(Map.of("op", "eig", "name", mu.get("name"), "value", mu.get("min"))));
+            String xml = (String) finish(l, (String) e.get("draft"), "Selbsttest").get("xml");
+            if (!xml.contains("Selbsttest") || !xml.contains("<eigenschaft")) throw new IllegalStateException("Helden-XML unvollständig");
+            return "Selbsttest ok (" + ((Map<?, ?>) r.get("rasse")).get("name") + ", " + ((Map<?, ?>) r.get("profession")).get("name") + ")";
+        } finally { Thread.currentThread().setContextClassLoader(old); }
+    }
+
+    private Map<String, Object> finish(ClassLoader l, String draft, String name) throws Exception {
         Object hew = load(l, draft);
         if (name != null && !name.isBlank()) call(hew, "setName", name);
         List<Map<String, String>> hints = hints(hew);

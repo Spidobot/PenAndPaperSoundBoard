@@ -118,7 +118,8 @@
           <div id="jarinfo" class="small"></div>
           <div class="field"><label class="label" for="updateTime">Tägliche Update-Prüfung (Serverzeit)</label><input type="time" id="updateTime"></div>
           <p class="small mut">Einmal täglich zu dieser Uhrzeit fragt der Server beim Update-Server der Helden-Software nach. Gibt es eine neue Version, wird sie geladen, per MD5 geprüft und ausgetauscht.</p>
-          <button class="btn sm" type="button" id="updnow" style="justify-self:start">Jetzt prüfen</button>
+          <div class="row"><button class="btn sm" type="button" id="updnow">Jetzt prüfen</button><button class="btn sm" type="button" id="selftest" title="Baut mit der laufenden helden.jar einen Testhelden komplett durch">Selbsttest</button></div>
+          <p class="small mut">Vor jedem Austausch baut der Server mit der neuen Version einen Testhelden. Klappt das nicht, bleibt die bisherige Version aktiv und du bekommst eine Mail.</p>
         </div>
         <div class="card">
           <h3>Speicherorte im Container</h3>
@@ -402,6 +403,7 @@ async function loadJar(){try{const j=await api('/api/jar');
 $('#cfg').onsubmit=async e=>{e.preventDefault();const b={};CFG.forEach(k=>b[k]=$('#'+k).value);
   try{await api('/api/config',{method:'PUT',body:b});toast('Gespeichert. Update-Prüfung täglich '+b.updateTime+' Serverzeit');loadJar()}catch(x){toast(x.message)}};
 $('#testmail').onclick=async()=>{toast('Sende Testmail…');try{await api('/api/config/testmail',{method:'POST'});toast('Testmail verschickt')}catch(e){toast('Mail fehlgeschlagen: '+e.message)}};
+$('#selftest').onclick=async()=>{toast('Selbsttest läuft…');try{const r=await api('/api/jar/selftest',{method:'POST'});toast(r.result)}catch(e){toast('Selbsttest gescheitert: '+e.message)}};
 $('#updnow').onclick=async()=>{toast('Prüfe… das kann ein paar Minuten dauern');try{const r=await api('/api/jar/update',{method:'POST'});toast(r.result);loadJar()}catch(e){toast(e.message)}};
 
 route();loadFg();loadHeroes();

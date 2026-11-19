@@ -19,6 +19,10 @@ public final class HeldenJar {
     private final Db db;
     private final Path dir, jar;
     private volatile URLClassLoader loader;
+    /** Prüft eine neue Jar, bevor sie die laufende ersetzt (wird von App gesetzt). */
+    public volatile java.util.function.Function<URLClassLoader, String> selfTest;
+    /** Meldet ein abgelehntes Update (Mail an den Meister). */
+    public volatile java.util.function.Consumer<String> onRejected;
     private final List<Runnable> onReload = new CopyOnWriteArrayList<>();
 
     public HeldenJar(Db db, Path dir) throws Exception {
@@ -92,6 +96,18 @@ public final class HeldenJar {
                 Path tmp = dir.resolve("helden.jar.temp");
                 try (var in = URI.create(url).toURL().openStream()) { Files.copy(in, tmp, StandardCopyOption.REPLACE_EXISTING); }
                 if (!md5(tmp).equalsIgnoreCase(md5)) { Files.deleteIfExists(tmp); throw new IOException("MD5 der neuen helden.jar stimmt nicht, nichts ersetzt"); }
+                // Erst testen, dann tauschen: passt die Anbindung nicht mehr, bleibt die alte Jar aktiv
+                if (selfTest != null) {
+                    String test;
+                    try (URLClassLoader probe = new URLClassLoader(new URL[]{tmp.toUri().toURL()}, HeldenJar.class.getClassLoader())) { test = selfTest.apply(probe); }
+                    catch (Throwable t) { test = "FEHLER " + t; }
+                    if (!test.startsWith("Selbsttest ok")) {
+                        Files.deleteIfExists(tmp);
+                        String msg = "Neue helden.jar (" + text + ") nicht übernommen, Selbsttest gescheitert: " + test + ". Die bisherige Version " + version() + " läuft weiter.";
+                        if (onRejected != null) onRejected.accept(msg);
+                        throw new IOException(msg);
+                    }
+                }
                 Files.move(tmp, jar, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
                 reload();
                 result = "Aktualisiert auf " + version() + (text.isBlank() ? "" : " (" + text + ")");
