@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="icon" href="/common/d20.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/common/app.css">
 <style>html,body{margin:0}</style>
 </head>
@@ -17,6 +18,7 @@
     <a href="#m-freigaben" data-v="m-freigaben">Freigaben <span class="pill new" id="fgBadge" hidden></span></a>
     <a href="#m-session" data-v="m-session">Session</a>
     <a href="#m-sessions" data-v="m-sessions">Sessions</a>
+    <a href="#m-spieler" data-v="m-spieler">Spieler</a>
     <a href="#m-config" data-v="m-config">Konfiguration</a>
     <a href="#" id="logout">Abmelden</a>
     <div class="foot">Jeder Bereich hat eine eigene Adresse. Mehrere Tabs gleichzeitig möglich.<br><br>Icons: <a href="https://icons8.com" target="_blank" rel="noopener" style="display:inline;padding:0">Icons8</a></div>
@@ -91,14 +93,18 @@
       <p class="small mut">Die Session-Ansicht öffnet immer die neueste Session. Ältere wählst du dort oben aus oder hier mit „Öffnen“.</p>
     </section>
 
+    <section class="view" id="m-spieler" hidden>
+      <div class="spread"><h1>Spieler</h1>
+        <form class="row" id="accForm"><input type="text" id="accName" placeholder="Name" style="width:180px" aria-label="Name" autocomplete="off">
+          <input type="text" id="accPw" placeholder="Startpasswort (mind. 8 Zeichen)" style="width:240px" aria-label="Startpasswort" autocomplete="off">
+          <button class="btn sm pri" type="submit">Anlegen</button></form></div>
+      <div class="card tw"><table><thead><tr><th>Name</th><th>Mail</th><th>Angelegt</th><th>Helden</th><th></th></tr></thead><tbody id="acctab"></tbody></table></div>
+      <p class="small mut">Spieler melden sich mit Name und Passwort an und können das Passwort selbst ändern. Die Mail-Adresse hinterlegen sie selbst; sie gilt erst nach Klick auf den Bestätigungslink.</p>
+    </section>
+
     <section class="view" id="m-config" hidden>
       <h1>Konfiguration</h1>
       <form id="cfg" class="cfggrid">
-        <div class="card">
-          <h3>Spielerzugang</h3>
-          <div class="field"><label class="label" for="playerPassword">Spieler-Passwort</label><input type="text" id="playerPassword" autocomplete="off"></div>
-          <p class="small mut">Ein gemeinsames Passwort für alle Spieler. Änderung meldet alle Spieler ab. Leer = kein Zugang.</p>
-        </div>
         <div class="card">
           <h3>Benachrichtigung</h3>
           <div class="field"><label class="label" for="mailTo">Mail an Meister</label><input type="email" id="mailTo"></div>
@@ -131,7 +137,7 @@
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
   $$('.side a[data-v]').forEach(a=>a.dataset.v===h?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'));
-  ({'m-helden':loadHeroes,'m-freigaben':loadFg,'m-session':loadSession,'m-sessions':loadSessions,'m-config':loadCfg})[h]?.();}
+  ({'m-helden':loadHeroes,'m-freigaben':loadFg,'m-session':loadSession,'m-sessions':loadSessions,'m-spieler':loadAccounts,'m-config':loadCfg})[h]?.();}
 addEventListener('hashchange',route);
 
 /* ---------- Soundboard ---------- */
@@ -236,7 +242,7 @@ es.addEventListener('msg',ev=>{const m=JSON.parse(ev.data);
 
 /* ---------- Helden ---------- */
 let heroes=[],selHero=null;
-async function loadHeroes(){try{heroes=await api('/api/heroes')}catch(e){return toast(e.message)}renderHeroes()}
+async function loadHeroes(){try{[heroes,accts]=await Promise.all([api('/api/heroes'),api('/api/accounts')])}catch(e){return toast(e.message)}renderHeroes()}
 function renderHeroes(){
   const n=heroes.filter(h=>h.status==='neu').length;$('#hBadge').textContent=n;$('#hBadge').hidden=!n;
   $('#htab').innerHTML=heroes.map(h=>`<tr${h.file===selHero?' class="best"':''}><td><b>${esc(h.name)}</b>${h.error?` <span class="err small">${esc(h.error)}</span>`:''}</td><td>${esc(h.player)}</td><td>${esc(h.profession)}</td><td class="mono small">${esc(h.received)}</td>
@@ -333,12 +339,14 @@ function renderAttr(){const hs=sessHeroes(),ks=['MU','KL','IN','CH','FF','GE','K
 
 /* ---------- Heldenbogen ---------- */
 function sheetHtml(h,dialog){const s=h.sheet||{basis:{},sections:[],notizen:[]};
-  const basis={'Spieler':h.player,'Profession':h.profession,...s.basis,'Eingang':h.received,'Datei':h.file};
+  const basis={'Profession':h.profession,...s.basis,'Eingang':h.received,'Datei':h.file};
   return `<div class="spread"><h2>${esc(h.name)}</h2><div class="row">
       <input type="search" class="sq" placeholder="Im Bogen suchen…" aria-label="Im Bogen suchen" style="width:220px">
       <a class="btn sm" href="/api/heroes/${encodeURIComponent(h.file)}/xml">XML</a>
       ${h.status==='neu'?'<button class="btn sm pri" data-take>Übernehmen</button>':''}
       ${dialog?'<button class="btn sm" data-close>Schließen</button>':''}</div></div>
+    <div class="row small"><label for="owner-${esc(h.file)}" class="label">Gehört</label>
+      <select id="owner-${esc(h.file)}" class="owner" data-file="${esc(h.file)}" style="width:auto"><option value="">– niemandem (FTP) –</option>${accts.map(a=>`<option value="${a.id}"${String(a.id)===String(h.account)?' selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
     <dl class="kv">${Object.entries(basis).filter(([k,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
     <div class="attr">${ATTR.map(k=>`<div class="a"><span class="label">${k}</span><b>${h.E&&h.E[k]!=null?h.E[k]:'–'}</b></div>`).join('')}</div>
     ${h.meistergenehmigung&&h.meistergenehmigung.length?`<div class="note"><b>Meistergenehmigung laut XML:</b><ul class="small">${h.meistergenehmigung.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
@@ -359,8 +367,31 @@ function openSheet(file){const h=heroes.find(x=>x.file===file);if(!h)return;cons
 document.addEventListener('click',e=>{const b=e.target.closest('[data-sheet]');if(b)openSheet(b.dataset.sheet)});
 $('#sheet').addEventListener('click',e=>{if(e.target===$('#sheet'))$('#sheet').close()});
 
+/* ---------- Spieler-Konten ---------- */
+let accts=[],accConfirm=null,accPwOpen=null;
+async function loadAccts(){try{accts=await api('/api/accounts')}catch(e){}}
+async function loadAccounts(){try{[accts,heroes]=await Promise.all([api('/api/accounts'),api('/api/heroes')])}catch(e){return toast(e.message)}renderAccounts()}
+function renderAccounts(){
+  $('#acctab').innerHTML=accts.map(a=>{const n=heroes.filter(h=>String(h.account)===String(a.id)).length;
+    const mail=a.email?`${esc(a.email)} <span class="pill ok">bestätigt</span>`:a.email_pending?`${esc(a.email_pending)} <span class="pill warn">unbestätigt</span>`:'<span class="mut">keine</span>';
+    const act=accConfirm===a.id?`<span class="small">Konto löschen? Helden bleiben erhalten.</span><button class="btn sm danger" data-adel="${a.id}">Ja, löschen</button><button class="btn sm" data-ano>Nein</button>`
+      :accPwOpen===a.id?`<input type="text" id="apw-${a.id}" placeholder="neues Passwort" style="width:180px" aria-label="Neues Passwort"><button class="btn sm pri" data-apwset="${a.id}">Setzen</button><button class="btn sm" data-ano>Abbrechen</button>`
+      :`<button class="btn sm" data-apw="${a.id}">Passwort setzen</button><button class="btn sm danger" data-aask="${a.id}">Löschen</button>`;
+    return `<tr><td><b>${esc(a.name)}</b></td><td class="small">${mail}</td><td class="mono small">${esc(a.created||'')}</td><td>${n}</td><td><div class="row" style="flex-wrap:nowrap">${act}</div></td></tr>`}).join('')
+    ||'<tr><td colspan="5" class="empty">Noch keine Spieler. Oben anlegen.</td></tr>'}
+$('#accForm').onsubmit=async e=>{e.preventDefault();
+  try{await api('/api/accounts',{method:'POST',body:{name:$('#accName').value,password:$('#accPw').value}});toast('Spieler angelegt. Name und Startpasswort weitergeben.');$('#accName').value='';$('#accPw').value='';loadAccounts()}catch(x){toast(x.message)}};
+$('#acctab').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.aask){accConfirm=+b.dataset.aask;accPwOpen=null;renderAccounts()}
+  else if(b.dataset.apw){accPwOpen=+b.dataset.apw;accConfirm=null;renderAccounts();$('#apw-'+b.dataset.apw).focus()}
+  else if(b.dataset.ano!==undefined){accConfirm=accPwOpen=null;renderAccounts()}
+  else if(b.dataset.adel){try{await api('/api/accounts/'+b.dataset.adel,{method:'DELETE'});accConfirm=null;toast('Konto gelöscht');loadAccounts()}catch(x){toast(x.message)}}
+  else if(b.dataset.apwset){try{await api('/api/accounts/'+b.dataset.apwset+'/password',{method:'POST',body:{password:$('#apw-'+b.dataset.apwset).value}});accPwOpen=null;toast('Passwort gesetzt, alte Anmeldungen sind abgemeldet');renderAccounts()}catch(x){toast(x.message)}}};
+document.addEventListener('change',async e=>{const s=e.target.closest('select.owner');if(!s)return;
+  try{await api('/api/heroes/'+encodeURIComponent(s.dataset.file)+'/owner',{method:'POST',body:{account:s.value?+s.value:null}});toast('Besitzer gespeichert');const h=heroes.find(x=>x.file===s.dataset.file);if(h){h.account=s.value?+s.value:null}}catch(x){toast(x.message)}});
+
 /* ---------- Konfiguration ---------- */
-const CFG=['playerPassword','mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];
+const CFG=['mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];
 async function loadCfg(){try{const c=await api('/api/config');CFG.forEach(k=>$('#'+k).value=c[k]??'');loadJar()}catch(e){toast(e.message)}}
 async function loadJar(){try{const j=await api('/api/jar');
   $('#jarinfo').innerHTML=j.present?`<dl class="kv"><dt>Installiert</dt><dd class="mono">${esc(j.version||'?')}</dd>

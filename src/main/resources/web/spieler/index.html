@@ -5,42 +5,98 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Heldenhort</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="icon" href="/common/d20.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/common/app.css">
-<style>html,body{margin:0}</style>
+<style>
+html,body{margin:0}
+.pl .inner{width:min(1200px,100%)}
+.costs{display:flex;flex-wrap:wrap;gap:8px}
+.cost{border:1px solid var(--line);border-radius:999px;padding:3px 12px;background:var(--panel);font-size:.9rem}
+.cost.over{border-color:var(--bad);color:var(--bad)}
+.ctlgrid{display:grid;gap:4px 12px;align-items:center}
+.ctlgrid .h{font-size:.8rem;color:var(--mut);font-weight:700}
+.opts{display:grid;gap:6px}
+.opt{display:flex;gap:8px;align-items:center}
+.vals td input[type=number]{width:80px}
+.hint{border-left:3px solid var(--line);padding:6px 10px;background:var(--panel2);font-size:.9rem}
+.hint.F{border-color:var(--bad)} .hint.MG{border-color:var(--acc)} .hint.H{border-color:var(--warn)}
+.busy{opacity:.6;pointer-events:none}
+.list{display:grid;gap:10px}
+.item{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:var(--r);padding:10px 14px;background:var(--panel)}
+</style>
 </head>
 <body>
 <div class="pl"><div class="inner">
 
+  <!-- Anmeldung -->
   <div id="s-login" class="login" hidden>
     <h1>Heldenhort</h1>
-    <p class="mut">Zugang für die Spielrunde. Das Passwort bekommst du vom Meister.</p>
+    <p class="mut">Zugang für die Spielrunde. Name und Startpasswort bekommst du vom Meister.</p>
     <form id="lform" class="card">
+      <div class="field"><label class="label" for="lname">Name</label><input type="text" id="lname" maxlength="40" autocomplete="username" required></div>
       <div class="field"><label class="label" for="lpw">Passwort</label><input type="password" id="lpw" autocomplete="current-password" required></div>
-      <div class="field"><label class="label" for="lname">Dein Name</label><input type="text" id="lname" maxlength="40" required></div>
-      <button class="btn pri" type="submit">Eintreten</button>
+      <button class="btn pri" type="submit">Anmelden</button>
       <p class="small err" id="lerr" hidden></p>
     </form>
   </div>
 
+  <!-- Start -->
   <div id="s-home" hidden>
     <div class="spread" style="margin-bottom:18px"><h1>Willkommen, <span id="who"></span></h1><button class="btn sm" id="logout">Abmelden</button></div>
     <div class="tiles">
-      <button class="tile" data-go="s-create"><span class="ico">✦</span><h2>Heldenerstellung</h2><span class="mut">Helden bauen, im Browser speichern, mit Hintergrundgeschichte an den Meister senden.</span></button>
+      <button class="tile" data-go="s-drafts"><span class="ico">✦</span><h2>Heldenerstellung</h2><span class="mut">Neue Helden bauen, mit Hintergrundgeschichte an den Meister senden.</span></button>
+      <button class="tile" data-go="s-mine"><span class="ico">⚔</span><h2>Meine Helden</h2><span class="mut">Deine Helden beim Meister ansehen.</span></button>
       <button class="tile" data-go="s-stream"><span class="ico">♪</span><h2>Soundstream</h2><span class="mut">Musik und Geräusche vom Spieltisch. Du regelst nur deine Lautstärke.</span></button>
+      <button class="tile" data-go="s-konto"><span class="ico">⚙</span><h2>Konto</h2><span class="mut">Passwort ändern, Mail-Adresse für Benachrichtigungen.</span></button>
     </div>
   </div>
 
+  <!-- Entwürfe -->
+  <div id="s-drafts" hidden>
+    <div class="spread" style="margin-bottom:14px"><div class="row"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Heldenerstellung</h1></div><button class="btn pri" id="newDraft">Neuer Held</button></div>
+    <div class="list" id="draftList"></div>
+  </div>
+
+  <!-- Assistent -->
   <div id="s-create" hidden>
-    <div class="spread" style="margin-bottom:14px">
-      <div class="row"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Heldenerstellung</h1></div>
-      <span class="small mut">Entwurf wird in diesem Browser gespeichert</span>
+    <div class="spread" style="margin-bottom:10px">
+      <div class="row"><button class="btn sm" data-go="s-drafts">← Entwürfe</button><h1 id="cTitle">Heldenerstellung</h1></div>
+      <div class="costs" id="costs"></div>
     </div>
-    <div class="note" style="margin-bottom:14px" id="engineNote">Regeln, Auswahllisten und Regelprüfung kommen aus der helden.jar.</div>
-    <div class="steps" id="steps"></div>
-    <div class="card" id="stepbody" style="margin-top:12px"></div>
-    <div class="spread" style="margin-top:12px"><button class="btn" id="prev">Zurück</button><button class="btn pri" id="next">Weiter</button></div>
+    <div class="note" style="margin-bottom:12px" id="engineNote">Regeln, Auswahllisten, Kosten und Regelprüfung kommen aus der helden.jar. Alles wird am Server gespeichert.</div>
+    <div id="phaseA" hidden>
+      <div class="card" id="rkp"></div>
+    </div>
+    <div id="phaseB" hidden>
+      <div class="steps" id="steps"></div>
+      <div class="card" id="stepbody" style="margin-top:12px"></div>
+    </div>
   </div>
 
+  <!-- Meine Helden -->
+  <div id="s-mine" hidden>
+    <div class="row" style="margin-bottom:14px"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Meine Helden</h1></div>
+    <div class="list" id="mineList"></div>
+    <div class="card" id="mineSheet" hidden style="margin-top:14px"></div>
+  </div>
+
+  <!-- Konto -->
+  <div id="s-konto" hidden>
+    <div class="row" style="margin-bottom:14px"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Konto</h1></div>
+    <div class="grid2">
+      <form class="card" id="pwForm"><h3>Passwort ändern</h3>
+        <div class="field"><label class="label" for="pwOld">Bisheriges Passwort</label><input type="password" id="pwOld" autocomplete="current-password" required></div>
+        <div class="field"><label class="label" for="pwNew">Neues Passwort (mind. 8 Zeichen)</label><input type="password" id="pwNew" autocomplete="new-password" minlength="8" required></div>
+        <button class="btn pri" type="submit" style="justify-self:start">Ändern</button></form>
+      <form class="card" id="mailForm"><h3>Mail-Adresse</h3>
+        <p class="small mut">Für Nachrichten zu deinen Freigaben. Gilt erst, wenn du den Link in der Bestätigungsmail anklickst.</p>
+        <div id="mailState" class="small"></div>
+        <div class="field"><label class="label" for="mailNew">Neue Adresse</label><input type="email" id="mailNew" autocomplete="email" required></div>
+        <button class="btn pri" type="submit" style="justify-self:start">Bestätigungsmail senden</button></form>
+    </div>
+  </div>
+
+  <!-- Soundstream -->
   <div id="s-stream" hidden>
     <div class="row" style="margin-bottom:14px"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Soundstream</h1></div>
     <div class="card stream">
@@ -57,99 +113,212 @@
 <script src="/common/common.js"></script>
 <script>
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-const VIEWS=['s-login','s-home','s-create','s-stream'];
-function show(v){VIEWS.forEach(x=>$('#'+x).hidden=x!==v);if(v==='s-create')renderStep();window.scrollTo(0,0)}
-function go(v){location.hash=v}
-addEventListener('hashchange',()=>guard(location.hash.slice(1)||'s-home'));
+const VIEWS=['s-login','s-home','s-drafts','s-create','s-mine','s-konto','s-stream'];
 let me=null;
-async function guard(v){if(!me&&v!=='s-login'){try{me=(await api('/api/me')).name}catch(e){return show('s-login')}}$('#who').textContent=me;show(VIEWS.includes(v)?v:'s-home')}
+function show(v){VIEWS.forEach(x=>$('#'+x).hidden=x!==v);({'s-drafts':loadDrafts,'s-mine':loadMine,'s-konto':loadKonto})[v]?.();window.scrollTo(0,0)}
+function go(v){if(location.hash.slice(1)===v)guard(v);else location.hash=v}
+addEventListener('hashchange',()=>guard(location.hash.slice(1)||'s-home'));
+async function guard(v){
+  if(!me&&v!=='s-login'){try{me=await api('/api/me')}catch(e){return show('s-login')}}
+  if(me)$('#who').textContent=me.name;
+  if(v.startsWith('d-')){openDraft(+v.slice(2));return}
+  show(VIEWS.includes(v)?v:'s-home')}
+addEventListener('hh401',()=>{me=null;show('s-login')});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-go]');if(b)go(b.dataset.go)});
 
-/* ---------- Login ---------- */
+/* ---------- Login / Konto ---------- */
 $('#lname').value=LS.get('hh-name','');
 $('#lform').onsubmit=async e=>{e.preventDefault();$('#lerr').hidden=true;
-  try{me=(await api('/api/login',{method:'POST',body:{password:$('#lpw').value,name:$('#lname').value}})).name;LS.set('hh-name',me);$('#lpw').value='';go('s-home');guard('s-home')}
+  try{await api('/api/login',{method:'POST',body:{name:$('#lname').value,password:$('#lpw').value}});LS.set('hh-name',$('#lname').value);$('#lpw').value='';me=null;go('s-home')}
   catch(x){$('#lerr').textContent=x.message;$('#lerr').hidden=false}};
-$('#logout').onclick=async()=>{await api('/api/logout',{method:'POST'}).catch(()=>{});me=null;stopStream();go('s-login');show('s-login')};
+$('#logout').onclick=async()=>{await api('/api/logout',{method:'POST'}).catch(()=>{});me=null;stopStream();go('s-login')};
+async function loadKonto(){try{me=await api('/api/me')}catch(e){return}
+  $('#mailState').innerHTML=me.email?`Bestätigt: <b>${esc(me.email)}</b>`:'<span class="mut">Keine bestätigte Adresse.</span>';
+  if(me.emailPending)$('#mailState').innerHTML+=`<br>Wartet auf Bestätigung: <b>${esc(me.emailPending)}</b>`}
+$('#pwForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/account/password',{method:'POST',body:{old:$('#pwOld').value,new:$('#pwNew').value}});$('#pwOld').value=$('#pwNew').value='';toast('Passwort geändert')}catch(x){toast(x.message)}};
+$('#mailForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/account/email',{method:'POST',body:{email:$('#mailNew').value}});$('#mailNew').value='';toast('Bestätigungsmail ist unterwegs. Bitte den Link darin anklicken.');loadKonto()}catch(x){toast(x.message)}};
 
-/* ---------- Heldenerstellung ---------- */
-const STEPS=['Grunddaten','Rasse','Kultur','Profession','Eigenschaften','Vor- & Nachteile','Talente','Hintergrund','Prüfen & senden'];
-const READY=new Set([0,1,2,7,8]); // Schritte, die schon an die helden.jar angebunden sind
-const draft=Object.assign({name:'',setting:null,geschlecht:'männlich',rasse:'',kultur:'',bg:'',req:null,hw:[]},LS.get('hh-draft',{}));
-let step=LS.get('hh-step',0),cat=null,catErr=null;
-const save=()=>{LS.set('hh-draft',draft);LS.set('hh-step',step)};
-const bgText=()=>{const d=document.createElement('div');d.innerHTML=draft.bg;return d.textContent.trim()};
-async function loadCat(){try{cat=await api('/api/create/catalog?setting='+encodeURIComponent(draft.setting||'')+'&geschlecht='+encodeURIComponent(draft.geschlecht));catErr=null;draft.setting=cat.setting;
-  $('#engineNote').textContent=`Regeln, Auswahllisten und Regelprüfung kommen aus der helden.jar (${cat.version}).`}catch(e){catErr=e.message;cat=null}renderStep()}
-function opts(list,sel){return '<option value="">bitte wählen</option>'+list.map(x=>`<option${x===sel?' selected':''}>${esc(x)}</option>`).join('')}
-function renderStep(){
-  $('#steps').innerHTML=STEPS.map((s,i)=>`<button data-st="${i}"${i===step?' aria-current="step"':''} class="${i<step?'done':''}">${i+1}. ${s}</button>`).join('');
-  const b=$('#stepbody');$('#prev').disabled=step===0;$('#next').hidden=step===STEPS.length-1;
-  if(!cat&&!catErr&&READY.has(step)&&step<3){b.innerHTML='<p class="mut">Lade Daten aus der helden.jar…</p>';loadCat();return}
-  if(catErr&&step<3){b.innerHTML=`<p class="err">${esc(catErr)}</p>`;return}
-  if(!READY.has(step)){b.innerHTML=`<h2>${STEPS[step]}</h2><p class="mut">Dieser Schritt wird gerade an die helden.jar angebunden und folgt mit dem nächsten Update.</p>`;return}
-  if(step===0)b.innerHTML=`<h2>Grunddaten</h2><div class="grid2">
-    <div class="field"><label class="label" for="dn">Name</label><input type="text" id="dn" value="${esc(draft.name)}" maxlength="80"></div>
-    <div class="field"><label class="label" for="ds">Geschlecht</label><select id="ds">${cat.geschlechter.map(g=>`<option${g===draft.geschlecht?' selected':''}>${esc(g)}</option>`).join('')}</select></div>
-    <div class="field"><label class="label" for="dr">Regelbasis</label><select id="dr">${cat.settings.map(g=>`<option${g===draft.setting?' selected':''}>${esc(g)}</option>`).join('')}</select></div></div>`;
-  if(step===1)b.innerHTML=`<h2>Rasse</h2><div class="field"><label class="label" for="rs">Rasse (${cat.rassen.length})</label><select id="rs" data-k="rasse">${opts(cat.rassen,draft.rasse)}</select></div>`;
-  if(step===2)b.innerHTML=`<h2>Kultur</h2><div class="field"><label class="label" for="ku">Kultur (${cat.kulturen.length})</label><select id="ku" data-k="kultur">${opts(cat.kulturen,draft.kultur)}</select></div>
-    <p class="small mut">Ob die Kultur zur Rasse passt, prüft die helden.jar im letzten Schritt.</p>`;
-  if(step===7){b.innerHTML=`<div class="spread"><h2>Hintergrund</h2><span class="pill" id="bgst"></span></div>
+/* ---------- Entwürfe ---------- */
+async function loadDrafts(){let ds;try{ds=await api('/api/drafts')}catch(e){return toast(e.message)}
+  $('#draftList').innerHTML=ds.map(d=>`<div class="item"><div><b>${esc(d.name)}</b> <span class="pill ${d.status==='gesendet'?'ok':''}">${d.status==='gesendet'?'beim Meister':d.haupt?'Werte':'Rasse/Kultur/Profession'}</span><div class="small mut">zuletzt ${esc(d.updated)}</div></div>
+    <div class="row">${d.status==='gesendet'?'':`<button class="btn sm pri" data-open="${d.id}">Weiter</button>`}<button class="btn sm danger" data-del="${d.id}">Löschen</button></div></div>`).join('')
+    ||'<p class="mut">Noch kein Entwurf. Mit „Neuer Held“ geht es los.</p>'}
+$('#newDraft').onclick=async()=>{try{const r=await api('/api/drafts',{method:'POST'});location.hash='d-'+r.id}catch(e){toast(e.message)}};
+let delAsk=null;
+$('#draftList').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.open)location.hash='d-'+b.dataset.open;
+  if(b.dataset.del){if(delAsk!==b.dataset.del){delAsk=b.dataset.del;b.textContent='Wirklich löschen?';return}
+    try{await api('/api/drafts/'+b.dataset.del,{method:'DELETE'});delAsk=null;loadDrafts()}catch(x){toast(x.message)}}};
+
+/* ---------- Assistent ---------- */
+let D=null,inp={},R=null,S=null,step=0;
+const STEPS=['Eigenschaften','Vor- & Nachteile','Sonderfertigkeiten','Talente','Hintergrund','Prüfen & senden'];
+async function openDraft(id){show('s-create');$('#rkp').innerHTML='<p class="mut">Lade…</p>';$('#phaseA').hidden=false;$('#phaseB').hidden=true;$('#costs').innerHTML='';
+  try{D=await api('/api/drafts/'+id)}catch(e){toast(e.message);return go('s-drafts')}
+  inp=D.input||{};inp.answers=inp.answers||[];$('#cTitle').textContent=D.name;
+  if(D.status==='gesendet'){$('#rkp').innerHTML='<p>Dieser Held ist schon beim Meister.</p>';return}
+  if(D.haupt){$('#phaseA').hidden=true;$('#phaseB').hidden=false;step=LS.get('hh-step-'+id,0);await edit([])}else await rkp()}
+function busy(on){$('#s-create').classList.toggle('busy',on)}
+async function rkp(){busy(true);try{R=await api('/api/drafts/'+D.id+'/rkp',{method:'POST',body:inp})}catch(e){busy(false);toast(e.message);return}busy(false);
+  $('#engineNote').textContent=`Regeln, Auswahllisten, Kosten und Regelprüfung kommen aus der helden.jar (${R.version}). Alles wird am Server gespeichert.`;
+  if(inp.name){D.name=inp.name;$('#cTitle').textContent=inp.name}
+  if(R.next==='haupt'){D.haupt=true;$('#phaseA').hidden=true;$('#phaseB').hidden=false;step=0;await edit([]);return}
+  renderRkp()}
+function optsHtml(list,sel){return '<option value="">bitte wählen</option>'+list.map(o=>`<option value="${esc(o.name)}"${o.name===sel?' selected':''}>${esc(o.name)}${o.ueblich?' ★':''}</option>`).join('')}
+function rkpStep(key,label){const st=R[key];if(!st)return '';
+  const cur=inp[key]||{},v=st.varianten||[];
+  return `<div class="field"><label class="label" for="rk-${key}">${label} <span class="mut">(${st.options.length}${st.options.some(o=>o.ueblich)?', ★ = üblich':''})</span></label>
+    <select id="rk-${key}" data-k="${key}">${optsHtml(st.options,st.name)}</select>
+    ${st.name&&v.length?`<label class="label" for="rv-${key}">Variante${st.varianteNoetig?'':' (optional)'}</label><select id="rv-${key}" data-v="${key}"><option value="">${st.varianteNoetig?'bitte wählen':'keine'}</option>${v.map(x=>`<option${(cur.varianten||[]).includes(x)?' selected':''}>${esc(x)}</option>`).join('')}</select>`:''}</div>`}
+function renderRkp(){
+  const p=R.pending;
+  $('#rkp').innerHTML=`<h2>Herkunft und Profession</h2>
+   <div class="grid2">
+     <div class="field"><label class="label" for="rk-name">Name</label><input type="text" id="rk-name" value="${esc(inp.name||'')}" maxlength="80"></div>
+     <div class="field"><label class="label" for="rk-g">Geschlecht</label><select id="rk-g">${R.geschlechter.map(g=>`<option${g===R.geschlecht?' selected':''}>${esc(g)}</option>`).join('')}</select></div>
+     <div class="field"><label class="label" for="rk-s">Regelbasis</label><select id="rk-s">${R.settings.map(g=>`<option${g===R.setting?' selected':''}>${esc(g)}</option>`).join('')}</select></div>
+   </div>
+   <div class="grid2">${rkpStep('rasse','Rasse')}${rkpStep('kultur','Kultur')}${rkpStep('profession','Profession')}</div>
+   ${(R.auswahlenFertig||[]).length?`<div class="small mut">Getroffene Auswahlen: ${R.auswahlenFertig.map(a=>esc(a.title)).join(' · ')} <button class="btn sm" id="ausReset">Neu wählen</button></div>`:''}
+   ${p?pendingHtml(p):''}`;
+}
+function pendingHtml(p){
+  // Bedienelemente nach Raster gruppieren (so wie die helden.jar sie anordnet)
+  const groups=[];let cur=null;
+  for(const c of p.controls){const g=c.grid??'seq';if(!cur||cur.g!==g){cur={g,items:[]};groups.push(cur)}cur.items.push(c)}
+  const ctl=c=>{
+    if(c.type==='label')return `<span>${esc(c.label)}</span>`;
+    if(c.type==='list')return c.multi?`<div class="opts">${c.items.map((x,i)=>`<label class="opt"><input type="checkbox" data-cid="${c.id}" data-li="${i}"${c.selected.includes(i)?' checked':''}> ${esc(x)}</label>`).join('')}</div>`
+      :`<div class="opts">${c.items.map((x,i)=>`<label class="opt"><input type="radio" name="l${c.id}" data-cid="${c.id}" data-li="${i}"${c.selected.includes(i)?' checked':''}> ${esc(x)}</label>`).join('')}</div>`;
+    if(c.type==='radio')return `<input type="radio" name="g${c.grid}-${c.col}" data-cid="${c.id}" data-btn${c.selected?' checked':''}${c.enabled?'':' disabled'} aria-label="${esc(c.label||'wählen')}">${c.label?' '+esc(c.label):''}`;
+    if(c.type==='check')return `<label class="opt"><input type="checkbox" data-cid="${c.id}" data-btn${c.selected?' checked':''}${c.enabled?'':' disabled'}> ${esc(c.label)}</label>`;
+    if(c.type==='spin')return `<input type="number" data-cid="${c.id}" value="${c.value}"${c.min!=null?` min="${c.min}"`:''}${c.max!=null?` max="${c.max}"`:''} style="width:80px">`;
+    if(c.type==='combo')return `<select data-cid="${c.id}">${c.items.map((x,i)=>`<option value="${i}"${i===c.selected?' selected':''}>${esc(x)}</option>`).join('')}</select>`;
+    return ''};
+  const body=groups.map(g=>{if(g.g==='seq')return g.items.map(ctl).join('<br>');
+    const cols=Math.max(...g.items.map(c=>c.col??0))+1;
+    return `<div class="ctlgrid" style="grid-template-columns:repeat(${cols},auto)">${g.items.map(c=>`<div style="grid-row:${(c.row??0)+1};grid-column:${(c.col??0)+1}" class="${(c.row??0)===0&&c.type==='label'?'h':''}">${ctl(c)}</div>`).join('')}</div>`}).join('');
+  return `<div class="card" style="border-color:var(--acc)"><h3>Auswahl ${p.index+1}: ${esc(p.title)}</h3>${p.error?`<p class="err">${esc(p.error)}</p>`:''}${body}
+    <div class="row"><button class="btn pri" id="ausOk">Übernehmen</button></div></div>`}
+$('#rkp').addEventListener('change',e=>{const t=e.target;
+  if(t.id==='rk-g'){inp.geschlecht=t.value;['rasse','kultur','profession'].forEach(k=>delete inp[k]);inp.answers=[];rkp()}
+  else if(t.id==='rk-s'){inp.setting=t.value;['rasse','kultur','profession'].forEach(k=>delete inp[k]);inp.answers=[];rkp()}
+  else if(t.dataset.k){const order=['rasse','kultur','profession'],i=order.indexOf(t.dataset.k);inp[t.dataset.k]={name:t.value,varianten:[]};order.slice(i+1).forEach(k=>delete inp[k]);inp.answers=[];rkp()}
+  else if(t.dataset.v){const order=['rasse','kultur','profession'],i=order.indexOf(t.dataset.v);inp[t.dataset.v].varianten=t.value?[t.value]:[];order.slice(i+1).forEach(k=>delete inp[k]);inp.answers=[];rkp()}});
+$('#rkp').addEventListener('input',e=>{if(e.target.id==='rk-name')inp.name=e.target.value});
+$('#rkp').addEventListener('focusout',e=>{if(e.target.id==='rk-name'&&R&&R.next!=='auswahl')rkp()});
+$('#rkp').addEventListener('click',e=>{
+  if(e.target.id==='ausReset'){inp.answers=[];rkp()}
+  if(e.target.id==='ausOk'){const p=R.pending,ans={};
+    for(const c of p.controls){
+      if(c.type==='list')ans[c.id]=$$(`[data-cid="${c.id}"][data-li]`).filter(x=>x.checked).map(x=>+x.dataset.li);
+      if(c.type==='radio'||c.type==='check'){const el=$(`[data-cid="${c.id}"][data-btn]`);if(el)ans[c.id]=el.checked}
+      if(c.type==='spin'){const el=$(`[data-cid="${c.id}"]`);ans[c.id]=+el.value}
+      if(c.type==='combo'){const el=$(`[data-cid="${c.id}"]`);ans[c.id]=+el.value}}
+    inp.answers=inp.answers.slice(0,p.index);inp.answers[p.index]=ans;rkp()}});
+
+/* Phase B: Werte */
+async function edit(ops){busy(true);try{S=await api('/api/drafts/'+D.id+'/edit',{method:'POST',body:{ops}})}catch(e){busy(false);toast(e.message);return false}busy(false);renderCosts();renderStep();return true}
+function renderCosts(){const k=S.kosten,parts=[];
+  for(const[n,[u,a]]of Object.entries(k))parts.push(`<span class="cost${a>=0&&u>a?' over':''}">${esc(n)} ${u}${a>=0?' / '+a:''}</span>`);
+  parts.push(`<span class="cost${S.eigenschaftenGP[0]>S.eigenschaftenGP[1]?' over':''}">Eigenschafts-GP ${S.eigenschaftenGP[0]} / ${S.eigenschaftenGP[1]}</span>`);
+  $('#costs').innerHTML=parts.join('')}
+function renderStep(){LS.set('hh-step-'+D.id,step);
+  $('#steps').innerHTML=STEPS.map((s,i)=>`<button data-st="${i}"${i===step?' aria-current="step"':''}>${i+1}. ${s}</button>`).join('')+`<button id="toRkp" class="small">↺ Herkunft neu wählen</button>`;
+  const b=$('#stepbody');
+  if(step===0)b.innerHTML=`<div class="spread"><h2>Eigenschaften</h2><div class="field" style="min-width:240px"><label class="label" for="hname">Name</label><input type="text" id="hname" value="${esc(D.name)}" maxlength="80"></div></div>
+    <div class="tw"><table class="vals"><thead><tr><th>Eigenschaft</th><th>Wert</th><th>erlaubt</th></tr></thead><tbody>${S.eigenschaften.map(e=>`<tr><td>${esc(e.name)}</td><td><input type="number" data-eig="${esc(e.name)}" value="${e.value}" min="${e.min}" max="${e.max}"></td><td class="mono small mut">${e.min}–${e.max}</td></tr>`).join('')}</tbody></table></div>
+    <p class="small mut">Werte inklusive Rassen- und Kulturmodifikatoren. Kosten rechnet die helden.jar.</p>`;
+  if(step===1)b.innerHTML=`<h2>Vor- & Nachteile</h2>
+    <div class="tw"><table><tbody>${S.vorteile.map(v=>`<tr><td><b>${esc(v.name)}</b></td><td class="mono">${esc(v.value)}</td><td><button class="btn sm danger" data-vdel="${esc(v.name)}">Entfernen</button></td></tr>`).join('')||'<tr><td class="empty">Keine.</td></tr>'}</tbody></table></div>
+    <div class="row" style="flex-wrap:nowrap"><input type="text" id="vname" list="vlist" placeholder="Vorteil oder Nachteil (${S.vorteileMoeglich.length} wählbar)" aria-label="Vorteil oder Nachteil"><input type="text" id="vval" placeholder="Wert/Stufe, falls nötig" style="width:200px" aria-label="Wert"><button class="btn pri" id="vadd">Hinzufügen</button></div>
+    <datalist id="vlist">${S.vorteileMoeglich.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+    <p class="small mut">Bei Nachteilen wie „Goldgier“ die Stufe als Wert angeben, bei „Herausragender Sinn“ z. B. „Gehör“.</p>`;
+  if(step===2){const own=S.sf.filter(x=>x.eigene),fix=S.sf.filter(x=>!x.eigene);
+    b.innerHTML=`<h2>Sonderfertigkeiten</h2>
+    <div class="tw"><table><tbody>${own.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td><button class="btn sm danger" data-sdel="${esc(x.name)}">Entfernen</button></td></tr>`).join('')||'<tr><td class="empty">Noch keine eigenen gewählt.</td></tr>'}</tbody></table></div>
+    <div class="row" style="flex-wrap:nowrap"><input type="text" id="sname" list="slist" placeholder="Sonderfertigkeit (${S.sfMoeglich.length} wählbar)" aria-label="Sonderfertigkeit"><select id="skart" style="width:auto" aria-label="Bezahlen mit"><option value="">Bezahlen mit…</option><option>GP</option><option>AP</option></select><button class="btn pri" id="sadd">Hinzufügen</button></div>
+    <datalist id="slist">${S.sfMoeglich.map(x=>`<option value="${esc(x.name)}">${x.ap} AP</option>`).join('')}</datalist>
+    <details class="sec"><summary class="small mut">Aus Rasse, Kultur und Profession (${fix.length})</summary><p class="small">${fix.map(x=>esc(x.name)).join(', ')}</p></details>`}
+  if(step===3)b.innerHTML=`<div class="spread"><h2>Talente</h2><input type="search" id="tq" placeholder="Talent suchen…" style="width:220px" aria-label="Talent suchen"></div>
+    <div class="tw"><table class="vals"><thead><tr><th>Talent</th><th>Probe</th><th>TaW</th><th>max</th></tr></thead><tbody id="tbody">${S.talente.map(t=>`<tr data-tn="${esc(t.name.toLowerCase())}"><td>${esc(t.name)}</td><td class="mono small">${esc(t.probe)}</td><td><input type="number" data-tal="${esc(t.name)}" value="${t.value}"${t.max!=null?` max="${t.max}"`:''}></td><td class="mono small mut">${t.max??''}</td></tr>`).join('')}</tbody></table></div>
+    <div class="row" style="flex-wrap:nowrap"><input type="text" id="tname" list="tlist" placeholder="Talent aktivieren (${S.talenteAktivierbar[0]}/${S.talenteAktivierbar[1]} aktiviert)" aria-label="Talent aktivieren"><button class="btn pri" id="tadd">Aktivieren</button></div>
+    <datalist id="tlist">${S.talenteMoeglich.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
+  if(step===4){b.innerHTML=`<div class="spread"><h2>Hintergrund</h2><span class="pill" id="bgst"></span></div>
     <div><div class="tb" id="tb">
       <button data-cmd="bold" title="Fett"><b>F</b></button><button data-cmd="italic" title="Kursiv"><i>K</i></button><button data-cmd="underline" title="Unterstrichen"><u>U</u></button>
       <button data-cmd="formatBlock" data-v="h3" title="Überschrift">Ü</button><button data-cmd="formatBlock" data-v="p" title="Absatz">¶</button>
       <button data-cmd="insertUnorderedList" title="Liste">• Liste</button><button data-cmd="insertOrderedList" title="Nummeriert">1. Liste</button>
       <button data-cmd="formatBlock" data-v="blockquote" title="Zitat">„Zitat“</button><button data-cmd="removeFormat" title="Formatierung entfernen">⌫ Format</button></div>
-    <div class="ed" id="ed" contenteditable="true" data-ph="Woher kommt dein Held? Was treibt ihn an? Familie, Feinde, Geheimnisse…"></div></div>`;
-    $('#ed').innerHTML=draft.bg;
-    const upd=()=>{draft.bg=$('#ed').innerHTML;save();const n=bgText().length;$('#bgst').textContent=n>=50?`${n} Zeichen · ok`:`${n}/50 Zeichen Minimum`;$('#bgst').className='pill '+(n>=50?'ok':'warn')};
-    $('#ed').oninput=upd;upd();$('#tb').onmousedown=e=>e.preventDefault();
-    $('#tb').onclick=e=>{const t=e.target.closest('[data-cmd]');if(!t)return;document.execCommand(t.dataset.cmd,false,t.dataset.v?`<${t.dataset.v}>`:null);upd()};}
-  if(step===8)renderCheck();
+    <div class="ed" id="ed" contenteditable="true" data-ph="Woher kommt dein Held? Was treibt ihn an? Familie, Feinde, Geheimnisse…"></div></div>
+    <p class="small mut">Wird automatisch gespeichert.</p>`;
+    $('#ed').innerHTML=D.bg||'';let t;
+    const upd=()=>{const n=$('#ed').textContent.trim().length;$('#bgst').textContent=n>=50?`${n} Zeichen · ok`:`${n}/50 Zeichen Minimum`;$('#bgst').className='pill '+(n>=50?'ok':'warn')};
+    $('#ed').oninput=()=>{upd();D.bg=$('#ed').innerHTML;clearTimeout(t);t=setTimeout(()=>api('/api/drafts/'+D.id+'/bg',{method:'PUT',body:{bg:D.bg}}).catch(x=>toast(x.message)),700)};upd();
+    $('#tb').onmousedown=e=>e.preventDefault();
+    $('#tb').onclick=e=>{const c=e.target.closest('[data-cmd]');if(!c)return;document.execCommand(c.dataset.cmd,false,c.dataset.v?`<${c.dataset.v}>`:null);$('#ed').oninput()};}
+  if(step===5)renderCheck();
 }
 const ST={offen:'warn',freigegeben:'ok',geändert:'ok',abgelehnt:'warn'};
-let reqData=null;
-async function pollReq(){if(!draft.req)return;try{reqData=await api('/api/approvals/'+draft.req)}catch(e){if(e.status===404){draft.req=null;save()}}
-  if(location.hash==='#s-create'&&step===8&&!$('#stepbody').contains(document.activeElement))renderCheck()}
-setInterval(pollReq,5000);
-function renderCheck(){
-  const ok=bgText().length>=50,items=reqData?reqData.items:draft.hw.map(t=>({text:t,status:'offen'}));
-  const done=items.filter(i=>i.status==='freigegeben'||i.status==='geändert').length,fgOk=!items.length||(reqData&&done===items.length);
-  const xmlReady=false; // Helden-XML entsteht erst, wenn alle Schritte an die helden.jar angebunden sind
-  $('#stepbody').innerHTML=`<h2>Prüfen & senden</h2><table class="small">
-    <tr><td>Name</td><td><b>${esc(draft.name||'–')}</b></td></tr><tr><td>Rasse / Kultur</td><td>${esc(draft.rasse||'–')} / ${esc(draft.kultur||'–')}</td></tr>
-    <tr><td>Hintergrund</td><td>${ok?'<span class="pill ok">ausgefüllt</span>':'<span class="pill warn">fehlt</span> mindestens 50 Zeichen nötig'}</td></tr></table>
-    <div class="spread"><h3>Regelprüfung (helden.jar)</h3><span class="small mut">${reqData?`Meisterfreigaben: ${done}/${items.length} · zuletzt abgeglichen <span class="mono">${new Date().toLocaleTimeString('de-AT')}</span>`:''}</span></div>
-    ${items.length?`<div class="tw"><table class="small"><thead><tr><th>Meldung</th><th>Status</th></tr></thead><tbody>${items.map(i=>`<tr><td>${esc(i.text)}${i.comment?`<div style="margin-top:4px"><b>Meister:</b> ${esc(i.comment)}</div>`:''}</td><td><span class="pill ${ST[i.status]}">${esc(i.status)}</span></td></tr>`).join('')}</tbody></table></div>`:'<p class="small mut">Noch keine Meldungen. Die Regelprüfung läuft, sobald alle Schritte angebunden sind.</p>'}
-    ${reqData&&items.some(i=>i.status==='abgelehnt')?'<p class="small" style="color:var(--warn)">Ein Punkt wurde abgelehnt. Bitte den Helden anpassen und neu anfragen.</p>':''}
-    <div class="row">
-      ${!draft.req&&items.length?'<button class="btn" id="askfg">Freigabe beim Meister anfragen</button>':''}
-      ${reqData&&items.some(i=>i.status==='abgelehnt')?'<button class="btn" id="reask">Angepasst, neu anfragen</button>':''}
-      <button class="btn pri" id="send"${ok&&fgOk&&xmlReady?'':' disabled'}>An Meister senden</button></div>
-    ${ok?'':'<p class="small" style="color:var(--warn)">Senden ist gesperrt, bis die Hintergrundgeschichte ausgefüllt ist.</p>'}
-    ${fgOk?'':'<p class="small" style="color:var(--warn)">Senden ist gesperrt, bis alle Punkte mit Meistergenehmigung freigegeben oder geändert sind.</p>'}
-    ${xmlReady?'':'<p class="small mut">Senden wird freigeschaltet, sobald die übrigen Schritte an die helden.jar angebunden sind.</p>'}`;
-  if($('#askfg'))$('#askfg').onclick=async()=>{try{draft.req=(await api('/api/approvals',{method:'POST',body:{hero:draft.name||'Unbenannt',items:draft.hw}})).id;save();toast('Anfrage gesendet. Der Meister bekommt eine Mail.');pollReq()}catch(e){toast(e.message)}};
-  if($('#reask'))$('#reask').onclick=async()=>{try{await api('/api/approvals/'+draft.req+'/reopen',{method:'POST'});toast('Neu angefragt.');pollReq()}catch(e){toast(e.message)}};
+let appr=null;
+async function renderCheck(){
+  let hs=S.hinweise;
+  try{[appr,hs]=await Promise.all([api('/api/drafts/'+D.id+'/approval'),api('/api/drafts/'+D.id+'/check').then(r=>r.hinweise)])}catch(e){appr=appr||{}}
+  const F=hs.filter(h=>h.art==='F'),MG=hs.filter(h=>h.art==='MG'),H=hs.filter(h=>h.art==='H');
+  const items=appr&&appr.items?appr.items:[],okSet=new Set(items.filter(i=>i.status==='freigegeben'||i.status==='geändert').map(i=>i.text));
+  const bgOk=(D.bg||'').replace(/<[^>]+>/g,'').trim().length>=50,mgOk=MG.every(h=>okSet.has(h.text));
+  const openMG=MG.filter(h=>!items.some(i=>i.text===h.text));
+  $('#stepbody').innerHTML=`<h2>Prüfen & senden</h2>
+    ${F.map(h=>`<div class="hint F"><b>Fehler:</b> ${esc(h.text)}</div>`).join('')}
+    ${MG.map(h=>{const it=items.find(i=>i.text===h.text);return `<div class="hint MG"><b>Meistergenehmigung:</b> ${esc(h.text)} ${it?`<span class="pill ${ST[it.status]}">${esc(it.status)}</span>${it.comment?`<div class="small"><b>Meister:</b> ${esc(it.comment)}</div>`:''}`:'<span class="pill">noch nicht angefragt</span>'}</div>`}).join('')}
+    ${H.map(h=>`<div class="hint H">${esc(h.text)}</div>`).join('')}
+    ${!hs.length?'<p class="mut">Die Regelprüfung meldet nichts.</p>':''}
+    <p class="small">${bgOk?'<span class="pill ok">Hintergrund ok</span>':'<span class="pill warn">Hintergrund fehlt</span> mindestens 50 Zeichen'}</p>
+    <div class="row">${openMG.length?'<button class="btn" id="askfg">Freigabe beim Meister anfragen</button>':''}
+      <button class="btn pri" id="send"${bgOk&&mgOk&&!F.length?'':' disabled'}>An Meister senden</button></div>
+    ${F.length?'<p class="small err">Senden ist gesperrt, solange die Regelprüfung Fehler meldet.</p>':''}
+    ${mgOk?'':'<p class="small" style="color:var(--warn)">Senden ist gesperrt, bis alle Punkte mit Meistergenehmigung freigegeben oder geändert sind. Der Stand wird automatisch abgeglichen.</p>'}`;
+  if($('#askfg'))$('#askfg').onclick=async()=>{try{await api('/api/drafts/'+D.id+'/approval',{method:'POST'});toast('Anfrage gesendet. Der Meister bekommt eine Mail.');renderCheck()}catch(e){toast(e.message)}};
+  $('#send').onclick=async()=>{try{await api('/api/drafts/'+D.id+'/send',{method:'POST'});toast('Held an den Meister gesendet.');go('s-mine')}catch(e){toast(e.message)}};
 }
-$('#steps').onclick=e=>{const b=e.target.closest('[data-st]');if(b){step=+b.dataset.st;save();renderStep()}};
-$('#prev').onclick=()=>{step=Math.max(0,step-1);save();renderStep()};
-$('#next').onclick=()=>{step=Math.min(STEPS.length-1,step+1);save();renderStep()};
-$('#stepbody').addEventListener('input',e=>{if(e.target.id==='dn'){draft.name=e.target.value;save()}});
+setInterval(()=>{if(location.hash==='#d-'+(D&&D.id)&&D.haupt&&step===5&&!$('#stepbody').contains(document.activeElement))renderCheck()},8000);
+$('#steps').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.id==='toRkp'){if(b.dataset.ask!=='1'){b.dataset.ask='1';b.textContent='Wirklich? Werte gehen verloren';return}
+    await api('/api/drafts/'+D.id+'/reset',{method:'POST'});D.haupt=false;inp.answers=[];$('#phaseB').hidden=true;$('#phaseA').hidden=false;rkp();return}
+  step=+b.dataset.st;renderStep()};
 $('#stepbody').addEventListener('change',e=>{const t=e.target;
-  if(t.dataset.k){draft[t.dataset.k]=t.value;save()}
-  if(t.id==='ds'||t.id==='dr'){if(t.id==='ds')draft.geschlecht=t.value;else draft.setting=t.value;draft.rasse='';draft.kultur='';save();cat=null;loadCat()}});
+  if(t.dataset.eig)edit([{op:'eig',name:t.dataset.eig,value:+t.value}]);
+  if(t.dataset.tal)edit([{op:'talent',name:t.dataset.tal,value:+t.value}]);
+  if(t.id==='hname'&&t.value.trim()){D.name=t.value.trim();$('#cTitle').textContent=D.name;edit([{op:'name',value:D.name}])}});
+$('#stepbody').addEventListener('input',e=>{if(e.target.id==='tq'){const q=e.target.value.toLowerCase();$$('#tbody tr').forEach(r=>r.hidden=q&&!r.dataset.tn.includes(q))}});
+$('#stepbody').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.id==='vadd'){const n=$('#vname').value.trim();if(!n)return toast('Vorteil oder Nachteil fehlt');edit([{op:'vorteil+',name:n,value:$('#vval').value.trim()}])}
+  if(b.dataset.vdel)edit([{op:'vorteil-',name:b.dataset.vdel}]);
+  if(b.id==='sadd'){const n=$('#sname').value.trim();if(!n)return toast('Sonderfertigkeit fehlt');edit([{op:'sf+',name:n,kostenart:$('#skart').value}])}
+  if(b.dataset.sdel)edit([{op:'sf-',name:b.dataset.sdel}]);
+  if(b.id==='tadd'){const n=$('#tname').value.trim();if(!n)return toast('Talent fehlt');edit([{op:'talent',name:n,value:0}])}});
+
+/* ---------- Meine Helden ---------- */
+let mine=[];
+async function loadMine(){try{mine=await api('/api/myheroes')}catch(e){return toast(e.message)}$('#mineSheet').hidden=true;
+  $('#mineList').innerHTML=mine.map(h=>`<div class="item"><div><b>${esc(h.name)}</b> <span class="small mut">${esc(h.rasse)} · ${esc(h.profession)}</span><div class="small mut">beim Meister seit ${esc(h.received)}</div></div>
+    <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button></div></div>`).join('')
+    ||'<p class="mut">Noch keine Helden beim Meister.</p>'}
+$('#mineList').onclick=e=>{const b=e.target.closest('[data-h]');if(!b)return;const h=mine.find(x=>x.file===b.dataset.h);const s=h.sheet||{basis:{},sections:[]};
+  $('#mineSheet').hidden=false;
+  $('#mineSheet').innerHTML=`<h2>${esc(h.name)}</h2><dl class="kv">${Object.entries({...s.basis,'Profession':h.profession}).filter(([k,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+    ${s.sections.map(sec=>`<details class="sec"><summary><b>${esc(sec.title)}</b> <span class="mut small">${sec.rows.length}</span></summary><div class="tw"><table class="small"><tbody>${sec.rows.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td class="mono">${esc(r.value)}</td><td class="mut">${esc(r.details)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')}`;
+  $('#mineSheet').scrollIntoView({behavior:'smooth'})};
 
 /* ---------- Soundstream ---------- */
 const pl=new Player();let es=null;
 $('#wave').innerHTML='<i></i>'.repeat(16);
 pl.setMaster(LS.get('hh-vol',70)/100);$('#pvol').value=LS.get('hh-vol',70);
 function startStream(){pl.enabled=true;if(es)return;es=new EventSource('/api/sound/events');
-  es.addEventListener('msg',ev=>{const m=JSON.parse(ev.data);if(m.type==='fx')pl.fx(m.file);else{pl.apply(m);status(m)}});
+  es.addEventListener('msg',ev=>{const m=JSON.parse(ev.data);if(m.type==='fx')pl.fx(m.file);else{pl.apply(m);sstat(m)}});
   es.onerror=()=>{$('#pstat').textContent='Verbindung unterbrochen, verbinde neu…'}}
 function stopStream(){pl.enabled=false;if(es){es.close();es=null}for(const k in pl.a)pl.a[k].pause()}
-function status(m){$('#pstat').textContent=(m.ch.music.playing||m.ch.bg.playing)?'Verbunden. Du hörst den Spieltisch.':'Verbunden. Gerade ist es still.'}
+function sstat(m){$('#pstat').textContent=(m.ch.music.playing||m.ch.bg.playing)?'Verbunden. Du hörst den Spieltisch.':'Verbunden. Gerade ist es still.'}
 $('#pplay').onclick=()=>{const on=$('#pplay').getAttribute('aria-pressed')!=='true';$('#pplay').setAttribute('aria-pressed',on);$('#pplay').textContent=on?'❚❚':'▶';
   if(on)startStream();else{stopStream();$('#pstat').textContent='Ton aus.'}};
 $('#pvol').oninput=e=>{pl.setMaster(e.target.value/100);LS.set('hh-vol',+e.target.value)};

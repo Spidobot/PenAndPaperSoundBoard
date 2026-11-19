@@ -14,14 +14,20 @@ public final class Mail {
     public Mail(Db db) { this.db = db; }
 
     /** Im Hintergrund senden, Fehler nur loggen: eine kaputte Mail darf keinen Spieler-Request scheitern lassen. */
-    public void notifyMeister(String subject, String text) {
+    public void notifyMeister(String subject, String text) { notify(db.get("mailTo", ""), subject, text); }
+
+    /** An einen Spieler (bestätigte Adresse) oder den Meister; leere Adresse = nichts tun. */
+    public void notify(String to, String subject, String text) {
+        if (to == null || to.isBlank()) return;
         bg.submit(() -> {
-            try { send(subject, text); } catch (Exception e) { System.err.println("Mail fehlgeschlagen: " + e.getMessage()); }
+            try { send(to, subject, text); } catch (Exception e) { System.err.println("Mail fehlgeschlagen: " + e.getMessage()); }
         });
     }
 
-    public void send(String subject, String text) throws MessagingException {
-        String host = db.get("smtpHost", ""), to = db.get("mailTo", "");
+    public void send(String subject, String text) throws MessagingException { send(db.get("mailTo", ""), subject, text); }
+
+    public void send(String to, String subject, String text) throws MessagingException {
+        String host = db.get("smtpHost", "");
         if (host.isBlank() || to.isBlank()) throw new MessagingException("SMTP-Server oder Empfänger fehlt in der Konfiguration");
         int port = Integer.parseInt(db.get("smtpPort", "587"));
         String user = db.get("smtpUser", ""), pass = db.get("smtpPass", "");

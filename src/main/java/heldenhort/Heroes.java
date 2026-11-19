@@ -55,15 +55,17 @@ public final class Heroes {
     }
 
     /** Speichert einen vom Spieler gesendeten Helden. Dateiname aus dem Heldennamen, nie aus Nutzereingaben als Pfad. */
-    public String save(String name, String player, byte[] xml, String background) throws Exception {
+    public String save(String name, String player, byte[] xml, String background) throws Exception { return save(name, player, null, xml, background); }
+
+    public String save(String name, String player, Long account, byte[] xml, String background) throws Exception {
         parse(xml); // wirft bei kaputtem XML
         String base = name.replaceAll("[^\\p{L}\\p{N} _-]", "").trim().replace(' ', '_');
         if (base.isEmpty()) base = "Held";
         String file = base + ".xml";
         for (int i = 2; Files.exists(dir.resolve(file)); i++) file = base + "_" + i + ".xml";
         Files.write(dir.resolve(file), xml);
-        db.exec("INSERT OR REPLACE INTO hero(file,player,received,status,background) VALUES(?,?,?,?,?)",
-                file, player, LocalDateTime.now().format(TS), "neu", background);
+        db.exec("INSERT OR REPLACE INTO hero(file,player,received,status,background,account) VALUES(?,?,?,?,?,?)",
+                file, player, LocalDateTime.now().format(TS), "neu", background, account);
         return file;
     }
 

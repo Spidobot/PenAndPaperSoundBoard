@@ -19,6 +19,10 @@ public final class Db {
             s.execute("CREATE TABLE IF NOT EXISTS session(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, heroes TEXT)");
             try { s.execute("ALTER TABLE session ADD COLUMN created TEXT"); } catch (SQLException alreadyThere) { }
             s.execute("CREATE TABLE IF NOT EXISTS approval(id INTEGER PRIMARY KEY AUTOINCREMENT, hero TEXT, player TEXT, created TEXT)");
+            try { s.execute("ALTER TABLE hero ADD COLUMN account INTEGER"); } catch (SQLException alreadyThere) { }
+            try { s.execute("ALTER TABLE approval ADD COLUMN account INTEGER"); } catch (SQLException alreadyThere) { }
+            s.execute("CREATE TABLE IF NOT EXISTS draft(id INTEGER PRIMARY KEY AUTOINCREMENT, account INTEGER, name TEXT, input TEXT, xml TEXT, "
+                    + "bg TEXT, approval INTEGER, status TEXT DEFAULT 'entwurf', updated TEXT)");
             s.execute("CREATE TABLE IF NOT EXISTS approval_item(id INTEGER PRIMARY KEY AUTOINCREMENT, approval INTEGER, kind TEXT, text TEXT, status TEXT, comment TEXT)");
         }
     }

@@ -1,0 +1,527 @@
+package heldenhort;
+
+import java.awt.*;
+import java.beans.PropertyChangeSupport;
+import java.io.ByteArrayOutputStream;
+import java.lang.reflect.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.util.*;
+import java.util.List;
+import javax.swing.*;
+
+/**
+ * Heldenerstellung mit der Erschaffungslogik der helden.jar, ohne Bildschirm.
+ *
+ * Zwei Abschnitte:
+ *  1. rkp(): Regelbasis, Geschlecht, Rasse, Kultur, Profession (+ Varianten) und die Auswahlen der Profession.
+ *     Wird bei jeder Anfrage aus den Angaben des Spielers neu durchgespielt. Offene Auswahlen werden als
+ *     Formular beschrieben (die Swing-Panels der Jar werden ausgelesen und befüllt).
+ *  2. edit()/finish(): ab dann ist der Entwurf die Entwurfs-XML der Jar (Speichern/Laden). Änderungen werden
+ *     über die Jar angewendet, die Jar rechnet Kosten und prüft.
+ *
+ * Nur lesbare Klassen- und Methodennamen der Jar werden benutzt; verschleierte Namen nur über Typen (Reflection).
+ */
+public final class Creation {
+    private static final String W = "helden.gui.erschaffung.werkzeug.";
+    private static final String Z = "helden.gui.erschaffung.zustaende.";
+    private final HeldenJar jar;
+    private boolean ready;
+
+    public Creation(HeldenJar jar) {
+        this.jar = jar;
+        jar.onReload(() -> { synchronized (this) { ready = false; } });
+    }
+
+    // ------------------------------------------------------------------ Abschnitt 1
+
+    /** Spielt die Angaben durch und liefert Auswahllisten, offene Auswahl oder den fertigen Entwurf. */
+    public synchronized Map<String, Object> rkp(Map<String, Object> in) throws Exception {
+        ClassLoader l = init();
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("version", jar.version());
+
+        Class<?> setC = l.loadClass("helden.framework.settings.Setting"), setsC = l.loadClass("helden.framework.settings.Settings");
+        List<String> settings = new ArrayList<>();
+        for (Object s : (List<?>) call(setC, "getHauptSettings")) settings.add((String) call(s, "getName"));
+        String setting = str(in.get("setting"));
+        if (!settings.contains(setting)) setting = settings.get(0);
+        out.put("settings", settings);
+        out.put("setting", setting);
+        Class<?> gC = l.loadClass("helden.framework.Geschlecht");
+        List<String> gs = new ArrayList<>();
+        Object g = null;
+        for (Object x : gC.getEnumConstants()) { gs.add(x.toString()); if (x.toString().equals(str(in.get("geschlecht")))) g = x; }
+        if (g == null) g = gC.getEnumConstants()[0];
+        out.put("geschlechter", gs);
+        out.put("geschlecht", g.toString());
+
+        Object hew = newHew(l);
+        Object sets = call(setsC, "getSettingsBySetting", call(setC, "getByName", setting));
+        call(hew, "setSetting", sets);
+        call(hew, "setGeschlecht", g);
+        call(hew, "setMaxGP", 110);
+        call(hew, "setMaxGPEigenschaft", 100);
+        call(hew, "setMaxEigenschaft", 14);
+        call(hew, "naechstePhase");
+
+        // Rasse, Kultur, Profession nacheinander; jeder Schritt braucht den vorigen
+        String[][] steps = {{"rasse", "RassenZustand"}, {"kultur", "KulturZustand"}, {"profession", "ProfessionsZustand"}};
+        for (String[] st : steps) {
+            Object z = l.loadClass(Z + st[1]).getConstructors()[0].newInstance(hew);
+            if (st[0].equals("profession")) call(z, "getZusatzGuiElemente"); // legt Kontrollkästchen an, die setRPK braucht
+            List<?> moeglich = (List<?>) call(z, "getMoeglicheRPK");
+            Set<String> ueblich = new HashSet<>();
+            for (Object u : (List<?>) call(z, "getUebliche")) ueblich.add(u.toString());
+            List<Map<String, Object>> opts = new ArrayList<>();
+            Set<String> seen = new HashSet<>();
+            for (Object o : moeglich) {
+                if (!(Boolean) call(z, "anzeigen", o, null)) continue; // filtert u. a. andere Regelbasen
+                if (!seen.add(o.toString())) continue;
+                opts.add(Map.of("name", o.toString(), "ueblich", ueblich.contains(o.toString())));
+            }
+            Map<String, Object> step = new LinkedHashMap<>();
+            step.put("options", opts);
+            out.put(st[0], step);
+
+            Map<?, ?> want = in.get(st[0]) instanceof Map<?, ?> m ? m : null;
+            Object pick = null;
+            if (want != null) for (Object o : moeglich) if (o.toString().equals(str(want.get("name")))) { pick = o; break; }
+            if (pick == null) { out.put("next", st[0]); return out; }
+            step.put("name", pick.toString());
+
+            List<?> vs = (List<?>) call(pick, "getMoeglicheVarianten");
+            List<String> vnames = new ArrayList<>();
+            for (Object v : vs) vnames.add(v.toString());
+            boolean needV = (Boolean) call(pick, "hatVariantenAuswahl") && !vs.isEmpty();
+            step.put("varianten", vnames);
+            step.put("varianteNoetig", needV);
+            ArrayList<Object> chosen = new ArrayList<>();
+            List<?> wantV = want.get("varianten") instanceof List<?> wl ? wl : List.of();
+            for (Object v : vs) if (wantV.contains(v.toString())) chosen.add(v);
+            if (needV && chosen.isEmpty()) { out.put("next", st[0]); return out; }
+            step.put("gewaehlteVarianten", chosen.stream().map(Object::toString).toList());
+            call(z, "setRPK", pick, chosen);
+        }
+        if (!(Boolean) call(hew, "isNaechstePhaseErlaubt")) throw new IllegalArgumentException("Diese Kombination lässt die helden.jar nicht zu");
+        call(hew, "naechstePhase"); // -> Auswahlen
+
+        // Auswahlen der Profession/Kultur: Panels der Jar auslesen und mit den Antworten befüllen
+        Object az = l.loadClass(Z + "AuswahlZustand").getConstructors()[0].newInstance(hew);
+        call(az, "getPanel");
+        call(az, "update");
+        List<?> answers = in.get("answers") instanceof List<?> al ? al : List.of();
+        List<Map<String, Object>> done = new ArrayList<>();
+        for (int i = 0; ; i++) {
+            boolean more;
+            try { more = (Boolean) call(az, "naechsteAuswahl"); }
+            catch (RuntimeException e) { if (!e.getClass().getSimpleName().equals("forsuper") && !String.valueOf(e.getClass()).contains("KeineWeitere")) throw e; more = false; }
+            if (!more) break;
+            Component panel = (Component) call(az, "getAuswahlpanel");
+            Map<String, Object> desc = describe(az, panel);
+            desc.put("index", i);
+            if (i >= answers.size() || !(answers.get(i) instanceof Map<?, ?> ans)) {
+                out.put("auswahlenFertig", done);
+                out.put("pending", desc);
+                out.put("next", "auswahl");
+                return out;
+            }
+            apply(panel, ans);
+            if (!(Boolean) call(az, "auswahlGueltig")) {
+                desc.put("error", "Diese Auswahl ist so nicht gültig. Bitte genau die verlangte Anzahl wählen.");
+                out.put("auswahlenFertig", done);
+                out.put("pending", desc);
+                out.put("next", "auswahl");
+                return out;
+            }
+            done.add(Map.of("title", desc.get("title")));
+        }
+        out.put("auswahlenFertig", done);
+        call(hew, "naechstePhase"); // -> Haupt
+        call(hew, "setName", str(in.get("name")));
+        out.put("draft", save(l, hew));
+        out.put("next", "haupt");
+        return out;
+    }
+
+    /** Beschreibt ein Auswahl-Panel als Liste von Bedienelementen mit Rasterposition. */
+    private static Map<String, Object> describe(Object az, Component panel) throws Exception {
+        List<Map<String, Object>> controls = new ArrayList<>();
+        walk(panel, controls, new int[]{0});
+        Map<String, Object> d = new LinkedHashMap<>();
+        // Überschrift: Texte des Zustands-Panels außerhalb des Auswahl-Panels
+        List<String> texts = new ArrayList<>();
+        Object main = call(az, "getPanel");
+        if (main instanceof Component c) collectTexts(c, panel, texts);
+        d.put("title", texts.isEmpty() ? "Auswahl" : String.join(" ", texts));
+        d.put("controls", controls);
+        return d;
+    }
+
+    private static void collectTexts(Component c, Component skip, List<String> out) {
+        if (c == skip || !c.isVisible()) return;
+        String t = c instanceof JLabel lb ? lb.getText() : c instanceof javax.swing.text.JTextComponent tc ? tc.getText() : null;
+        if (t != null) { t = t.replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim(); if (!t.isEmpty() && !out.contains(t)) out.add(t); }
+        if (c instanceof JComponent jc && jc.getBorder() instanceof javax.swing.border.TitledBorder tb && tb.getTitle() != null && !tb.getTitle().isBlank()) out.add(tb.getTitle());
+        if (c instanceof Container k && !(c instanceof JList<?>)) for (Component x : k.getComponents()) collectTexts(x, skip, out);
+    }
+
+    private static void walk(Component c, List<Map<String, Object>> out, int[] id) {
+        if (!c.isVisible()) return;
+        Map<String, Object> m = null;
+        if (c instanceof JList<?> li) {
+            List<String> items = new ArrayList<>();
+            for (int i = 0; i < li.getModel().getSize(); i++) items.add(String.valueOf(li.getModel().getElementAt(i)));
+            m = new LinkedHashMap<>(Map.of("type", "list", "items", items, "multi", li.getSelectionMode() != ListSelectionModel.SINGLE_SELECTION,
+                    "selected", Arrays.stream(li.getSelectedIndices()).boxed().toList()));
+        } else if (c instanceof JRadioButton || c instanceof JCheckBox) {
+            AbstractButton b = (AbstractButton) c;
+            m = new LinkedHashMap<>(Map.of("type", c instanceof JRadioButton ? "radio" : "check", "label", text(b.getText()), "selected", b.isSelected(), "enabled", b.isEnabled()));
+        } else if (c instanceof JSpinner sp) {
+            m = new LinkedHashMap<>(Map.of("type", "spin", "value", sp.getValue()));
+            if (sp.getModel() instanceof SpinnerNumberModel nm) { m.put("min", nm.getMinimum()); m.put("max", nm.getMaximum()); }
+        } else if (c instanceof JComboBox<?> cb) {
+            List<String> items = new ArrayList<>();
+            for (int i = 0; i < cb.getItemCount(); i++) items.add(String.valueOf(cb.getItemAt(i)));
+            m = new LinkedHashMap<>(Map.of("type", "combo", "items", items, "selected", cb.getSelectedIndex()));
+        } else if (c instanceof JLabel lb && lb.getText() != null && !text(lb.getText()).isEmpty()) {
+            m = new LinkedHashMap<>(Map.of("type", "label", "label", text(lb.getText())));
+        }
+        if (m != null) {
+            m.put("id", id[0]++);
+            Container p = c.getParent();
+            if (p != null && p.getLayout() instanceof GridBagLayout gb) {
+                GridBagConstraints k = gb.getConstraints(c);
+                m.put("row", k.gridy); m.put("col", k.gridx); m.put("grid", System.identityHashCode(p));
+            } else if (p != null && p.getLayout() instanceof GridLayout gl) {
+                int idx = Arrays.asList(p.getComponents()).indexOf(c), cols = gl.getColumns() > 0 ? gl.getColumns() : Math.max(1, (p.getComponentCount() + gl.getRows() - 1) / Math.max(1, gl.getRows()));
+                m.put("row", idx / cols); m.put("col", idx % cols); m.put("grid", System.identityHashCode(p));
+            }
+            out.add(m);
+        }
+        if (c instanceof Container k && !(c instanceof JList<?>) && !(c instanceof JSpinner) && !(c instanceof JComboBox<?>))
+            for (Component x : k.getComponents()) walk(x, out, id);
+    }
+
+    /** Setzt die Antwort des Spielers in die Bedienelemente, gleiche Reihenfolge wie walk(). */
+    private static void apply(Component panel, Map<?, ?> ans) {
+        List<Component> comps = new ArrayList<>();
+        collect(panel, comps);
+        for (int i = 0; i < comps.size(); i++) {
+            Object v = ans.get(String.valueOf(i));
+            if (v == null) continue;
+            Component c = comps.get(i);
+            if (c instanceof JList<?> li && v instanceof List<?> idx)
+                li.setSelectedIndices(idx.stream().mapToInt(o -> ((Number) o).intValue()).filter(n -> n >= 0 && n < li.getModel().getSize()).toArray());
+            else if (c instanceof AbstractButton b && v instanceof Boolean want && b.isSelected() != want && b.isEnabled()) b.doClick();
+            else if (c instanceof JSpinner sp && v instanceof Number n) sp.setValue(n.intValue());
+            else if (c instanceof JComboBox<?> cb && v instanceof Number n && n.intValue() < cb.getItemCount()) cb.setSelectedIndex(n.intValue());
+        }
+    }
+
+    private static void collect(Component c, List<Component> out) {
+        if (!c.isVisible()) return;
+        if (c instanceof JList<?> || c instanceof JRadioButton || c instanceof JCheckBox || c instanceof JSpinner || c instanceof JComboBox<?>
+                || (c instanceof JLabel lb && lb.getText() != null && !text(lb.getText()).isEmpty())) out.add(c);
+        if (c instanceof Container k && !(c instanceof JList<?>) && !(c instanceof JSpinner) && !(c instanceof JComboBox<?>))
+            for (Component x : k.getComponents()) collect(x, out);
+    }
+
+    private static String text(String s) { return s == null ? "" : s.replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim(); }
+
+    // ------------------------------------------------------------------ Abschnitt 2
+
+    /** Wendet Änderungen auf den Entwurf an und liefert neuen Entwurf + Zustand. */
+    public synchronized Map<String, Object> edit(String draft, List<?> ops) throws Exception {
+        ClassLoader l = init();
+        String xml = draft;
+        // Vor- und Nachteile: über die Entwurfs-XML (Wert setzen ist in der Jar verschleiert)
+        for (Object o : ops == null ? List.of() : ops) {
+            Map<?, ?> op = (Map<?, ?>) o;
+            String kind = str(op.get("op")), name = str(op.get("name"));
+            if (kind.equals("vorteil+")) xml = addVorteil(xml, name, str(op.get("value")));
+            else if (kind.equals("vorteil-")) xml = removeVorteil(xml, name);
+            else if (kind.equals("talent")) xml = setTalent(xml, name, ((Number) op.get("value")).intValue());
+        }
+        Object hew = load(l, xml);
+        for (Object o : ops == null ? List.of() : ops) {
+            Map<?, ?> op = (Map<?, ?>) o;
+            String kind = str(op.get("op")), name = str(op.get("name"));
+            switch (kind) {
+                case "eig" -> {
+                    Object e = eigenschaft(l, name);
+                    Object he = call(hew, "getHswEigenschaften");
+                    int v = ((Number) op.get("value")).intValue();
+                    int min = (Integer) call(he, "getMinimalEigenschaftswert", e), max = (Integer) call(he, "getMaximalEigenschaftswert", e);
+                    if (v < min || v > max) throw new IllegalArgumentException(name + " muss zwischen " + min + " und " + max + " liegen");
+                    call(he, "setEigenschaftInklModi", e, v);
+                }
+                case "sf+" -> {
+                    Object sfw = call(hew, "getSf"), sf = null;
+                    for (Object s : (Iterable<?>) call(sfw, "getMoeglicheSonderfertigkeiten")) if (s.toString().equals(name)) sf = s;
+                    if (sf == null) throw new IllegalArgumentException("Sonderfertigkeit nicht wählbar: " + name);
+                    List<?> kas = (List<?>) call(sfw, "getMoeglicheKostenArten", sf);
+                    Object ka = kas.get(0);
+                    for (Object k : kas) if (k.toString().equals(str(op.get("kostenart")))) ka = k;
+                    call(sfw, "add", sf, ka);
+                }
+                case "sf-" -> {
+                    Object sfw = call(hew, "getSf");
+                    for (Object s : ((Map<?, ?>) call(sfw, "getKostenArtFuerSf")).keySet()) if (s.toString().equals(name)) call(sfw, "remove", s);
+                }
+                case "name" -> call(hew, "setName", str(op.get("value")));
+                default -> { }
+            }
+        }
+        call(hew, "recalc");
+        String newDraft = save(l, hew);
+        Map<String, Object> out = state(l, load(l, newDraft), newDraft);
+        out.put("draft", newDraft);
+        return out;
+    }
+
+    /** Fertiger Held als XML plus Meldungen der Regelprüfung. */
+    public synchronized Map<String, Object> finish(String draft, String name) throws Exception {
+        ClassLoader l = init();
+        Object hew = load(l, draft);
+        if (name != null && !name.isBlank()) call(hew, "setName", name);
+        List<Map<String, String>> hints = hints(hew);
+        call(hew, "heldAbschliessen");
+        Object xp = l.loadClass("helden.framework.held.persistenz.XMLPersistierer").getConstructor().newInstance();
+        ByteArrayOutputStream bo = new ByteArrayOutputStream();
+        call(xp, "writeHeldenXML", call(hew, "getHeld"), bo);
+        String xml = bo.toString(StandardCharsets.UTF_8);
+        // Beim Abschließen schreibt die Jar weitere Punkte als "Meistergenehmigung notwendig" in den Helden
+        // (z. B. nicht genutzte AP). Alles, was nicht schon als Hinweis der Prüfung bekannt ist, ist eine Meistergenehmigung.
+        Set<String> known = new HashSet<>();
+        for (Map<String, String> h : hints) known.add(h.get("text"));
+        List<Map<String, String>> all = new ArrayList<>(hints);
+        for (org.w3c.dom.Element e : Heroes.all(parse(xml).getDocumentElement(), "ereignis"))
+            if ("Meistergenehmigung notwendig".equals(e.getAttribute("text")) && known.add(e.getAttribute("obj")))
+                all.add(Map.of("art", "MG", "text", e.getAttribute("obj")));
+        return Map.of("xml", xml, "hinweise", all);
+    }
+
+    private Map<String, Object> state(ClassLoader l, Object hew, String draft) throws Exception {
+        Map<String, Object> s = new LinkedHashMap<>();
+        s.put("rasse", String.valueOf(call(hew, "getRasse")));
+        s.put("kultur", String.valueOf(call(hew, "getKultur")));
+
+        Object k = call(hew, "getKosten");
+        Map<String, Object> kosten = new LinkedHashMap<>();
+        for (Object ka : (List<?>) call(k, "getAlleKostenArten")) {
+            int used = (Integer) call(k, "getKosten", ka), avail = (Integer) call(k, "getVerfuegbarePunkte", ka);
+            if (used != 0 || avail > 0) kosten.put(ka.toString(), List.of(used, avail));
+        }
+        s.put("kosten", kosten);
+        Object he = call(hew, "getHswEigenschaften");
+        s.put("eigenschaftenGP", List.of(call(he, "getEigenschaftenGP"), call(he, "erlaubteAnzahlGPinEigenschaften")));
+
+        // Werte aus dem Entwurf (so wie die Jar sie gespeichert hat), Grenzen aus der Jar
+        var doc = parse(draft);
+        org.w3c.dom.Element held = (org.w3c.dom.Element) doc.getElementsByTagName("held").item(0);
+        List<Map<String, Object>> eig = new ArrayList<>();
+        for (String n : List.of("Mut", "Klugheit", "Intuition", "Charisma", "Fingerfertigkeit", "Gewandtheit", "Konstitution", "Körperkraft", "Sozialstatus")) {
+            org.w3c.dom.Element e = byName(held, "eigenschaft", n);
+            Object eo = eigenschaft(l, n);
+            int mod = e == null ? 0 : Heroes.num(e.getAttribute("mod"));
+            int base = e == null ? 0 : Heroes.num(e.getAttribute("value"));
+            eig.add(Map.of("name", n, "value", base + mod, "min", call(he, "getMinimalEigenschaftswert", eo), "max", call(he, "getMaximalEigenschaftswert", eo)));
+        }
+        s.put("eigenschaften", eig);
+
+        List<Map<String, String>> vt = new ArrayList<>();
+        for (org.w3c.dom.Element v : Heroes.all(held, "vorteil")) if (v.getParentNode() != null && !"wertvorteile".equals(v.getParentNode().getNodeName()))
+            vt.add(Map.of("name", v.getAttribute("name"), "value", v.getAttribute("value")));
+        s.put("vorteile", vt);
+        Object hv = call(hew, "getHswVorteile");
+        Set<String> vm = new TreeSet<>();
+        Object kat = call(hv, "getMoegliche");
+        for (Object v : (Iterable<?>) call(kat, "getListe")) vm.add(v.toString());
+        s.put("vorteileMoeglich", vm);
+
+        Object sfw = call(hew, "getSf");
+        Set<String> userSf = new TreeSet<>();
+        for (Object x : ((Map<?, ?>) call(sfw, "getKostenArtFuerSf")).keySet()) userSf.add(x.toString());
+        List<Map<String, Object>> sf = new ArrayList<>();
+        for (org.w3c.dom.Element e : Heroes.all(held, "sonderfertigkeit")) {
+            if (e.getParentNode() == null || "kostensf".equals(e.getParentNode().getNodeName()) || "usersf".equals(e.getParentNode().getNodeName())) continue;
+            String n = e.getAttribute("name");
+            sf.add(Map.of("name", n, "eigene", userSf.contains(n), "details", Heroes.details(e)));
+        }
+        s.put("sf", sf);
+        List<Map<String, Object>> sfm = new ArrayList<>();
+        for (Object x : (Iterable<?>) call(sfw, "getMoeglicheSonderfertigkeiten")) {
+            List<String> kas = new ArrayList<>();
+            for (Object ka : (List<?>) call(sfw, "getMoeglicheKostenArten", x)) kas.add(ka.toString());
+            sfm.add(Map.of("name", x.toString(), "ap", call(x, "getKosten"), "kostenarten", kas));
+        }
+        s.put("sfMoeglich", sfm);
+
+        Object tal = call(hew, "getTalente");
+        Map<String, Object> tobj = new HashMap<>();
+        for (Object t : (List<?>) call(tal, "getAktivierteTalente")) tobj.put(t.toString(), t);
+        List<Map<String, Object>> talente = new ArrayList<>();
+        for (org.w3c.dom.Element t : Heroes.all(held, "talent")) {
+            if (!t.hasAttribute("value")) continue;
+            String n = t.getAttribute("name");
+            Map<String, Object> m = new LinkedHashMap<>(Map.of("name", n, "value", Heroes.num(t.getAttribute("value")), "probe", t.getAttribute("probe").trim()));
+            Object to = tobj.get(n);
+            if (to != null) m.put("max", call(tal, "getMaximalWert", to));
+            talente.add(m);
+        }
+        s.put("talente", talente);
+        Set<String> tm = new TreeSet<>();
+        for (Object t : (List<?>) call(tal, "getNichtAktivierteTalente")) tm.add(t.toString());
+        s.put("talenteMoeglich", tm);
+        s.put("talenteAktivierbar", List.of(call(tal, "getAnzahlAktivierterTalente"), call(tal, "getErlaubteAnzahlAktivierterTalente")));
+        s.put("hinweise", hints(hew));
+        return s;
+    }
+
+    private static List<Map<String, String>> hints(Object hew) throws Exception {
+        List<Map<String, String>> out = new ArrayList<>();
+        for (Object h : (List<?>) call(call(hew, "getPruefer"), "pruefe")) {
+            String art = String.valueOf(call(h, "getHinweisart"));
+            out.add(Map.of("art", art.startsWith("MEISTER") ? "MG" : art.equals("FEHLER") ? "F" : "H", "text", h.toString()));
+        }
+        return out;
+    }
+
+    // ------------------------------------------------------------------ Helfer
+
+    private synchronized ClassLoader init() throws Exception {
+        ClassLoader l = jar.loader();
+        Thread.currentThread().setContextClassLoader(l); // die Jar lädt Icons/Ressourcen über den Thread-ClassLoader
+        if (!ready) {
+            l.loadClass("helden.framework.settings.Setting").getMethod("initAll").invoke(null);
+            ready = true;
+        }
+        return l;
+    }
+
+    private static Object newHew(ClassLoader l) throws Exception {
+        return l.loadClass(W + "HEW2").getConstructor(PropertyChangeSupport.class).newInstance(new PropertyChangeSupport(new Object()));
+    }
+
+    /** Lädt einen Entwurf wie die Oberfläche der Jar: Laden, dann Phase direkt auf "Haupt" (ohne Neuberechnung). */
+    private static Object load(ClassLoader l, String xml) throws Exception {
+        if (!xml.contains("Erschaffungszwischenstand")) throw new IllegalArgumentException("Kein Erschaffungsentwurf");
+        Path f = Files.createTempFile("entwurf", ".xml");
+        try {
+            Files.writeString(f, xml);
+            Object hew = newHew(l);
+            Object ld = l.loadClass(W + "Laden").getConstructors()[0].newInstance(hew, f.toString());
+            if ((Boolean) call(ld, "isLadeFehler")) throw new IllegalArgumentException("Entwurf konnte nicht geladen werden");
+            Class<?> ph = l.loadClass(W + "HEW2$PHASEN");
+            for (Field fd : hew.getClass().getFields()) if (fd.getType() == ph) for (Object c : ph.getEnumConstants()) if (c.toString().equals("Haupt")) fd.set(hew, c);
+            return hew;
+        } finally { Files.deleteIfExists(f); }
+    }
+
+    private static String save(ClassLoader l, Object hew) throws Exception {
+        Path f = Files.createTempFile("entwurf", ".xml");
+        try {
+            Object sp = l.loadClass(W + "Speichern").getConstructors()[0].newInstance(hew);
+            call(sp, "save", f.toString());
+            return Files.readString(f);
+        } finally { Files.deleteIfExists(f); }
+    }
+
+    private static Object eigenschaft(ClassLoader l, String name) throws Exception {
+        Class<?> c = l.loadClass("helden.framework.B.new");
+        for (Field f : c.getFields()) if (f.getType() == c && Modifier.isStatic(f.getModifiers())) { Object o = f.get(null); if (o.toString().equals(name)) return o; }
+        throw new IllegalArgumentException("Eigenschaft unbekannt: " + name);
+    }
+
+    // --- XML-Änderungen am Entwurf (DOM, damit Sonderzeichen sicher sind)
+
+    private static org.w3c.dom.Document parse(String xml) throws Exception {
+        var f = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+        f.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        f.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        return f.newDocumentBuilder().parse(new java.io.ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private static String serialize(org.w3c.dom.Document d) throws Exception {
+        var t = javax.xml.transform.TransformerFactory.newInstance().newTransformer();
+        var w = new java.io.StringWriter();
+        t.transform(new javax.xml.transform.dom.DOMSource(d), new javax.xml.transform.stream.StreamResult(w));
+        return w.toString();
+    }
+
+    private static org.w3c.dom.Element byName(org.w3c.dom.Element p, String tag, String name) {
+        for (org.w3c.dom.Element e : Heroes.all(p, tag)) if (e.getAttribute("name").equals(name)) return e;
+        return null;
+    }
+
+    /** Liste der Vorteile im Helden (nicht die Liste in erschaffungsdaten). */
+    private static org.w3c.dom.Element vorteilListe(org.w3c.dom.Document d) {
+        org.w3c.dom.Element held = (org.w3c.dom.Element) d.getElementsByTagName("held").item(0);
+        org.w3c.dom.Element vt = Heroes.first(held, "vt");
+        if (vt == null) { vt = d.createElement("vt"); held.appendChild(vt); }
+        return vt;
+    }
+
+    private static String addVorteil(String xml, String name, String value) throws Exception {
+        if (name.isBlank()) throw new IllegalArgumentException("Vorteil fehlt");
+        var d = parse(xml);
+        org.w3c.dom.Element vt = vorteilListe(d);
+        org.w3c.dom.Element e = d.createElement("vorteil");
+        e.setAttribute("name", name);
+        if (!value.isBlank()) e.setAttribute("value", value);
+        vt.appendChild(e);
+        return serialize(d);
+    }
+
+    private static String removeVorteil(String xml, String name) throws Exception {
+        var d = parse(xml);
+        org.w3c.dom.Element vt = vorteilListe(d);
+        for (org.w3c.dom.Element e : Heroes.all(vt, "vorteil")) if (e.getAttribute("name").equals(name)) { vt.removeChild(e); break; }
+        return serialize(d);
+    }
+
+    private static String setTalent(String xml, String name, int value) throws Exception {
+        var d = parse(xml);
+        org.w3c.dom.Element held = (org.w3c.dom.Element) d.getElementsByTagName("held").item(0);
+        org.w3c.dom.Element t = byName(held, "talent", name);
+        if (t == null) {
+            org.w3c.dom.Element liste = Heroes.first(held, "talentliste");
+            if (liste == null) throw new IllegalArgumentException("Talentliste fehlt im Entwurf");
+            t = d.createElement("talent");
+            t.setAttribute("name", name);
+            liste.appendChild(t);
+        }
+        t.setAttribute("value", String.valueOf(value));
+        return serialize(d);
+    }
+
+    // --- Reflection
+
+    static Object call(Object o, String name, Object... a) throws Exception {
+        Class<?> c = o instanceof Class<?> k ? k : o.getClass();
+        Object target = o instanceof Class<?> ? null : o;
+        for (Class<?> x = c; x != null; x = x.getSuperclass())
+            for (Method m : x.getDeclaredMethods()) {
+                if (!m.getName().equals(name) || m.getParameterCount() != a.length || m.isBridge()) continue;
+                Class<?>[] p = m.getParameterTypes();
+                boolean ok = true;
+                for (int i = 0; i < p.length; i++) if (a[i] != null && !wrap(p[i]).isInstance(a[i])) { ok = false; break; }
+                if (!ok) continue;
+                m.setAccessible(true);
+                try { return m.invoke(target, a); }
+                catch (InvocationTargetException e) {
+                    if (e.getCause() instanceof RuntimeException r) throw r;
+                    if (e.getCause() instanceof Exception ex) throw ex;
+                    throw e;
+                }
+            }
+        throw new NoSuchMethodException(c.getName() + "." + name + "/" + a.length);
+    }
+
+    private static Class<?> wrap(Class<?> p) {
+        return !p.isPrimitive() ? p : p == int.class ? Integer.class : p == boolean.class ? Boolean.class : p == long.class ? Long.class : p;
+    }
+
+    private static String str(Object o) { return o == null ? "" : o.toString().trim(); }
+}

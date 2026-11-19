@@ -25,7 +25,8 @@ public final class App {
         Db db = new Db(data.resolve("db/heldenhort.sqlite"));
         Mail mail = new Mail(db);
         HeldenJar jar = new HeldenJar(db, data.resolve("jar"));
-        Engine engine = new Engine(jar);
+        Creation creation = new Creation(jar);
+        Accounts accounts = new Accounts(db);
         Heroes heroes = new Heroes(db, data.resolve("helden"));
         Sound sound = new Sound(data.resolve("audio"));
         if (db.get("secret", null) == null) db.put("secret", HexFormat.of().formatHex(SecureRandom.getInstanceStrong().generateSeed(32)));
@@ -85,7 +86,7 @@ public final class App {
 
         m.get("/api/config", ctx -> {
             Map<String, Object> c = new LinkedHashMap<>();
-            for (String k : List.of("playerPassword", "mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime"))
+            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime"))
                 c.put(k, db.get(k, k.equals("updateTime") ? "04:00" : k.equals("smtpPort") ? "587" : ""));
             ctx.json(c);
         });
@@ -94,10 +95,8 @@ public final class App {
             String t = String.valueOf(b.get("updateTime"));
             if (!t.matches("([01]\\d|2[0-3]):[0-5]\\d")) throw new IllegalArgumentException("Uhrzeit bitte als HH:MM");
             if (!String.valueOf(b.get("smtpPort")).matches("\\d{1,5}")) throw new IllegalArgumentException("SMTP-Port ist keine Zahl");
-            if (!Objects.equals(db.get("playerPassword", ""), b.get("playerPassword")))
-                db.put("pwVersion", String.valueOf(Long.parseLong(db.get("pwVersion", "0")) + 1)); // meldet alle Spieler ab
             if (!t.equals(db.get("updateTime", "04:00"))) db.put("jarLastDay", ""); // neue Uhrzeit gilt schon heute
-            for (String k : List.of("playerPassword", "mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime"))
+            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime"))
                 db.put(k, String.valueOf(b.get(k) == null ? "" : b.get(k)).trim());
             ctx.json(Map.of("ok", true));
         });
@@ -142,6 +141,25 @@ public final class App {
             ctx.json(Map.of("ok", true));
         });
 
+        m.get("/api/accounts", ctx -> ctx.json(accounts.list()));
+        m.post("/api/accounts", ctx -> {
+            Map<?, ?> b = ctx.bodyAsClass(Map.class);
+            ctx.json(Map.of("id", accounts.create(str(b.get("name")), str(b.get("password")))));
+        });
+        m.post("/api/accounts/{id}/password", ctx -> {
+            accounts.setPassword(Long.parseLong(ctx.pathParam("id")), str(ctx.bodyAsClass(Map.class).get("password")));
+            ctx.json(Map.of("ok", true));
+        });
+        m.delete("/api/accounts/{id}", ctx -> { accounts.delete(Long.parseLong(ctx.pathParam("id"))); ctx.json(Map.of("ok", true)); });
+        m.post("/api/heroes/{file}/owner", ctx -> {
+            heroes.file(ctx.pathParam("file"));
+            Object acc = ctx.bodyAsClass(Map.class).get("account");
+            Long id = acc == null ? null : ((Number) acc).longValue();
+            String name = id == null ? "FTP" : String.valueOf(accounts.get(id).get("name"));
+            db.exec("UPDATE hero SET account=?, player=? WHERE file=?", id, name, ctx.pathParam("file"));
+            ctx.json(Map.of("ok", true));
+        });
+
         m.get("/api/approvals", ctx -> ctx.json(approvals(db, null)));
         m.post("/api/approvals/items/{id}", ctx -> {
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
@@ -149,82 +167,160 @@ public final class App {
             if (!List.of("freigegeben", "geändert", "abgelehnt").contains(st)) throw new IllegalArgumentException("Status unbekannt");
             if (st.equals("geändert") && c.isEmpty()) throw new IllegalArgumentException("Bei „geändert“ bitte im Kommentar schreiben, was geändert wurde");
             db.exec("UPDATE approval_item SET status=?, comment=? WHERE id=?", st, c, ctx.pathParam("id"));
+            var it = db.query("SELECT a.hero, a.account, i.text FROM approval_item i JOIN approval a ON a.id=i.approval WHERE i.id=?", ctx.pathParam("id"));
+            if (!it.isEmpty() && it.get(0).get("account") != null)
+                mail.notify(accounts.email(it.get(0).get("account")), "Freigabe: " + it.get(0).get("hero"),
+                        "Der Meister hat entschieden: " + st + "\n\n" + it.get(0).get("text") + (c.isEmpty() ? "" : "\n\nKommentar: " + c));
             ctx.json(Map.of("ok", true));
         });
 
         // ---------------- Spieler ----------------
         s.before(ctx -> {
             String p = ctx.path();
-            if ((p.startsWith("/api/") || p.startsWith("/audio/")) && !p.equals("/api/login") && player(db, ctx) == null)
+            if ((p.startsWith("/api/") || p.startsWith("/audio/")) && !p.equals("/api/login") && !p.equals("/api/account/confirm") && accounts.current(ctx) == null)
                 throw new UnauthorizedResponse("Bitte anmelden");
         });
         s.post("/api/login", ctx -> {
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
-            String pw = db.get("playerPassword", ""), given = String.valueOf(b.get("password"));
-            String name = String.valueOf(b.get("name")).trim();
-            if (pw.isEmpty() || !MessageDigest.isEqual(pw.getBytes(StandardCharsets.UTF_8), given.getBytes(StandardCharsets.UTF_8))) {
-                Thread.sleep(800); // bremst Raten
-                throw new UnauthorizedResponse(pw.isEmpty() ? "Der Meister hat noch kein Passwort festgelegt" : "Passwort falsch");
-            }
-            if (name.isEmpty() || name.equals("null") || name.length() > 40) throw new IllegalArgumentException("Bitte deinen Namen angeben");
-            ctx.cookie(cookie(ctx, "hh", token(db, name)));
-            ctx.json(Map.of("name", name));
+            Long id = accounts.login(str(b.get("name")), str(b.get("password")));
+            if (id == null) { Thread.sleep(800); throw new UnauthorizedResponse("Name oder Passwort falsch"); }
+            ctx.cookie(cookie(ctx, "hh", accounts.token(id)));
+            ctx.json(Map.of("name", accounts.get(id).get("name")));
         });
         s.post("/api/logout", ctx -> { ctx.removeCookie("hh", "/"); ctx.json(Map.of("ok", true)); });
-        s.get("/api/me", ctx -> ctx.json(Map.of("name", player(db, ctx))));
+        s.get("/api/me", ctx -> {
+            var a = accounts.current(ctx);
+            Map<String, Object> me = new LinkedHashMap<>();
+            me.put("name", a.get("name")); me.put("email", a.get("email")); me.put("emailPending", a.get("email_pending"));
+            ctx.json(me);
+        });
+        s.post("/api/account/password", ctx -> {
+            var a = accounts.current(ctx);
+            Map<?, ?> b = ctx.bodyAsClass(Map.class);
+            long id = ((Number) a.get("id")).longValue();
+            if (!accounts.checkOld(id, str(b.get("old")))) { Thread.sleep(800); throw new IllegalArgumentException("Bisheriges Passwort stimmt nicht"); }
+            accounts.setPassword(id, str(b.get("new")));
+            ctx.cookie(cookie(ctx, "hh", accounts.token(id)));
+            ctx.json(Map.of("ok", true));
+        });
+        s.post("/api/account/email", ctx -> {
+            var a = accounts.current(ctx);
+            String to = str(ctx.bodyAsClass(Map.class).get("email"));
+            String t = accounts.requestEmail(((Number) a.get("id")).longValue(), to);
+            String proto = Optional.ofNullable(ctx.header("X-Forwarded-Proto")).orElse(ctx.scheme());
+            String host = Optional.ofNullable(ctx.header("X-Forwarded-Host")).orElse(ctx.host());
+            mail.notify(to, "Mail-Adresse bestätigen", "Hallo " + a.get("name") + ",\n\nbitte bestätige deine Mail-Adresse für Heldenhort:\n"
+                    + proto + "://" + host + "/api/account/confirm?t=" + t + "\n\nWenn du das nicht warst, ignoriere diese Mail.");
+            ctx.json(Map.of("ok", true));
+        });
+        s.get("/api/account/confirm", ctx -> {
+            boolean ok = accounts.confirmEmail(ctx.queryParam("t"));
+            ctx.html("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'><link rel=stylesheet href='/common/app.css'>"
+                    + "<div class='pl'><div class='inner'><div class='card'><h2>" + (ok ? "Mail-Adresse bestätigt" : "Link ungültig oder schon benutzt")
+                    + "</h2><a class='btn' href='/'>Zu Heldenhort</a></div></div></div>");
+        });
         s.sse("/api/sound/events", c -> {
-            if (player(db, c.ctx()) == null) { c.close(); return; }
+            if (accounts.current(c.ctx()) == null) { c.close(); return; }
             sound.subscribe(c, true);
         });
 
-        s.get("/api/create/catalog", ctx -> ctx.json(engine.catalog(ctx.queryParam("setting"), ctx.queryParam("geschlecht"))));
-
-        s.post("/api/approvals", ctx -> {
-            Map<?, ?> b = ctx.bodyAsClass(Map.class);
-            String hero = String.valueOf(b.get("hero")).trim();
-            List<?> items = (List<?>) b.get("items");
-            if (hero.isEmpty() || items == null || items.isEmpty() || items.size() > 50) throw new IllegalArgumentException("Anfrage unvollständig");
-            String who = player(db, ctx);
-            long id = db.exec("INSERT INTO approval(hero,player,created) VALUES(?,?,?)", hero, who, java.time.LocalDateTime.now().format(Heroes.TS));
-            StringBuilder txt = new StringBuilder(who + " bittet um Freigabe für " + hero + ":\n\n");
-            for (Object o : items) {
-                String t = String.valueOf(o).trim();
-                if (t.length() > 1000) t = t.substring(0, 1000);
-                db.exec("INSERT INTO approval_item(approval,kind,text,status,comment) VALUES(?,?,?,?,?)", id, "MG", t, "offen", "");
-                txt.append("- ").append(t).append('\n');
-            }
-            mail.notifyMeister("Freigabe angefragt: " + hero, txt.append("\nFreigeben in der Meister-UI unter „Freigaben“.").toString());
-            ctx.json(Map.of("id", id));
+        // --- Entwürfe (Heldenerstellung), gehören dem Konto
+        s.get("/api/drafts", ctx -> ctx.json(db.query("SELECT id,name,status,updated, xml IS NOT NULL AS haupt FROM draft WHERE account=? ORDER BY updated DESC", me(accounts, ctx))));
+        s.post("/api/drafts", ctx -> ctx.json(Map.of("id", db.exec("INSERT INTO draft(account,name,input,updated) VALUES(?,?,?,?)", me(accounts, ctx), "Neuer Held", "{}", now()))));
+        s.get("/api/drafts/{id}", ctx -> {
+            var d = draft(db, accounts, ctx);
+            Map<String, Object> out = new LinkedHashMap<>(Map.of("id", d.get("id"), "name", str(d.get("name")), "status", str(d.get("status")), "bg", str(d.get("bg"))));
+            out.put("input", JSON.readValue(str(d.get("input")).isEmpty() ? "{}" : str(d.get("input")), Map.class));
+            out.put("approval", d.get("approval"));
+            out.put("haupt", d.get("xml") != null);
+            ctx.json(out);
         });
-        s.get("/api/approvals/{id}", ctx -> {
-            var r = approvals(db, Long.parseLong(ctx.pathParam("id")));
-            if (r.isEmpty() || !Objects.equals(r.get(0).get("player"), player(db, ctx))) throw new NotFoundResponse("Anfrage unbekannt");
-            ctx.json(r.get(0));
+        s.delete("/api/drafts/{id}", ctx -> { var d = draft(db, accounts, ctx); db.exec("DELETE FROM draft WHERE id=?", d.get("id")); ctx.json(Map.of("ok", true)); });
+        s.post("/api/drafts/{id}/rkp", ctx -> {
+            var d = draft(db, accounts, ctx);
+            if (d.get("xml") != null) throw new IllegalStateException("Rasse, Kultur und Profession stehen schon fest");
+            Map<String, Object> in = ctx.bodyAsClass(Map.class);
+            var r = creation.rkp(in);
+            String name = str(in.get("name")).isEmpty() ? "Neuer Held" : str(in.get("name"));
+            db.exec("UPDATE draft SET input=?, name=?, xml=?, updated=? WHERE id=?", JSON.writeValueAsString(in), name, r.get("draft"), now(), d.get("id"));
+            r.remove("draft");
+            ctx.json(r);
         });
-        s.post("/api/approvals/{id}/reopen", ctx -> {
-            var r = approvals(db, Long.parseLong(ctx.pathParam("id")));
-            if (r.isEmpty() || !Objects.equals(r.get(0).get("player"), player(db, ctx))) throw new NotFoundResponse("Anfrage unbekannt");
-            db.exec("UPDATE approval_item SET status='offen', comment='' WHERE approval=? AND status='abgelehnt'", ctx.pathParam("id"));
-            mail.notifyMeister("Freigabe erneut angefragt: " + r.get(0).get("hero"), player(db, ctx) + " hat den Helden angepasst und fragt erneut an.");
+        s.post("/api/drafts/{id}/reset", ctx -> { // zurück zu Rasse/Kultur/Profession, Werte gehen verloren
+            var d = draft(db, accounts, ctx);
+            db.exec("UPDATE draft SET xml=NULL, approval=NULL, updated=? WHERE id=?", now(), d.get("id"));
             ctx.json(Map.of("ok", true));
         });
-        s.post("/api/heroes", ctx -> {
-            Map<?, ?> b = ctx.bodyAsClass(Map.class);
-            String who = player(db, ctx), name = String.valueOf(b.get("name")).trim();
-            String bg = Jsoup.clean(String.valueOf(b.get("background")), Safelist.basic().addTags("h3"));
+        s.post("/api/drafts/{id}/edit", ctx -> {
+            var d = draft(db, accounts, ctx);
+            if (d.get("xml") == null) throw new IllegalStateException("Erst Rasse, Kultur und Profession wählen");
+            if ("gesendet".equals(d.get("status"))) throw new IllegalStateException("Der Held ist schon beim Meister");
+            List<?> ops = (List<?>) ctx.bodyAsClass(Map.class).getOrDefault("ops", List.of());
+            var r = creation.edit((String) d.get("xml"), ops);
+            for (Object o : ops) if (o instanceof Map<?, ?> op && "name".equals(op.get("op")) && !str(op.get("value")).isEmpty())
+                db.exec("UPDATE draft SET name=? WHERE id=?", str(op.get("value")), d.get("id"));
+            db.exec("UPDATE draft SET xml=?, updated=? WHERE id=?", r.remove("draft"), now(), d.get("id"));
+            ctx.json(r);
+        });
+        s.put("/api/drafts/{id}/bg", ctx -> {
+            var d = draft(db, accounts, ctx);
+            String bg = Jsoup.clean(str(ctx.bodyAsClass(Map.class).get("bg")), Safelist.basic().addTags("h3"));
+            if (bg.length() > 200_000) throw new IllegalArgumentException("Hintergrund zu lang");
+            db.exec("UPDATE draft SET bg=?, updated=? WHERE id=?", bg, now(), d.get("id"));
+            ctx.json(Map.of("ok", true));
+        });
+        s.get("/api/drafts/{id}/check", ctx -> { // Prüfung wie beim Senden (inkl. Punkte, die erst beim Abschließen entstehen)
+            var d = draft(db, accounts, ctx);
+            if (d.get("xml") == null) throw new IllegalStateException("Der Held ist noch nicht so weit");
+            ctx.json(Map.of("hinweise", creation.finish((String) d.get("xml"), str(d.get("name"))).get("hinweise")));
+        });
+        s.post("/api/drafts/{id}/approval", ctx -> {
+            var d = draft(db, accounts, ctx);
+            var a = accounts.current(ctx);
+            List<String> mg = mgHints(creation, d);
+            if (mg.isEmpty()) throw new IllegalArgumentException("Es gibt nichts freizugeben");
+            long id = db.exec("INSERT INTO approval(hero,player,created,account) VALUES(?,?,?,?)", d.get("name"), a.get("name"), now(), a.get("id"));
+            for (String t : mg) db.exec("INSERT INTO approval_item(approval,kind,text,status,comment) VALUES(?,?,?,?,?)", id, "MG", t, "offen", "");
+            db.exec("UPDATE draft SET approval=? WHERE id=?", id, d.get("id"));
+            mail.notifyMeister("Freigabe angefragt: " + d.get("name"), a.get("name") + " bittet um Freigabe für " + d.get("name") + ":\n\n- "
+                    + String.join("\n- ", mg) + "\n\nFreigeben in der Meister-UI unter „Freigaben“.");
+            ctx.json(Map.of("id", id));
+        });
+        s.get("/api/drafts/{id}/approval", ctx -> {
+            var d = draft(db, accounts, ctx);
+            if (d.get("approval") == null) { ctx.json(Map.of()); return; }
+            var r = approvals(db, ((Number) d.get("approval")).longValue());
+            ctx.json(r.isEmpty() ? Map.of() : r.get(0));
+        });
+        s.post("/api/drafts/{id}/send", ctx -> {
+            var d = draft(db, accounts, ctx);
+            var a = accounts.current(ctx);
+            if (d.get("xml") == null) throw new IllegalStateException("Der Held ist noch nicht fertig");
+            if ("gesendet".equals(d.get("status"))) throw new IllegalStateException("Schon gesendet");
+            String bg = str(d.get("bg"));
             if (Jsoup.parse(bg).text().trim().length() < MIN_BACKGROUND) throw new IllegalArgumentException("Hintergrundgeschichte fehlt (mindestens " + MIN_BACKGROUND + " Zeichen)");
-            Object aid = b.get("approvalId");
-            if (aid != null) {
-                var r = approvals(db, ((Number) aid).longValue());
-                if (r.isEmpty() || !Objects.equals(r.get(0).get("player"), who)) throw new IllegalArgumentException("Freigabe unbekannt");
-                for (Object it : (List<?>) r.get(0).get("items"))
-                    if (!List.of("freigegeben", "geändert").contains(((Map<?, ?>) it).get("status"))) throw new IllegalStateException("Noch nicht alle Punkte freigegeben");
+            var f = creation.finish((String) d.get("xml"), str(d.get("name")));
+            List<String> fehler = new ArrayList<>(), mg = new ArrayList<>();
+            for (Object o : (List<?>) f.get("hinweise")) { Map<?, ?> h = (Map<?, ?>) o; if ("F".equals(h.get("art"))) fehler.add(str(h.get("text"))); if ("MG".equals(h.get("art"))) mg.add(str(h.get("text"))); }
+            if (!fehler.isEmpty()) throw new IllegalStateException("Die Regelprüfung meldet Fehler: " + String.join("; ", fehler));
+            if (!mg.isEmpty()) { // jeder aktuelle Punkt muss freigegeben oder geändert sein
+                Set<String> ok = new HashSet<>();
+                if (d.get("approval") != null)
+                    for (var it : db.query("SELECT text FROM approval_item WHERE approval=? AND status IN ('freigegeben','geändert')", d.get("approval"))) ok.add(str(it.get("text")));
+                for (String t : mg) if (!ok.contains(t)) throw new IllegalStateException("Noch nicht freigegeben: " + t);
             }
-            String xml = String.valueOf(b.get("xml"));
-            if (xml.length() > 2_000_000) throw new IllegalArgumentException("XML zu groß");
-            String file = heroes.save(name, who, xml.getBytes(StandardCharsets.UTF_8), bg);
-            mail.notifyMeister("Neuer Held: " + name, who + " hat den Helden „" + name + "“ geschickt.\nDatei: " + heroes.dir().resolve(file));
+            String file = heroes.save(str(d.get("name")), str(a.get("name")), ((Number) a.get("id")).longValue(), ((String) f.get("xml")).getBytes(StandardCharsets.UTF_8), bg);
+            db.exec("UPDATE draft SET status='gesendet', updated=? WHERE id=?", now(), d.get("id"));
+            mail.notifyMeister("Neuer Held: " + d.get("name"), a.get("name") + " hat den Helden „" + d.get("name") + "“ geschickt.\nDatei: " + heroes.dir().resolve(file));
             ctx.json(Map.of("file", file));
+        });
+
+        // --- Meine Helden (fertige, beim Meister liegende)
+        s.get("/api/myheroes", ctx -> {
+            Object id = accounts.current(ctx).get("id");
+            List<Map<String, Object>> out = new ArrayList<>();
+            for (var h : heroes.list()) if (Objects.equals(String.valueOf(h.get("account")), String.valueOf(id))) out.add(h);
+            ctx.json(out);
         });
 
         m.start(Integer.parseInt(env("MEISTER_PORT", "8080")));
@@ -247,6 +343,30 @@ public final class App {
         } catch (Exception e) { return false; }
     }
 
+    static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    static String str(Object o) { return o == null ? "" : o.toString().trim(); }
+
+    static String now() { return java.time.LocalDateTime.now().format(Heroes.TS); }
+
+    static Object me(Accounts accounts, Context ctx) { return accounts.current(ctx).get("id"); }
+
+    /** Entwurf des angemeldeten Kontos, sonst 404. */
+    static Map<String, Object> draft(Db db, Accounts accounts, Context ctx) {
+        var r = db.query("SELECT * FROM draft WHERE id=? AND account=?", ctx.pathParam("id"), me(accounts, ctx));
+        if (r.isEmpty()) throw new NotFoundResponse("Entwurf unbekannt");
+        return r.get(0);
+    }
+
+    /** Punkte mit Meistergenehmigung laut Regelprüfung der helden.jar. */
+    static List<String> mgHints(Creation creation, Map<String, Object> d) throws Exception {
+        if (d.get("xml") == null) return List.of();
+        List<String> mg = new ArrayList<>();
+        for (Object o : (List<?>) creation.finish((String) d.get("xml"), str(d.get("name"))).get("hinweise"))
+            if ("MG".equals(((Map<?, ?>) o).get("art"))) mg.add(str(((Map<?, ?>) o).get("text")));
+        return mg;
+    }
+
     static Javalin web(String dir, long maxRequest) {
         return Javalin.create(c -> {
             c.staticFiles.add(dir, Location.CLASSPATH);
@@ -262,26 +382,6 @@ public final class App {
         var list = id == null ? db.query("SELECT * FROM approval ORDER BY id DESC") : db.query("SELECT * FROM approval WHERE id=?", id);
         for (var a : list) a.put("items", db.query("SELECT id,kind,text,status,comment FROM approval_item WHERE approval=? ORDER BY id", a.get("id")));
         return list;
-    }
-
-    // Spieler-Token: name.pwVersion.hmac — Passwortänderung erhöht pwVersion und macht alle alten Tokens ungültig.
-    static String token(Db db, String name) throws Exception {
-        String n = Base64.getUrlEncoder().withoutPadding().encodeToString(name.getBytes(StandardCharsets.UTF_8));
-        String body = n + "." + db.get("pwVersion", "0");
-        return body + "." + hmac(db, body);
-    }
-
-    static String player(Db db, Context ctx) {
-        try {
-            String t = ctx.cookie("hh");
-            if (t == null) return null;
-            int i = t.lastIndexOf('.');
-            String body = t.substring(0, i);
-            if (!MessageDigest.isEqual(hmac(db, body).getBytes(), t.substring(i + 1).getBytes())) return null;
-            String[] p = body.split("\\.");
-            if (!p[1].equals(db.get("pwVersion", "0"))) return null;
-            return new String(Base64.getUrlDecoder().decode(p[0]), StandardCharsets.UTF_8);
-        } catch (Exception e) { return null; }
     }
 
     static String hmac(Db db, String s) throws Exception {
