@@ -31,6 +31,7 @@ public final class App {
         Heroes heroes = new Heroes(db, data.resolve("helden"));
         Advance advance = new Advance(db, heroes, jar, accounts, mail);
         Sound sound = new Sound(data.resolve("audio"));
+        sound.db = db;
         sound.warmUp();
         if (db.get("secret", null) == null) db.put("secret", HexFormat.of().formatHex(SecureRandom.getInstanceStrong().generateSeed(32)));
 
@@ -85,6 +86,12 @@ public final class App {
             sound.rescan(scene);
             ctx.json(Map.of("saved", saved));
         });
+        m.post("/api/sound/session", ctx -> {
+            Map<?, ?> b = ctx.bodyAsClass(Map.class);
+            sound.sessionEdit(str(b.get("file")), !Boolean.FALSE.equals(b.get("add")));
+            ctx.json(Map.of("ok", true));
+        });
+        m.delete("/api/sound/session", ctx -> { sound.sessionClear(); ctx.json(Map.of("ok", true)); });
         m.sse("/api/sound/events", c -> sound.subscribe(c, false));
         m.get("/api/sound/fxinfo", ctx -> ctx.json(sound.fxInfo()));
         m.post("/api/sound/cmd", ctx -> { sound.command(ctx.bodyAsClass(Map.class)); ctx.json(sound.state()); });

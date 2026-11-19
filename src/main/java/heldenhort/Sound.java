@@ -13,6 +13,9 @@ import java.util.concurrent.*;
  */
 public final class Sound {
     public static final List<String> SCENES = List.of("Village", "Travel", "Dungeon", "Castle", "Fight");
+    /** Eigene Rubrik: vom Meister zusammengestellte Titel aus allen Szenen (nur Verweise, keine Kopien). */
+    public static final String SESSION = "Session";
+    public Db db; // für die Session-Liste
     /** Feste Effekt-Knöpfe aus dem alten Soundboard. Datei liegt unter /data/audio/Effects/. */
     public static final Map<String, String> FX = new LinkedHashMap<>();
     static {
@@ -66,6 +69,7 @@ public final class Sound {
      * Hat sich etwas geändert, bekommen alle eine "lib"-Nachricht und laden die Liste neu.
      */
     public Map<String, Object> library(String scene) throws Exception {
+        if (SESSION.equals(scene)) return sessionLib();
         if (!SCENES.contains(scene)) throw new IllegalArgumentException("Szene unbekannt");
         Map<String, Object> c = libCache.get(scene);
         if (c == null) { c = scan(scene); libCache.put(scene, c); }
@@ -79,6 +83,46 @@ public final class Sound {
             Map<String, Object> n = scan(scene);
             if (!n.equals(libCache.put(scene, n))) broadcast(Map.of("type", "lib", "scene", scene));
         } catch (Exception e) { System.err.println("Liste " + scene + " nicht lesbar: " + e); }
+    }
+
+    // ---------------- Session-Liste ----------------
+
+    @SuppressWarnings("unchecked")
+    private Map<String, List<String>> sessionList() {
+        try {
+            Map<String, List<String>> m = json.readValue(db.get("sessionSounds", "{}"), Map.class);
+            Map<String, List<String>> out = new LinkedHashMap<>();
+            for (String d : List.of("Music", "Sounds")) out.put(d, new ArrayList<>(m.getOrDefault(d, List.of())));
+            return out;
+        } catch (Exception e) { return new LinkedHashMap<>(Map.of("Music", new ArrayList<>(), "Sounds", new ArrayList<>())); }
+    }
+
+    /** Wie library(), aber Einträge sind volle Pfade (Music/Fight/x.mp3). Gelöschte Dateien fallen raus. */
+    private Map<String, Object> sessionLib() {
+        Map<String, Object> out = new LinkedHashMap<>();
+        sessionList().forEach((d, l) -> out.put(d, l.stream().filter(f -> Files.isRegularFile(root.resolve(f))).toList()));
+        Map<String, String> fx = new LinkedHashMap<>();
+        FX.forEach((k, f) -> fx.put(k, check(root.resolve("Effects").resolve(f))));
+        out.put("fx", fx);
+        out.put("session", true);
+        return out;
+    }
+
+    /** Titel in die Session-Liste aufnehmen/entfernen; file = Music/... oder Sounds/... */
+    public synchronized void sessionEdit(String file, boolean add) throws Exception {
+        String type = file.split("/")[0];
+        if (!List.of("Music", "Sounds").contains(type)) throw new IllegalArgumentException("Nur Musik oder Hintergrundgeräusche");
+        if (add) resolve(file);
+        Map<String, List<String>> m = sessionList();
+        m.get(type).remove(file);
+        if (add) m.get(type).add(file);
+        db.put("sessionSounds", json.writeValueAsString(m));
+        broadcast(Map.of("type", "lib", "scene", SESSION));
+    }
+
+    public synchronized void sessionClear() throws Exception {
+        db.put("sessionSounds", "{}");
+        broadcast(Map.of("type", "lib", "scene", SESSION));
     }
 
     /** Beim Start alle Szenen einmal einlesen, damit schon der erste Wechsel aus dem Speicher kommt. */
@@ -111,7 +155,7 @@ public final class Sound {
         String action = String.valueOf(c.get("action"));
         if (action.equals("scene")) {
             String s = String.valueOf(c.get("scene"));
-            if (!SCENES.contains(s)) throw new IllegalArgumentException("Szene unbekannt");
+            if (!SCENES.contains(s) && !SESSION.equals(s)) throw new IllegalArgumentException("Szene unbekannt");
             scene = s;
         } else if (action.equals("fxvolume")) {
             fxVolume = Math.max(0, Math.min(100, ((Number) c.get("value")).intValue()));

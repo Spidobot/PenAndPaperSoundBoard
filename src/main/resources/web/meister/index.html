@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119k">
+<link rel="stylesheet" href="/common/app.css?v=20261119m">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -170,7 +170,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119k"></script>
+<script src="/common/common.js?v=20261119m"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -179,7 +179,10 @@ function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v
 addEventListener('hashchange',route);
 
 /* ---------- Soundboard ---------- */
-const SCENES=[['Village','Dorf / Stadt','dorf'],['Travel','Reisen','reisen'],['Dungeon','Dungeon','dungeon'],['Castle','Burg','burg'],['Fight','Kampf','kampf']];
+const SCENES=[['Village','Dorf / Stadt','dorf'],['Travel','Reisen','reisen'],['Dungeon','Dungeon','dungeon'],['Castle','Burg','burg'],['Fight','Kampf','kampf'],['Session','Session','session']];
+let sessSet=new Set(); // Titel in der Session-Liste (volle Pfade)
+async function loadSess(){try{const l=await api('/api/sound/library?scene=Session');libs.Session=l;sessSet=new Set([...l.Music,...l.Sounds]);
+  if(st&&st.scene==='Session')lib=l;lastFile.musick=lastFile.bgk=null;renderSound()}catch(e){}}
 const FX=[['truhe','Schatztruhe öffnen'],['kuh','Cliffhanger-Kuh'],['avengers','Avengers'],['ziege','Bertha (solo)'],['qadd','Quest hinzugefügt'],['qdone','Quest abgeschlossen']];
 const CH={music:['Musik','Music'],bg:['Hintergrundgeräusche','Sounds']};
 let st=null,lib=null;const pl=new Player();
@@ -211,9 +214,10 @@ function fuzzy(q,name){q=norm(q);if(!q)return true;const n=norm(name);if(n.inclu
     return words.some(w=>w.startsWith(t)||(t.length>2&&w.includes(t))||lev(t,w)<=tol||lev(t,w.slice(0,t.length))<=tol)})}
 /** Liste (nur bei Szene/Bibliothek/Suche/Titelwechsel neu) und Steuerleiste (bei jedem Zustand) getrennt zeichnen */
 function renderList(id){
-  if(!st||!lib)return;const c=st.ch[id],[title,dir]=CH[id],el=$(`.plist[data-ch="${id}"]`),all=lib[dir]||[],items=all.filter(n=>fuzzy(qs[id],n));
+  if(!st||!lib)return;const c=st.ch[id],[title,dir]=CH[id],el=$(`.plist[data-ch="${id}"]`),all=lib[dir]||[],ses=st.scene==='Session';
+  const base=n=>n.split('/').pop(),items=all.filter(n=>fuzzy(qs[id],base(n))),full=n=>ses?n:dir+'/'+st.scene+'/'+n;
   const oldUl=el.querySelector('ul'),scroll=oldUl?oldUl.scrollTop:0,inp=el.querySelector('.lsearch'),focused=inp&&document.activeElement===inp,caret=focused?inp.selectionStart:0;
-  el.innerHTML=`<div class="head"><h3>${title}</h3></div>
+  el.innerHTML=`<div class="head spread"><h3>${title}</h3>${ses&&all.length?`<button class="btn sm" data-sclear="${id}">Liste leeren</button>`:''}</div>
    <div class="pctl">
      <div class="pbar">
        <button class="ib tog" data-act="toggle" data-ch="${id}" title="Abspielen / Pause"></button>
@@ -224,7 +228,10 @@ function renderList(id){
      <input type="range" class="seek" data-seek="${id}" min="0" max="0" step="1" value="0" aria-label="${title}: Position">
    </div>
    <input type="search" class="lsearch" data-ls="${id}" value="${esc(qs[id])}" placeholder="${title} durchsuchen… (${all.length})" aria-label="${title} durchsuchen">
-   <ul>${items.map(n=>`<li><button data-pick="${id}" data-f="${esc(dir+'/'+st.scene+'/'+n)}" title="Klick: auswählen · Doppelklick oder Play: abspielen"><span class="mk"></span>${esc(n.replace(/\.mp3$/i,''))}</button></li>`).join('')||`<li class="empty small">${all.length?'Kein Treffer.':'Keine MP3 in diesem Ordner.'}</li>`}</ul>`;
+   <ul>${items.map(n=>{const f=full(n),inS=sessSet.has(f);return `<li class="srow"><button data-pick="${id}" data-f="${esc(f)}" title="${ses?esc(f.split('/')[1])+' · ':''}Klick: auswählen · Doppelklick oder Play: abspielen"><span class="mk"></span>${esc(base(n).replace(/\.mp3$/i,''))}</button>`+
+     (ses?`<button class="sadd" data-sdel="${esc(f)}" title="Aus der Session-Liste nehmen" aria-label="Aus der Session-Liste nehmen">✕</button>`
+         :`<button class="sadd${inS?' in':''}" data-sadd="${esc(f)}" title="${inS?'Ist in der Session-Liste (klicken: herausnehmen)':'In die Session-Liste'}" aria-label="Session-Liste" aria-pressed="${inS}">${inS?'★':'☆'}</button>`)+`</li>`}).join('')
+     ||`<li class="empty small">${ses?'Noch leer. In den anderen Szenen mit ☆ Titel hierher holen.':all.length?'Kein Treffer.':'Keine MP3 in diesem Ordner.'}</li>`}</ul>`;
   el.querySelector('ul').scrollTop=scroll;
   if(focused){const n=el.querySelector('.lsearch');n.focus();n.setSelectionRange(caret,caret)}
   updateList(id);fitLists();
@@ -272,6 +279,10 @@ $('#m-sound').addEventListener('click',e=>{
   else if(b.dataset.folder!==undefined)showUpl();
   else if(b.dataset.fx){b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),600);cmd({action:'fx',key:b.dataset.fx})}
   else if(b.dataset.pick){sel[b.dataset.pick]=b.dataset.f;updateList(b.dataset.pick)} // nur auswählen
+  else if(b.dataset.sadd!==undefined){const f=b.dataset.sadd,add=!sessSet.has(f);add?sessSet.add(f):sessSet.delete(f);lastFile.musick=lastFile.bgk=null;renderSound();
+    api('/api/sound/session',{method:'POST',body:{file:f,add}}).then(()=>toast(add?'In der Session-Liste':'Aus der Session-Liste genommen')).catch(x=>{toastErr(x.message);loadSess()})}
+  else if(b.dataset.sdel!==undefined){api('/api/sound/session',{method:'POST',body:{file:b.dataset.sdel,add:false}}).catch(x=>toastErr(x.message))}
+  else if(b.dataset.sclear){if(b.dataset.ask!=='1'){b.dataset.ask='1';b.textContent='Wirklich leeren?';return}api('/api/sound/session',{method:'DELETE'}).catch(x=>toastErr(x.message))}
   else if(b.dataset.act==='toggle'){const k=b.dataset.ch,c=st.ch[k];
     if(c.playing){pl.pauseNow(k);st.ch[k]={...c,playing:false};updateList(k);cmd({action:'pause',ch:k,pos:pl.a[k].currentTime||undefined})} // sofort still, ohne auf den Server zu warten
     else if(sel[k]&&sel[k]!==c.file)start(k,sel[k]);
@@ -333,7 +344,7 @@ try{setDark(localStorage.getItem('hh-dark')!=='0')}catch(_){setDark(true)}
 
 function onSound(m){
   if(m.type==='fx'){pl.fx(m.file);return}
-  if(m.type==='lib'){delete libs[m.scene];if(st&&st.scene===m.scene)loadLib();return}
+  if(m.type==='lib'){if(m.scene==='Session'){loadSess();return}delete libs[m.scene];if(st&&st.scene===m.scene)loadLib();return}
   if(st&&m.serverNow<st.serverNow)return; // ältere Nachricht nach einer schnelleren Befehlsantwort
   const sceneChanged=!st||st.scene!==m.scene;st=m;pl.apply(m);if(sceneChanged)loadLib();else renderSound()}
 liveEvents('/api/sound/events',onSound,ok=>{const l=$('#lstn');if(l)l.classList.toggle('warn',!ok);if(!ok&&l)l.textContent='Verbindung weg, verbinde neu…'});
@@ -579,7 +590,7 @@ $('#testmail').onclick=async()=>{const r=$('#mailres');r.hidden=false;r.classNam
 $('#selftest').onclick=async()=>{toast('Selbsttest läuft…');try{const r=await api('/api/jar/selftest',{method:'POST'});toast(r.result)}catch(e){toastErr('Selbsttest gescheitert: '+e.message)}};
 $('#updnow').onclick=async()=>{toast('Prüfe… das kann ein paar Minuten dauern');try{const r=await api('/api/jar/update',{method:'POST'});toast(r.result);loadJar()}catch(e){toastErr(e.message)}};
 
-route();loadFg();loadHeroes();
+route();loadFg();loadHeroes();loadSess();
 </script>
 </body>
 </html>
