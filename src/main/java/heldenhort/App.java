@@ -43,6 +43,7 @@ public final class App {
             a.get("/audio/<path>", ctx -> {
                 Path p = sound.resolve(ctx.pathParam("path"));
                 ctx.contentType("audio/mpeg");
+                ctx.header("Cache-Control", "no-cache"); // ersetzte Dateien sofort hören
                 ctx.writeSeekableStream(Files.newInputStream(p), "audio/mpeg", Files.size(p));
             });
             a.get("/api/sound/library", ctx -> ctx.json(sound.library(ctx.queryParamAsClass("scene", String.class).getOrDefault(sound.scene))));
@@ -198,7 +199,7 @@ public final class App {
         s.get("/api/me", ctx -> {
             var a = accounts.current(ctx);
             Map<String, Object> me = new LinkedHashMap<>();
-            me.put("name", a.get("name")); me.put("email", a.get("email")); me.put("emailPending", a.get("email_pending"));
+            me.put("id", a.get("id")); me.put("name", a.get("name")); me.put("email", a.get("email")); me.put("emailPending", a.get("email_pending"));
             ctx.json(me);
         });
         s.post("/api/account/password", ctx -> {
@@ -329,6 +330,8 @@ public final class App {
             for (var h : heroes.list()) if (Objects.equals(String.valueOf(h.get("account")), String.valueOf(id))) out.add(h);
             ctx.json(out);
         });
+
+        new Polls(db, mail, accounts).routes(m, s);
 
         m.start(Integer.parseInt(env("MEISTER_PORT", "8080")));
         s.start(Integer.parseInt(env("SPIELER_PORT", "8081")));

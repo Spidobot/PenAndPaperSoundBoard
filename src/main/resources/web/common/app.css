@@ -171,3 +171,10 @@ details.sec td:first-child{white-space:nowrap}
 .plist .head{display:grid;gap:2px}
 .plist .head .mono{overflow-wrap:anywhere}
 .plist .lsearch{width:100%}
+
+.ans{display:inline-flex;gap:2px}
+.ans button{border:1px solid var(--line);background:var(--panel);padding:3px 8px;border-radius:4px;font-size:.85rem}
+.ans button[aria-pressed="true"].ja{background:var(--ok);color:var(--bg);border-color:var(--ok)}
+.ans button[aria-pressed="true"].vielleicht{background:var(--warn);color:var(--bg);border-color:var(--warn)}
+.ans button[aria-pressed="true"].nein{background:var(--bad);color:var(--bg);border-color:var(--bad)}
+.v-ja{color:var(--ok);font-weight:700}.v-vielleicht{color:var(--warn);font-weight:700}.v-nein{color:var(--bad);font-weight:700}

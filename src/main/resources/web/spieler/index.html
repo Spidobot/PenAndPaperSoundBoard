@@ -47,6 +47,7 @@ html,body{margin:0}
       <button class="tile" data-go="s-drafts"><span class="ico">✦</span><h2>Heldenerstellung</h2><span class="mut">Neue Helden bauen, mit Hintergrundgeschichte an den Meister senden.</span></button>
       <button class="tile" data-go="s-mine"><span class="ico">⚔</span><h2>Meine Helden</h2><span class="mut">Deine Helden beim Meister ansehen.</span></button>
       <button class="tile" data-go="s-stream"><span class="ico">♪</span><h2>Soundstream</h2><span class="mut">Musik und Geräusche vom Spieltisch. Du regelst nur deine Lautstärke.</span></button>
+      <button class="tile" data-go="s-termine"><span class="ico">⌛</span><h2>Termine</h2><span class="mut">Abstimmen, wann die nächste Runde stattfindet.</span></button>
       <button class="tile" data-go="s-konto"><span class="ico">⚙</span><h2>Konto</h2><span class="mut">Passwort ändern, Mail-Adresse für Benachrichtigungen.</span></button>
     </div>
   </div>
@@ -78,6 +79,12 @@ html,body{margin:0}
     <div class="row" style="margin-bottom:14px"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Meine Helden</h1></div>
     <div class="list" id="mineList"></div>
     <div class="card" id="mineSheet" hidden style="margin-top:14px"></div>
+  </div>
+
+  <!-- Termine -->
+  <div id="s-termine" hidden>
+    <div class="row" style="margin-bottom:14px"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Termine</h1></div>
+    <div id="pollList" style="display:grid;gap:14px"></div>
   </div>
 
   <!-- Konto -->
@@ -113,9 +120,9 @@ html,body{margin:0}
 <script src="/common/common.js"></script>
 <script>
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-const VIEWS=['s-login','s-home','s-drafts','s-create','s-mine','s-konto','s-stream'];
+const VIEWS=['s-login','s-home','s-drafts','s-create','s-mine','s-konto','s-stream','s-termine'];
 let me=null;
-function show(v){VIEWS.forEach(x=>$('#'+x).hidden=x!==v);({'s-drafts':loadDrafts,'s-mine':loadMine,'s-konto':loadKonto})[v]?.();window.scrollTo(0,0)}
+function show(v){VIEWS.forEach(x=>$('#'+x).hidden=x!==v);({'s-drafts':loadDrafts,'s-mine':loadMine,'s-konto':loadKonto,'s-termine':loadPolls})[v]?.();window.scrollTo(0,0)}
 function go(v){if(location.hash.slice(1)===v)guard(v);else location.hash=v}
 addEventListener('hashchange',()=>guard(location.hash.slice(1)||'s-home'));
 async function guard(v){
@@ -309,6 +316,20 @@ $('#mineList').onclick=e=>{const b=e.target.closest('[data-h]');if(!b)return;con
   $('#mineSheet').innerHTML=`<h2>${esc(h.name)}</h2><dl class="kv">${Object.entries({...s.basis,'Profession':h.profession}).filter(([k,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
     ${s.sections.map(sec=>`<details class="sec"><summary><b>${esc(sec.title)}</b> <span class="mut small">${sec.rows.length}</span></summary><div class="tw"><table class="small"><tbody>${sec.rows.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td class="mono">${esc(r.value)}</td><td class="mut">${esc(r.details)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')}`;
   $('#mineSheet').scrollIntoView({behavior:'smooth'})};
+
+/* ---------- Termine ---------- */
+let polls=[],pdraft={};
+async function loadPolls(){try{polls=await api('/api/polls')}catch(e){return toast(e.message)}renderPolls()}
+function renderPolls(){const myId=me&&me.id;
+  $('#pollList').innerHTML=polls.map(p=>`<div class="card" data-poll="${p.id}"><h3>${esc(p.title)}</h3>${p.note?`<p class="small mut">${esc(p.note)}</p>`:''}
+    ${pollMatrix({...p,options:p.options.map(o=>({...o,label:fmtTermin(o.label)}))},myId,pdraft[p.id])}
+    <div class="row"><button class="btn pri" data-save="${p.id}">Stimme speichern</button><span class="small mut">Du kannst deine Stimme jederzeit ändern.</span></div></div>`).join('')
+    ||'<p class="mut">Gerade keine offene Abstimmung für dich.</p>'}
+$('#pollList').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
+  const card=b.closest('[data-poll]'),pid=card&&card.dataset.poll;
+  if(b.dataset.a){const opt=b.closest('[data-opt]').dataset.opt;(pdraft[pid]=pdraft[pid]||{})[opt]=b.dataset.a;renderPolls()}
+  if(b.dataset.save){const ans=pdraft[pid]||{};if(!Object.keys(ans).length)return toast('Erst bei den Terminen „kann“, „vielleicht“ oder „kann nicht“ wählen');
+    try{await api('/api/polls/'+pid+'/vote',{method:'POST',body:{answers:ans}});delete pdraft[pid];toast('Gespeichert');loadPolls()}catch(x){toast(x.message)}}};
 
 /* ---------- Soundstream ---------- */
 const pl=new Player();let es=null;

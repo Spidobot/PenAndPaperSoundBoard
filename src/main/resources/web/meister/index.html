@@ -19,6 +19,7 @@
     <a href="#m-session" data-v="m-session">Session</a>
     <a href="#m-sessions" data-v="m-sessions">Sessions</a>
     <a href="#m-spieler" data-v="m-spieler">Spieler</a>
+    <a href="#m-termine" data-v="m-termine">Termine</a>
     <a href="#m-config" data-v="m-config">Konfiguration</a>
     <a href="#" id="logout">Abmelden</a>
     <div class="foot">Jeder Bereich hat eine eigene Adresse. Mehrere Tabs gleichzeitig möglich.<br><br>Icons: <a href="https://icons8.com" target="_blank" rel="noopener" style="display:inline;padding:0">Icons8</a></div>
@@ -102,6 +103,20 @@
       <p class="small mut">Spieler melden sich mit Name und Passwort an und können das Passwort selbst ändern. Die Mail-Adresse hinterlegen sie selbst; sie gilt erst nach Klick auf den Bestätigungslink.</p>
     </section>
 
+    <section class="view" id="m-termine" hidden>
+      <h1>Termine</h1>
+      <form class="card" id="pollForm"><h3>Neue Abstimmung</h3>
+        <div class="grid2">
+          <div class="field"><label class="label" for="pTitle">Titel</label><input type="text" id="pTitle" placeholder="z. B. Phileasson Abend 13"></div>
+          <div class="field"><label class="label" for="pSess">Wer stimmt ab?</label><select id="pSess"></select></div>
+        </div>
+        <div class="field"><label class="label" for="pNote">Hinweis (optional)</label><input type="text" id="pNote" placeholder="z. B. online, ca. 4 Stunden"></div>
+        <div class="field"><span class="label">Termine</span><div id="pOpts" style="display:grid;gap:6px"></div></div>
+        <div class="row"><button class="btn sm" type="button" id="pAdd">+ Termin</button><button class="btn pri" type="submit">Abstimmung starten</button></div>
+      </form>
+      <div id="pollList" style="display:grid;gap:14px"></div>
+    </section>
+
     <section class="view" id="m-config" hidden>
       <h1>Konfiguration</h1>
       <form id="cfg" class="cfggrid">
@@ -138,7 +153,7 @@
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
   $$('.side a[data-v]').forEach(a=>a.dataset.v===h?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'));
-  ({'m-helden':loadHeroes,'m-freigaben':loadFg,'m-session':loadSession,'m-sessions':loadSessions,'m-spieler':loadAccounts,'m-config':loadCfg})[h]?.();}
+  ({'m-helden':loadHeroes,'m-freigaben':loadFg,'m-session':loadSession,'m-sessions':loadSessions,'m-spieler':loadAccounts,'m-termine':loadPolls,'m-config':loadCfg})[h]?.();}
 addEventListener('hashchange',route);
 
 /* ---------- Soundboard ---------- */
@@ -157,9 +172,11 @@ function renderScenes(){
   $('#scenes').className='scenes'+(compact?' compact':'');
   $('#scenes').innerHTML=`<button data-menu title="Menü">${IMG('menu')}<span>Menü</span></button>`+
    SCENES.map(([k,l,i])=>`<button data-sc="${k}" aria-current="${st&&k===st.scene}" title="${l}">${IMG(i)}<span>${l}</span></button>`).join('')+
-   `<hr><button data-folder title="Dateiordner">${IMG('ordner')}<span>Dateiordner</span></button><button data-fx="pizza" title="Pizza"${lib&&!lib.fx.pizza?' disabled':''}>${IMG('pizza')}<span>Pizza</span></button>`;
+   `<hr><button data-folder title="Dateiordner">${IMG('ordner')}<span>Dateiordner</span></button><button data-fx="pizza" title="${lib&&lib.fx.pizza!=='ok'?'Pizza: '+esc(lib.fx.pizza==='fehlt'?'Datei fehlt in /data/audio/Effects':lib.fx.pizza):'Pizza'}"${lib&&lib.fx.pizza!=='ok'?' disabled':''}>${IMG('pizza')}<span>Pizza</span></button>`;
 }
-function renderFx(){$('#fx').innerHTML=FX.map(([k,l])=>{const ok=lib&&lib.fx[k];return `<button data-fx="${k}" title="${ok?l:l+': Datei fehlt in /data/audio/Effects'}" aria-label="${l}"${ok?'':' disabled'}>${IMG(k)}</button>`}).join('')}
+function renderFx(){$('#fx').innerHTML=FX.map(([k,l])=>{const s=lib&&lib.fx[k],ok=s==='ok'||s===true;
+  const why=!s||s==='fehlt'?'Datei fehlt in /data/audio/Effects':s;
+  return `<button data-fx="${k}" title="${ok?l:l+': '+esc(why)}" aria-label="${l}"${ok?'':' disabled'}>${IMG(k)}</button>`}).join('')}
 /* Tippfehlertolerante Suche: Teilstring, Wortanfang oder kleine Abweichung pro Wort */
 const qs={music:'',bg:''};
 const norm=s=>s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\.mp3$/,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
@@ -390,6 +407,30 @@ $('#acctab').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
   else if(b.dataset.apwset){try{await api('/api/accounts/'+b.dataset.apwset+'/password',{method:'POST',body:{password:$('#apw-'+b.dataset.apwset).value}});accPwOpen=null;toast('Passwort gesetzt, alte Anmeldungen sind abgemeldet');renderAccounts()}catch(x){toast(x.message)}}};
 document.addEventListener('change',async e=>{const s=e.target.closest('select.owner');if(!s)return;
   try{await api('/api/heroes/'+encodeURIComponent(s.dataset.file)+'/owner',{method:'POST',body:{account:s.value?+s.value:null}});toast('Besitzer gespeichert');const h=heroes.find(x=>x.file===s.dataset.file);if(h){h.account=s.value?+s.value:null}}catch(x){toast(x.message)}});
+
+/* ---------- Termine ---------- */
+let polls=[],pollDel=null;
+function addOpt(v=''){const d=document.createElement('div');d.className='row';d.style.flexWrap='nowrap';
+  d.innerHTML=`<input type="datetime-local" class="popt" value="${esc(v)}" aria-label="Termin" style="width:auto"><button type="button" class="btn sm" data-rm aria-label="Termin entfernen">✕</button>`;$('#pOpts').append(d)}
+$('#pAdd').onclick=()=>addOpt();
+$('#pOpts').onclick=e=>{if(e.target.closest('[data-rm]'))e.target.closest('.row').remove()};
+async function loadPolls(){let ss;try{[polls,ss]=await Promise.all([api('/api/polls'),api('/api/sessions')])}catch(e){return toast(e.message)}
+  const cur=$('#pSess').value;$('#pSess').innerHTML='<option value="">alle Spieler-Konten</option>'+ss.map(s=>`<option value="${s.id}">Session: ${esc(s.name)}</option>`).join('');$('#pSess').value=cur;
+  if(!$('#pOpts').children.length){addOpt();addOpt()}
+  $('#pollList').innerHTML=polls.map(p=>{const need=p.voters.length*p.options.length,have=p.votes.filter(v=>p.voters.some(x=>String(x.id)===String(v.account))).length;
+    return `<div class="card"><div class="spread"><div><h3>${esc(p.title)}</h3><div class="small mut">${p.sessionName?'Session '+esc(p.sessionName):'alle Spieler'} · angelegt ${esc(p.created)}${p.note?' · '+esc(p.note):''}</div></div>
+      <div class="row"><span class="pill ${have>=need&&need?'ok':'warn'}">${have}/${need} Stimmen</span>${p.closed?'<span class="pill">geschlossen</span>':''}
+      <button class="btn sm" data-pclose="${p.id}" data-c="${p.closed?0:1}">${p.closed?'Wieder öffnen':'Schließen'}</button>
+      ${pollDel===p.id?`<button class="btn sm danger" data-pdel="${p.id}">Wirklich löschen</button>`:`<button class="btn sm danger" data-pask="${p.id}">Löschen</button>`}</div></div>
+      ${p.voters.length?pollMatrix({...p,options:p.options.map(o=>({...o,label:fmtTermin(o.label)}))},null):'<p class="small err">Niemand stimmt ab: In der Session gehören noch keine Helden einem Spieler-Konto.</p>'}</div>`}).join('')||'<p class="mut">Noch keine Abstimmung.</p>'}
+$('#pollForm').onsubmit=async e=>{e.preventDefault();const opts=$$('.popt').map(i=>i.value).filter(Boolean);
+  try{await api('/api/polls',{method:'POST',body:{title:$('#pTitle').value,note:$('#pNote').value,session:$('#pSess').value?+$('#pSess').value:null,options:opts}});
+    toast('Abstimmung gestartet');$('#pTitle').value='';$('#pNote').value='';$('#pOpts').innerHTML='';loadPolls()}catch(x){toast(x.message)}};
+$('#pollList').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.pask){pollDel=+b.dataset.pask;loadPolls()}
+  if(b.dataset.pdel){try{await api('/api/polls/'+b.dataset.pdel,{method:'DELETE'});pollDel=null;loadPolls()}catch(x){toast(x.message)}}
+  if(b.dataset.pclose){try{await api('/api/polls/'+b.dataset.pclose+'/close',{method:'POST',body:{closed:b.dataset.c==='1'}});loadPolls()}catch(x){toast(x.message)}}};
+setInterval(()=>{if(location.hash==='#m-termine'&&!$('#pollForm').contains(document.activeElement))loadPolls()},15000);
 
 /* ---------- Konfiguration ---------- */
 const CFG=['mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];

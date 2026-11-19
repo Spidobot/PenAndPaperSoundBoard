@@ -68,8 +68,9 @@ public final class Sound {
                 out.put(d, s.map(p -> p.getFileName().toString()).filter(n -> n.toLowerCase().endsWith(".mp3")).sorted().toList());
             }
         }
-        Map<String, Boolean> fx = new LinkedHashMap<>();
-        FX.forEach((k, f) -> fx.put(k, Files.isRegularFile(root.resolve("Effects").resolve(f))));
+        // je Effekt: "ok", "fehlt" oder eine Beschreibung, warum der Browser die Datei nicht abspielen kann
+        Map<String, String> fx = new LinkedHashMap<>();
+        FX.forEach((k, f) -> fx.put(k, check(root.resolve("Effects").resolve(f))));
         out.put("fx", fx);
         return out;
     }
@@ -135,6 +136,23 @@ public final class Sound {
     }
 
     long listeners() { return clients.stream().filter(c -> Boolean.TRUE.equals(c.ctx().attribute("player"))).count(); }
+
+    /** Prüft, ob die Datei eine echte MP3 (MPEG Layer III) ist. Browser können z. B. kein MP2. */
+    static String check(Path p) {
+        if (!Files.isRegularFile(p)) return "fehlt";
+        try (var in = Files.newInputStream(p)) {
+            byte[] b = in.readNBytes(64 * 1024);
+            int i = 0;
+            if (b.length > 10 && b[0] == 'I' && b[1] == 'D' && b[2] == '3') // ID3v2-Tag überspringen
+                i = 10 + ((b[6] & 0x7f) << 21 | (b[7] & 0x7f) << 14 | (b[8] & 0x7f) << 7 | (b[9] & 0x7f));
+            for (; i + 1 < b.length; i++) {
+                if ((b[i] & 0xff) != 0xff || (b[i + 1] & 0xe0) != 0xe0) continue;
+                int layer = (b[i + 1] >> 1) & 3;
+                return layer == 1 ? "ok" : "Datei ist MPEG Layer " + (layer == 2 ? "II (MP2)" : layer == 3 ? "I" : "?") + ", keine echte MP3. Bitte als MP3 neu speichern.";
+            }
+            return i == 0 ? "ok" : "Kein MPEG-Audio gefunden";
+        } catch (Exception e) { return "nicht lesbar: " + e.getMessage(); }
+    }
 
     /** Pfad unter /data/audio, ohne Ausbruch nach oben. */
     public Path resolve(String rel) {

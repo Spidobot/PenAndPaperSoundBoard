@@ -28,3 +28,16 @@ class Player{
   setMaster(v){this.master=v;if(this.state)this.apply(this.state)}
   fx(file){if(!this.enabled)return;const a=new Audio(this.url(file));a.volume=Math.max(0,Math.min(1,this.master*((this.state?.fxVolume??80)/100)));a.play().catch(()=>{})}
 }
+
+/** Abstimmungs-Übersicht: Zeilen = Termine, Spalten = Personen. mine = eigene Konto-ID (Spieler), sonst null. */
+const SYM={ja:'✓',vielleicht:'?',nein:'✗'};
+function pollMatrix(p,mine,draftAns){
+  const vote=(o,a)=>p.votes.find(v=>String(v.option)===String(o)&&String(v.account)===String(a));
+  const others=p.voters.filter(v=>String(v.id)!==String(mine));
+  return `<div class="tw"><table><thead><tr><th>Termin</th>${mine!=null?'<th>Du</th>':''}${others.map(v=>`<th>${esc(v.name)}</th>`).join('')}<th>Summe</th></tr></thead><tbody>${p.options.map(o=>{
+    const all=p.voters.map(v=>vote(o.id,v.id)).filter(Boolean),ja=all.filter(v=>v.answer==='ja').length,vi=all.filter(v=>v.answer==='vielleicht').length;
+    const cur=draftAns&&draftAns[o.id]||(vote(o.id,mine)||{}).answer;
+    return `<tr><td><b>${esc(o.label)}</b></td>${mine!=null?`<td><span class="ans" data-opt="${o.id}">${['ja','vielleicht','nein'].map(a=>`<button class="${a}" data-a="${a}" aria-pressed="${cur===a}">${{ja:'kann',vielleicht:'vielleicht',nein:'kann nicht'}[a]}</button>`).join('')}</span></td>`:''}
+      ${others.map(v=>{const x=vote(o.id,v.id);return `<td class="${x?'v-'+x.answer:'mut'}" title="${x?esc(x.answer):'noch offen'}">${x?SYM[x.answer]:'·'}</td>`}).join('')}
+      <td class="mono small">${ja} ✓ · ${vi} ?</td></tr>`}).join('')}</tbody></table></div>`}
+function fmtTermin(v){try{const d=new Date(v);if(isNaN(d))return v;return d.toLocaleString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}catch(e){return v}}
