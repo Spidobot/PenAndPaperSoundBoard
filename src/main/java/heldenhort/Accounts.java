@@ -30,13 +30,24 @@ public final class Accounts {
     public long create(String name, String pw) {
         name = name == null ? "" : name.trim();
         if (!name.matches("[\\p{L}\\p{N} ._-]{2,40}")) throw new IllegalArgumentException("Name: 2 bis 40 Zeichen, nur Buchstaben, Ziffern, Leerzeichen, . _ -");
-        checkPw(pw);
+        checkStartPw(pw);
         if (!db.query("SELECT 1 FROM account WHERE name=?", name).isEmpty()) throw new IllegalArgumentException("Den Namen gibt es schon");
         return db.exec("INSERT INTO account(name,pw,created) VALUES(?,?,?)", name, hash(pw), LocalDateTime.now().format(Heroes.TS));
     }
 
+    /** Vom Spieler selbst gesetzt: mindestens 8 Zeichen. */
     public void setPassword(long id, String pw) {
         checkPw(pw);
+        store(id, pw);
+    }
+
+    /** Vom Meister gesetzt (Startpasswort): keine Mindestlänge. */
+    public void setStartPassword(long id, String pw) {
+        checkStartPw(pw);
+        store(id, pw);
+    }
+
+    private void store(long id, String pw) {
         db.exec("UPDATE account SET pw=?, tokver=tokver+1 WHERE id=?", hash(pw), id); // meldet alte Sitzungen ab
     }
 
@@ -104,6 +115,11 @@ public final class Accounts {
     }
 
     // --- Passwörter: PBKDF2 aus der Standardbibliothek
+
+    private static void checkStartPw(String pw) {
+        if (pw == null || pw.isEmpty()) throw new IllegalArgumentException("Passwort fehlt");
+        if (pw.length() > 200) throw new IllegalArgumentException("Passwort zu lang");
+    }
 
     private static void checkPw(String pw) {
         if (pw == null || pw.length() < 8) throw new IllegalArgumentException("Passwort: mindestens 8 Zeichen");

@@ -157,7 +157,7 @@ public final class App {
             ctx.json(Map.of("id", accounts.create(str(b.get("name")), str(b.get("password")))));
         });
         m.post("/api/accounts/{id}/password", ctx -> {
-            accounts.setPassword(Long.parseLong(ctx.pathParam("id")), str(ctx.bodyAsClass(Map.class).get("password")));
+            accounts.setStartPassword(Long.parseLong(ctx.pathParam("id")), str(ctx.bodyAsClass(Map.class).get("password")));
             ctx.json(Map.of("ok", true));
         });
         m.delete("/api/accounts/{id}", ctx -> { accounts.delete(Long.parseLong(ctx.pathParam("id"))); ctx.json(Map.of("ok", true)); });
