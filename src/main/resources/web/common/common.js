@@ -33,7 +33,11 @@ class Player{
   url(f){const [p,q]=f.split('?');return '/audio/'+p.split('/').map(encodeURIComponent).join('/')+(q?'?'+q:'')}
   /** Position laut Server, auf jetzt hochgerechnet */
   pos(k){const c=this.state&&this.state.ch[k];if(!c)return 0;return c.playing?c.pos+(Date.now()+this.skew-this.state.serverNow)/1000:c.pos}
-  apply(st){this.state=st;this.skew=st.serverNow-Date.now();
+  /** Uhrabgleich mit dem Server. Verspätete Nachrichten (Proxy puffert) lassen den Server-Zeitpunkt älter wirken;
+   *  darum zählt die größte Differenz der letzten Minuten, nicht die letzte. Sonst springt der Titel zurück. */
+  clock(serverNow){if(!serverNow)return;const s=serverNow-Date.now(),now=Date.now();
+    this.samples=(this.samples||[]).filter(x=>now-x.t<300000);this.samples.push({t:now,s});this.skew=Math.max(...this.samples.map(x=>x.s))}
+  apply(st){this.state=st;this.clock(st.serverNow);
     for(const k in this.a){const c=st.ch[k],el=this.a[k],g=++this.gen[k];
       el.loop=!!c.repeat;el.volume=Math.max(0,Math.min(1,c.volume/100*this.master));
       if(c.file&&el.dataset.f!==c.file){el.dataset.f=c.file;el.src=this.url(c.file)}
@@ -43,6 +47,9 @@ class Player{
         // Während eines laufenden Spulvorgangs nichts anfassen: die Dauer ist dann oft nur geschätzt,
         // ein p%d mit falscher Dauer warf die Position an den Anfang und der Titel hing.
         if(el.seeking){el.play().catch(()=>{});return}
+        // Gleicher Startpunkt wie zuletzt und der Titel läuft: nichts korrigieren (Lautstärke, Wiederholen, Zuhörer usw.)
+        if(el.dataset.anchor===c.anchor&&!el.paused)return;
+        el.dataset.anchor=c.anchor;
         let p=this.pos(k);const d=el.duration;
         if(d&&isFinite(d)&&p>=d){if(c.repeat)p=p%d;else{el.pause();return}}
         if(Math.abs(el.currentTime-p)>2){try{el.currentTime=p}catch(e){}}
@@ -109,7 +116,7 @@ document.addEventListener('click',e=>{const a=e.target.closest('a[data-pdf]');if
  */
 function liveEvents(url,onMsg,onStatus=()=>{}){let es=null,last=Date.now(),stopped=false;
   const open=()=>{if(es)es.close();es=new EventSource(url);last=Date.now();
-    es.addEventListener('msg',ev=>{last=Date.now();onStatus(true);let m;try{m=JSON.parse(ev.data)}catch(_){return}if(m.type!=='ping')onMsg(m)});
+    es.addEventListener('msg',ev=>{last=Date.now();onStatus(true);let m;try{m=JSON.parse(ev.data)}catch(_){return}if(m.type==='ping'){try{pl.clock(m.serverNow)}catch(_){}}else onMsg(m)});
     es.onopen=()=>{last=Date.now();onStatus(true)};
     es.onerror=()=>{onStatus(false);if(es.readyState===2)setTimeout(()=>{if(!stopped)open()},2000)}};
   const dog=setInterval(()=>{if(!stopped&&Date.now()-last>35000){onStatus(false);open()}},5000);

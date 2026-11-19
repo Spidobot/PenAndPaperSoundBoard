@@ -217,3 +217,4 @@ a.btn{text-decoration:none;color:inherit;display:inline-flex;align-items:center}
 .pctl{display:grid;gap:4px;padding:8px 10px;border:1px solid var(--line);border-radius:4px;background:var(--panel2)}
 .pctl .hvol{flex:1;min-width:0}
 main:has(> #m-sound:not([hidden])){padding-bottom:16px}
+.pbar [data-act="repeat"]{display:inline-flex;gap:6px;align-items:center;padding:4px 10px;font-size:.85rem;min-width:132px;justify-content:center}

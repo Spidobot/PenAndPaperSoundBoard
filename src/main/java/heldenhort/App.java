@@ -31,6 +31,7 @@ public final class App {
         Heroes heroes = new Heroes(db, data.resolve("helden"));
         Advance advance = new Advance(db, heroes, jar, accounts, mail);
         Sound sound = new Sound(data.resolve("audio"));
+        sound.warmUp();
         if (db.get("secret", null) == null) db.put("secret", HexFormat.of().formatHex(SecureRandom.getInstanceStrong().generateSeed(32)));
 
         String adminPw = env("ADMIN_PASSWORD", "");
@@ -81,6 +82,7 @@ public final class App {
                 try (var in = f.content()) { Files.copy(in, dir.resolve(name), StandardCopyOption.REPLACE_EXISTING); }
                 saved.add(name);
             }
+            sound.rescan(scene);
             ctx.json(Map.of("saved", saved));
         });
         m.sse("/api/sound/events", c -> sound.subscribe(c, false));

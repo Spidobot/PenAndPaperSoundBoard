@@ -57,9 +57,34 @@ public final class Sound {
 
     public Path root() { return root; }
 
-    /** MP3-Liste einer Szene, wie im Original nur *.mp3. */
+    private final Map<String, Map<String, Object>> libCache = new ConcurrentHashMap<>();
+    private final ExecutorService scanner = Executors.newSingleThreadExecutor();
+
+    /**
+     * MP3-Liste einer Szene. Kommt sofort aus dem Speicher; die Platte wird danach im Hintergrund gelesen.
+     * Grund: auf Unraid schläft die Platte oft, das Aufwecken dauert Sekunden und hat den Szenenwechsel blockiert.
+     * Hat sich etwas geändert, bekommen alle eine "lib"-Nachricht und laden die Liste neu.
+     */
     public Map<String, Object> library(String scene) throws Exception {
         if (!SCENES.contains(scene)) throw new IllegalArgumentException("Szene unbekannt");
+        Map<String, Object> c = libCache.get(scene);
+        if (c == null) { c = scan(scene); libCache.put(scene, c); }
+        else scanner.submit(() -> rescan(scene));
+        return c;
+    }
+
+    /** Liste neu von der Platte lesen; bei Änderung alle benachrichtigen. Nach Upload direkt aufrufen. */
+    public void rescan(String scene) {
+        try {
+            Map<String, Object> n = scan(scene);
+            if (!n.equals(libCache.put(scene, n))) broadcast(Map.of("type", "lib", "scene", scene));
+        } catch (Exception e) { System.err.println("Liste " + scene + " nicht lesbar: " + e); }
+    }
+
+    /** Beim Start alle Szenen einmal einlesen, damit schon der erste Wechsel aus dem Speicher kommt. */
+    public void warmUp() { for (String s : SCENES) scanner.submit(() -> rescan(s)); }
+
+    private Map<String, Object> scan(String scene) throws Exception {
         Map<String, Object> out = new LinkedHashMap<>();
         for (String d : List.of("Music", "Sounds")) {
             Path dir = root.resolve(d).resolve(scene);
@@ -131,6 +156,8 @@ public final class Sound {
         ch.forEach((n, k) -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("file", k.file); m.put("playing", k.playing); m.put("repeat", k.repeat); m.put("volume", k.volume); m.put("pos", k.pos());
+            // ändert sich nur bei Titel/Start/Pause/Spulen: nur dann dürfen Browser ihre Position korrigieren
+            m.put("anchor", k.file + "|" + k.playing + "|" + k.offset + "|" + k.since);
             chs.put(n, m);
         });
         Map<String, Object> s = new LinkedHashMap<>();
@@ -140,6 +167,9 @@ public final class Sound {
     }
 
     public void subscribe(SseClient c, boolean player) {
+        // Nginx (Proxy Manager) puffert sonst die Live-Nachrichten und schickt sie verspätet in Blöcken
+        c.ctx().res().setHeader("X-Accel-Buffering", "no");
+        c.ctx().res().setHeader("Cache-Control", "no-cache, no-transform");
         c.keepAlive();
         c.onClose(() -> { clients.remove(c); broadcast(state()); });
         c.ctx().attribute("player", player);

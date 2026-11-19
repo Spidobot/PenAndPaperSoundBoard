@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119i">
+<link rel="stylesheet" href="/common/app.css?v=20261119k">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -170,7 +170,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119i"></script>
+<script src="/common/common.js?v=20261119k"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -234,7 +234,7 @@ function updateList(id){if(!st)return;const c=st.ch[id],el=$(`.plist[data-ch="${
   el.querySelectorAll('[data-pick]').forEach(b=>{const cur=b.dataset.f===c.file;b.setAttribute('aria-current',cur);b.classList.toggle('sel',sel[id]===b.dataset.f);
     b.classList.toggle('starting',starting[id]===b.dataset.f);b.querySelector('.mk').textContent=cur&&c.playing?'▶ ':starting[id]===b.dataset.f?'… ':''});
   const tg=el.querySelector('[data-act="toggle"]');tg.innerHTML=c.playing?IMG('pause','Pause'):IMG('play','Abspielen');tg.setAttribute('aria-pressed',c.playing);tg.title=c.playing?'Pause':'Abspielen';
-  const rp=el.querySelector('[data-act="repeat"]');rp.innerHTML=c.repeat?IMG('rep1','Wiederholen'):IMG('once','Einmal');rp.setAttribute('aria-pressed',c.repeat);rp.title=c.repeat?'Wiederholen (klicken: nur einmal spielen)':'Einmal spielen (klicken: wiederholen)';
+  const rp=el.querySelector('[data-act="repeat"]');rp.innerHTML=c.repeat?IMG('rep1','')+'<span>Wiederholen</span>':IMG('once','')+'<span>Einmal</span>';rp.setAttribute('aria-pressed',c.repeat);rp.title=c.repeat?'Wiederholen (klicken: nur einmal spielen)':'Einmal spielen (klicken: wiederholen)';
   el.querySelector(`[data-now="${id}"]`).textContent=c.file?c.file.split('/').pop().replace(/\.mp3$/i,''):'nichts gewählt';
   const vol=el.querySelector('[data-chvol]');if(document.activeElement!==vol){vol.value=c.volume;el.querySelector('[data-volv]').textContent=c.volume}
   updateStatus(id)}
@@ -258,14 +258,17 @@ function renderSound(){renderScenes();renderFx();
   for(const id of ['music','bg']){const key=JSON.stringify([st&&st.scene,lib&&lib[CH[id][1]],qs[id]]);
     if(key!==lastFile[id+'k']){lastFile[id+'k']=key;renderList(id)}else updateList(id)}
   if(st){$('#onair').hidden=!(st.ch.music.playing||st.ch.bg.playing);$('#lstn').textContent=st.listeners+' Zuhörer';$('#bertha').checked=st.berthaAt>0;if(document.activeElement!==$('#fxvol')){$('#fxvol').value=st.fxVolume;$('#fxvolv').textContent=st.fxVolume}}}
-async function loadLib(){try{lib=await api('/api/sound/library?scene='+encodeURIComponent(st.scene))}catch(e){toastErr(e.message)}renderSound()}
+// Listen je Szene im Browser merken: Szenenwechsel zeigt sofort die bekannte Liste, die frische kommt nach
+const libs={};
+async function loadLib(){const sc=st.scene;if(libs[sc]){lib=libs[sc];renderSound()}
+  try{const l=await api('/api/sound/library?scene='+encodeURIComponent(sc));libs[sc]=l;if(st.scene===sc){lib=l;renderSound()}}catch(e){toastErr(e.message)}}
 const sel={music:null,bg:null}; // Auswahl pro Tab, läuft erst nach Play/Doppelklick
 function start(id,file){starting[id]=file;sel[id]=file;updateList(id);cmd({action:'pick',ch:id,file})}
 $('#m-sound').addEventListener('dblclick',e=>{const b=e.target.closest('[data-pick]');if(b)start(b.dataset.pick,b.dataset.f)});
 $('#m-sound').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||b.disabled)return;
   if(b.classList.contains('tog')){b.classList.remove('bump');void b.offsetWidth;b.classList.add('bump')}
-  if(b.dataset.sc)cmd({action:'scene',scene:b.dataset.sc});
+  if(b.dataset.sc&&st&&st.scene!==b.dataset.sc){st.scene=b.dataset.sc;lib=libs[b.dataset.sc]||lib;renderSound();loadLib();cmd({action:'scene',scene:b.dataset.sc})} // sofort umschalten
   else if(b.dataset.folder!==undefined)showUpl();
   else if(b.dataset.fx){b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),600);cmd({action:'fx',key:b.dataset.fx})}
   else if(b.dataset.pick){sel[b.dataset.pick]=b.dataset.f;updateList(b.dataset.pick)} // nur auswählen
@@ -276,7 +279,7 @@ $('#m-sound').addEventListener('click',e=>{
     else toast('Erst einen Titel wählen')}
   else if(b.dataset.act==='repeat'){const k=b.dataset.ch,c=st.ch[k],a=pl.a[k];
     const pos=pl.enabled&&!a.paused?a.currentTime:(a.duration&&isFinite(a.duration)?pl.pos(k)%a.duration:undefined);
-    cmd({action:'repeat',ch:k,value:!c.repeat,pos})}
+    c.repeat=!c.repeat;updateList(k);cmd({action:'repeat',ch:k,value:c.repeat,pos})}
 });
 $('#m-sound').addEventListener('input',e=>{const t=e.target;
   if(t.dataset.ls){qs[t.dataset.ls]=t.value;renderList(t.dataset.ls)}
@@ -330,6 +333,7 @@ try{setDark(localStorage.getItem('hh-dark')!=='0')}catch(_){setDark(true)}
 
 function onSound(m){
   if(m.type==='fx'){pl.fx(m.file);return}
+  if(m.type==='lib'){delete libs[m.scene];if(st&&st.scene===m.scene)loadLib();return}
   if(st&&m.serverNow<st.serverNow)return; // ältere Nachricht nach einer schnelleren Befehlsantwort
   const sceneChanged=!st||st.scene!==m.scene;st=m;pl.apply(m);if(sceneChanged)loadLib();else renderSound()}
 liveEvents('/api/sound/events',onSound,ok=>{const l=$('#lstn');if(l)l.classList.toggle('warn',!ok);if(!ok&&l)l.textContent='Verbindung weg, verbinde neu…'});
