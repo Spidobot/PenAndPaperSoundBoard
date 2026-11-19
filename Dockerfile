@@ -1,7 +1,7 @@
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /src
 COPY pom.xml .
-RUN mvn -q -B dependency:go-offline
+RUN for i in 1 2 3; do mvn -q -B org.apache.maven.plugins:maven-dependency-plugin:3.8.1:go-offline && exit 0; sleep 10; done; exit 1
 COPY src src
 RUN mvn -q -B package -DskipTests
 
