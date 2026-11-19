@@ -120,6 +120,23 @@ public final class App {
         m.delete("/api/sound/session", ctx -> { sound.sessionClear(ctx.queryParam("sid")); ctx.json(Map.of("ok", true)); });
         m.sse("/api/sound/events", c -> sound.subscribe(c, false));
         m.get("/api/sound/fxinfo", ctx -> ctx.json(sound.fxInfo()));
+        // Diagnose: was machen die Threads gerade? Bei Hängern im Browser öffnen und den Text schicken.
+        m.get("/api/debug/threads", ctx -> {
+            StringBuilder sb = new StringBuilder("Zeit " + java.time.LocalDateTime.now() + "\n");
+            Map<String, Integer> states = new TreeMap<>();
+            var all = Thread.getAllStackTraces();
+            all.forEach((t, st) -> states.merge(t.getState().toString(), 1, Integer::sum));
+            sb.append("Threads ").append(all.size()).append(" ").append(states).append("\n\n");
+            all.forEach((t, st) -> {
+                if (t.getState() == Thread.State.RUNNABLE || t.getState() == Thread.State.BLOCKED || t.getName().contains("Javalin") || t.getName().contains("Jetty") || t.getName().contains("pool")) {
+                    boolean idle = java.util.Arrays.stream(st).anyMatch(e -> e.getMethodName().equals("idleJobPoll") || e.getClassName().contains("ReservedThreadExecutor") || e.getMethodName().contains("select") || e.getMethodName().equals("getTask"));
+                    if (idle) return;
+                    sb.append(t.getName()).append(" ").append(t.getState()).append("\n");
+                    for (int i = 0; i < Math.min(12, st.length); i++) sb.append("    ").append(st[i]).append("\n");
+                }
+            });
+            ctx.contentType("text/plain; charset=utf-8").result(sb.toString());
+        });
         m.post("/api/sound/cmd", ctx -> { sound.command(ctx.bodyAsClass(Map.class)); ctx.json(sound.state()); });
 
         m.get("/api/config", ctx -> {
@@ -548,6 +565,8 @@ Icons: Icons8 (icons8.com).""";
             c.jetty.multipartConfig.maxFileSize(maxRequest, io.javalin.config.SizeUnit.BYTES);
             c.jetty.multipartConfig.maxTotalRequestSize(maxRequest, io.javalin.config.SizeUnit.BYTES);
             c.showJavalinBanner = false;
+            // Anfragen, die länger als 3 s dauern, ins Docker-Log (Hängern auf die Spur kommen)
+            c.requestLogger.http((ctx, ms) -> { if (ms > 3000 && !ctx.path().startsWith("/audio/")) System.err.println("LANGSAM " + Math.round(ms) + " ms: " + ctx.method() + " " + ctx.path()); });
         });
     }
 
