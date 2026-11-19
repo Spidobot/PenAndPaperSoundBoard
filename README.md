@@ -19,7 +19,7 @@ Beide können über den Nginx Proxy Manager ins Netz. Das Login-Cookie wird auto
    - **Sounds** `/data/audio` → der `_DSA`-Ordner mit `Music/` und `Sounds/`
    - **Helden-XML** `/data/helden` → ein Ordner, den du per FTP erreichst
 3. `ADMIN_PASSWORD` setzen.
-4. `helden.jar` per FTP nach `/mnt/user/appdata/heldenhort/jar/helden.jar` legen. Sie liegt aus Lizenzgründen nicht im Image. Danach aktualisiert sie sich selbst, einmal täglich zur eingestellten Uhrzeit.
+4. `helden.jar` per FTP nach `/mnt/user/appdata/heldenhort/jar/helden.jar` legen. Sie liegt aus Lizenzgründen nicht im Image. Danach wird sie einmal täglich zur eingestellten Uhrzeit über den Update-Server der Helden-Software aktualisiert (MD5-geprüft).
 5. In der Meister-UI unter *Konfiguration*: Spieler-Passwort, Mail-Empfänger und SMTP eintragen, Testmail schicken.
 
 ## Ordner

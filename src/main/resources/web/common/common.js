@@ -26,5 +26,5 @@ class Player{
       if(el.readyState>=1)sync();else el.addEventListener('loadedmetadata',sync,{once:true});
     }}
   setMaster(v){this.master=v;if(this.state)this.apply(this.state)}
-  fx(file){if(!this.enabled)return;const a=new Audio(this.url(file));a.volume=this.master;a.play().catch(()=>{})}
+  fx(file){if(!this.enabled)return;const a=new Audio(this.url(file));a.volume=Math.max(0,Math.min(1,this.master*((this.state?.fxVolume??80)/100)));a.play().catch(()=>{})}
 }

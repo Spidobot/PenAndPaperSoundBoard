@@ -144,3 +144,18 @@ mark{background:var(--acc-soft);color:inherit;padding:0 2px}
 .scenes button:disabled{opacity:.35;cursor:not-allowed}
 .drop.over{border-color:var(--acc);color:var(--fg)}
 .side .logout{margin-top:auto}
+.plist li button.sel{outline:2px solid var(--acc);outline-offset:-2px}
+.plist li button{user-select:none}
+.card{align-content:start}
+#cfg td.mono{overflow-wrap:anywhere}
+.fxrow{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.fxvol{display:inline-flex;gap:8px;align-items:center;font-size:.9rem}
+.fxvol input{width:140px;accent-color:var(--acc)}
+.cfggrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start}
+.paths{display:grid;gap:10px;margin:0}
+.paths dt{font-size:.85rem;overflow-wrap:anywhere}
+.paths dd{margin:0;color:var(--mut);font-size:.85rem}
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;margin:0}
+.kv dt{color:var(--mut)}
+.kv dd{margin:0;overflow-wrap:anywhere}
+#jarinfo p{overflow-wrap:anywhere}

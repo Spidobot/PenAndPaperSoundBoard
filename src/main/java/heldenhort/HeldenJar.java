@@ -10,8 +10,8 @@ import java.util.concurrent.*;
 
 /**
  * Verwaltet /data/jar/helden.jar: eigener ClassLoader (austauschbar nach Update) und tägliches Update.
- * Das Update selbst macht der Updater der Helden-Software (autoUpdater.jar mit -jHeldenJar=...),
- * wir stoßen ihn nur zur eingestellten Uhrzeit an.
+ * Das Update läuft über den Update-Server der Helden-Software (gleiches Protokoll wie deren autoUpdater),
+ * einmal täglich zur eingestellten Uhrzeit.
  */
 public final class HeldenJar {
     static final String UPDATE_SERVER = "https://www.helden-software.de/update/";
@@ -73,19 +73,28 @@ public final class HeldenJar {
         } catch (Exception e) { System.err.println("Update-Job: " + e.getMessage()); }
     }
 
-    /** Prüfen und ggf. aktualisieren. Läuft in eigenen JVMs, damit Statics der Jar unseren Server nicht stören. */
+    /**
+     * Prüfen und ggf. aktualisieren, mit demselben Protokoll wie der autoUpdater der Helden-Software:
+     * index.php?pw=<Kanal>&md5=<MD5 der lokalen Jar> liefert UpdatePath, MD5 und UpdateText der aktuellen Version.
+     * Der autoUpdater selbst braucht ein Fenster und läuft im Container nicht, daher hier nachgebaut.
+     */
     public synchronized String update() {
         String result;
         try {
             if (!present()) throw new IllegalStateException("helden.jar fehlt");
-            String before = md5(jar);
-            String neu = run(List.of(java(), "-Djava.awt.headless=true", "-cp", jar + File.pathSeparator + selfJar(), "heldenhort.UpdateCheckMain"), 120).trim();
-            if (!neu.endsWith("true")) result = "Keine neue Version (" + version() + ")";
+            String local = md5(jar);
+            Map<String, String> info = query("index.php?pw=&md5=" + local);
+            String url = info.get("updatepath"), md5 = info.get("md5"), text = info.getOrDefault("updatetext", "");
+            if (md5 == null || url == null) throw new IOException("Update-Server liefert keine Versionsdaten");
+            if (md5.equalsIgnoreCase(local)) result = "Aktuell (" + version() + ")";
             else {
-                Path upd = fetchUpdater();
-                String out = run(List.of(java(), "-Djava.awt.headless=true", "-jar", upd.toString(), "-jHeldenJar=" + jar.toAbsolutePath(), "-jChannelPw="), 600);
-                if (md5(jar).equals(before)) result = "Update gemeldet, aber Datei unverändert. Ausgabe: " + tail(out);
-                else { reload(); result = "Aktualisiert auf " + version(); }
+                if (!url.startsWith(UPDATE_SERVER)) throw new IOException("Unerwartete Download-Adresse");
+                Path tmp = dir.resolve("helden.jar.temp");
+                try (var in = URI.create(url).toURL().openStream()) { Files.copy(in, tmp, StandardCopyOption.REPLACE_EXISTING); }
+                if (!md5(tmp).equalsIgnoreCase(md5)) { Files.deleteIfExists(tmp); throw new IOException("MD5 der neuen helden.jar stimmt nicht, nichts ersetzt"); }
+                Files.move(tmp, jar, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                reload();
+                result = "Aktualisiert auf " + version() + (text.isBlank() ? "" : " (" + text + ")");
             }
         } catch (Exception e) { result = "Fehler: " + e.getMessage(); }
         db.put("jarLastCheck", LocalDateTime.now().withNano(0).toString().replace('T', ' '));
@@ -94,36 +103,17 @@ public final class HeldenJar {
         return result;
     }
 
-    /** Lädt den offiziellen autoUpdater und prüft die MD5 aus der Antwort des Update-Servers. */
-    private Path fetchUpdater() throws Exception {
+    private static Map<String, String> query(String path) throws IOException {
         Map<String, String> info = new HashMap<>();
-        try (var in = new Scanner(URI.create(UPDATE_SERVER + "index.php?pw=autoUpdater").toURL().openStream(), "UTF-8")) {
+        try (var in = new Scanner(URI.create(UPDATE_SERVER + path).toURL().openStream(), "UTF-8")) {
             while (in.hasNextLine()) { String l = in.nextLine(); int i = l.indexOf('='); if (i > 0) info.put(l.substring(0, i).trim().toLowerCase(), l.substring(i + 1).trim()); }
         }
-        String url = info.get("updatepath"), md5 = info.get("md5");
-        if (url == null || md5 == null || !url.startsWith(UPDATE_SERVER)) throw new IOException("Update-Server liefert keine gültige Updater-Adresse");
-        Path f = dir.resolve("autoUpdater.jar");
-        try (var in = URI.create(url).toURL().openStream()) { Files.copy(in, f, StandardCopyOption.REPLACE_EXISTING); }
-        if (!md5(f).equalsIgnoreCase(md5)) { Files.deleteIfExists(f); throw new IOException("MD5 des autoUpdater stimmt nicht"); }
-        return f;
+        return info;
     }
-
-    private static String run(List<String> cmd, int timeoutSec) throws Exception {
-        Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-        byte[] out = p.getInputStream().readAllBytes();
-        if (!p.waitFor(timeoutSec, TimeUnit.SECONDS)) { p.destroyForcibly(); throw new IOException("Zeitüberschreitung"); }
-        return new String(out);
-    }
-
-    static String java() { return Path.of(System.getProperty("java.home"), "bin", "java").toString(); }
-
-    static String selfJar() throws Exception { return Path.of(HeldenJar.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toString(); }
 
     static String md5(Path f) throws Exception {
         MessageDigest d = MessageDigest.getInstance("MD5");
         try (var in = Files.newInputStream(f)) { in.transferTo(new java.security.DigestOutputStream(OutputStream.nullOutputStream(), d)); }
         return HexFormat.of().formatHex(d.digest());
     }
-
-    static String tail(String s) { return s.length() > 400 ? s.substring(s.length() - 400) : s; }
 }

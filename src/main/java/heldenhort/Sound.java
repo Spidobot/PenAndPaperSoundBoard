@@ -38,6 +38,7 @@ public final class Sound {
     public final Map<String, Channel> ch = new LinkedHashMap<>(Map.of("music", new Channel(70), "bg", new Channel(50)));
     public String scene = "Village";
     public long berthaAt;            // 0 = aus
+    public int fxVolume = 80;        // eigene Lautstärke für die Effekt-Knöpfe
 
     public Sound(Path root) throws Exception {
         this.root = root;
@@ -70,6 +71,8 @@ public final class Sound {
             String s = String.valueOf(c.get("scene"));
             if (!SCENES.contains(s)) throw new IllegalArgumentException("Szene unbekannt");
             scene = s;
+        } else if (action.equals("fxvolume")) {
+            fxVolume = Math.max(0, Math.min(100, ((Number) c.get("value")).intValue()));
         } else if (action.equals("bertha")) {
             berthaAt = Boolean.TRUE.equals(c.get("on")) ? System.currentTimeMillis() + 3_600_000 : 0;
         } else if (action.equals("fx")) {
@@ -107,7 +110,7 @@ public final class Sound {
             chs.put(n, m);
         });
         Map<String, Object> s = new LinkedHashMap<>();
-        s.put("type", "state"); s.put("scene", scene); s.put("ch", chs); s.put("berthaAt", berthaAt);
+        s.put("type", "state"); s.put("scene", scene); s.put("ch", chs); s.put("berthaAt", berthaAt); s.put("fxVolume", fxVolume);
         s.put("serverNow", System.currentTimeMillis()); s.put("listeners", listeners());
         return s;
     }
