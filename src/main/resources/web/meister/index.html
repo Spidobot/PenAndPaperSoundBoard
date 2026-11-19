@@ -152,7 +152,8 @@
           <div class="grid2"><div class="field"><label class="label" for="smtpHost">SMTP-Server</label><input type="text" id="smtpHost"></div><div class="field"><label class="label" for="smtpPort">Port</label><input type="number" id="smtpPort"></div></div>
           <div class="grid2"><div class="field"><label class="label" for="smtpUser">SMTP-Benutzer</label><input type="text" id="smtpUser" autocomplete="off"></div><div class="field"><label class="label" for="smtpPass">SMTP-Passwort</label><input type="password" id="smtpPass" autocomplete="new-password"></div></div>
           <div class="field"><label class="label" for="smtpFrom">Absender (leer = SMTP-Benutzer)</label><input type="email" id="smtpFrom"></div>
-          <button class="btn sm" type="button" id="testmail" style="justify-self:start">Testmail senden</button>
+          <div class="row"><button class="btn sm" type="button" id="testmail">Speichern und Testmail senden</button></div>
+          <div class="resbox" id="mailres" hidden></div>
           <h3>helden.jar</h3>
           <div id="jarinfo" class="small"></div>
           <div class="field"><label class="label" for="updateTime">Tägliche Update-Prüfung (Serverzeit)</label><input type="time" id="updateTime"></div>
@@ -160,9 +161,9 @@
           <div class="row"><button class="btn sm" type="button" id="updnow">Jetzt prüfen</button><button class="btn sm" type="button" id="selftest" title="Baut mit der laufenden helden.jar einen Testhelden komplett durch">Selbsttest</button></div>
           <p class="small mut">Vor jedem Austausch baut der Server mit der neuen Version einen Testhelden. Klappt das nicht, bleibt die bisherige Version aktiv und du bekommst eine Mail.</p>
           <h3>Speicherorte im Container</h3>
-          <dl class="paths"><dt class="mono">/data/audio/Music/&lt;Szene&gt;</dt><dd>Musik (Village, Travel, Dungeon, Castle, Fight)</dd><dt class="mono">/data/audio/Sounds/&lt;Szene&gt;</dt><dd>Hintergrundgeräusche</dd><dt class="mono">/data/audio/Effects</dt><dd>Effekt-Knöpfe (Schatztruhe.mp3, Kuh.mp3 …)</dd><dt class="mono">/data/audio/…</dt><dd>Upload über „Dateiordner“ im Soundboard oder per FTP</dd><dt class="mono">/data/helden</dt><dd>Helden-XML, per FTP befüllbar</dd><dt class="mono">/data/db/heldenhort.sqlite</dt><dd>Einstellungen, Sessions, Freigaben</dd><dt class="mono">/data/jar/helden.jar</dt><dd>ersetzt sich selbst über ihren Updater</dd></dl>
+          <dl class="paths"><dt class="mono">/data/audio/Music/&lt;Szene&gt;</dt><dd>Musik (Village, Travel, Dungeon, Castle, Fight)</dd><dt class="mono">/data/audio/Sounds/&lt;Szene&gt;</dt><dd>Hintergrundgeräusche</dd><dt class="mono">/data/audio/Effects</dt><dd>Effekt-Knöpfe (Schatztruhe.mp3, Kuh.mp3 …)</dd><dt class="mono">/data/audio/…</dt><dd>Upload im Soundboard (nur Music/Sounds) oder per FTP</dd><dt class="mono">/data/helden</dt><dd>Helden-XML, per FTP befüllbar</dd><dt class="mono">/data/db/heldenhort.sqlite</dt><dd>Einstellungen, Sessions, Freigaben</dd><dt class="mono">/data/jar/helden.jar</dt><dd>ersetzt sich selbst über ihren Updater</dd></dl>
         </details>
-        <div class="row"><button class="btn pri" type="submit">Speichern</button></div>
+        <div class="row"><button class="btn pri" type="submit">Speichern</button><span class="savest" id="savest" aria-live="polite"></span></div>
       </form>
     </section>
   </main>
@@ -185,7 +186,7 @@ const CH={music:['Musik','Music'],bg:['Hintergrundgeräusche','Sounds']};
 let st=null,lib=null;const pl=new Player();
 const starting={music:null,bg:null}; // Titel, der gerade gestartet wurde und noch lädt
 const IMG=(k,alt='')=>`<img class="ic" src="${ICON(k)}" alt="${esc(alt)}">`;
-const cmd=b=>api('/api/sound/cmd',{method:'POST',body:b}).catch(e=>toast(e.message));
+const cmd=b=>api('/api/sound/cmd',{method:'POST',body:b}).catch(e=>toastErr(e.message));
 try{$('#hear').checked=localStorage.getItem('hh-hear')!=='0'}catch(e){$('#hear').checked=true}
 pl.enabled=$('#hear').checked;
 document.addEventListener('pointerdown',()=>pl.unlock(),{once:true}); // Effekt-Spieler beim ersten Klick freischalten
@@ -247,7 +248,7 @@ function renderSound(){renderScenes();renderFx();
   for(const id of ['music','bg']){const key=JSON.stringify([st&&st.scene,lib&&lib[CH[id][1]],qs[id]]);
     if(key!==lastFile[id+'k']){lastFile[id+'k']=key;renderList(id)}else updateList(id)}
   if(st){$('#onair').hidden=!(st.ch.music.playing||st.ch.bg.playing);$('#lstn').textContent=st.listeners+' Zuhörer';$('#bertha').checked=st.berthaAt>0;if(document.activeElement!==$('#fxvol')){$('#fxvol').value=st.fxVolume;$('#fxvolv').textContent=st.fxVolume}}}
-async function loadLib(){try{lib=await api('/api/sound/library?scene='+encodeURIComponent(st.scene))}catch(e){toast(e.message)}renderSound()}
+async function loadLib(){try{lib=await api('/api/sound/library?scene='+encodeURIComponent(st.scene))}catch(e){toastErr(e.message)}renderSound()}
 const sel={music:null,bg:null}; // Auswahl pro Tab, läuft erst nach Play/Doppelklick
 function start(id,file){starting[id]=file;sel[id]=file;updateList(id);cmd({action:'pick',ch:id,file})}
 $('#m-sound').addEventListener('dblclick',e=>{const b=e.target.closest('[data-pick]');if(b)start(b.dataset.pick,b.dataset.f)});
@@ -288,7 +289,7 @@ async function fxDiag(){let r;try{r=await api('/api/sound/fxinfo')}catch(e){retu
     <p class="small mut">„Test“ spielt die Datei direkt in diesem Browser ab, auch wenn „Ton in diesem Tab“ aus ist.</p>`}
 $('#fxDiag').addEventListener('click',e=>{const b=e.target.closest('[data-fxtest]');if(!b)return;const a=new Audio('/audio/'+b.dataset.fxtest.split('/').map(encodeURIComponent).join('/')+'?t='+Date.now());
   a.onerror=()=>toast('Kann '+b.dataset.fxtest+' nicht abspielen: '+(a.error?('Code '+a.error.code+' '+(a.error.message||'')):'unbekannt'));
-  a.onplaying=()=>toast(b.dataset.fxtest+' spielt ('+a.duration.toFixed(1)+' s)');a.play().catch(x=>toast('Abspielen blockiert: '+x.message))});
+  a.onplaying=()=>toast(b.dataset.fxtest+' spielt ('+a.duration.toFixed(1)+' s)');a.play().catch(x=>toastErr('Abspielen blockiert: '+x.message))});
 pl.onFxError=(file,why)=>toast('Effekt '+file+' konnte hier nicht abgespielt werden: '+why);$('#uplClose').onclick=()=>$('#upl').hidden=true;
 function upload(files){files=[...files].filter(f=>/\.mp3$/i.test(f.name));if(!files.length)return toast('Nur MP3-Dateien');
   const fd=new FormData();fd.append('target',$('#uplTarget').value);fd.append('scene',st.scene);files.forEach(f=>fd.append('files',f));
@@ -323,7 +324,7 @@ es.addEventListener('msg',ev=>{const m=JSON.parse(ev.data);
 
 /* ---------- Helden ---------- */
 let heroes=[],selHero=null;
-async function loadHeroes(){try{[heroes,accts]=await Promise.all([api('/api/heroes'),api('/api/accounts')])}catch(e){return toast(e.message)}renderHeroes()}
+async function loadHeroes(){try{[heroes,accts]=await Promise.all([api('/api/heroes'),api('/api/accounts')])}catch(e){return toastErr(e.message)}renderHeroes()}
 function renderHeroes(){
   const n=heroes.filter(h=>h.status==='neu').length;$('#hBadge').textContent=n;$('#hBadge').hidden=!n;
   $('#htab').innerHTML=heroes.map(h=>`<tr${h.file===selHero?' class="best"':''}><td><b>${esc(h.name)}</b>${h.error?` <span class="err small">${esc(h.error)}</span>`:''}</td><td><select class="owner" data-file="${esc(h.file)}" aria-label="Besitzer von ${esc(h.name)}" style="width:auto"><option value="">– niemand (${esc(h.player||'FTP')}) –</option>${accts.map(a=>`<option value="${a.id}"${String(a.id)===String(h.account)?' selected':''}>${esc(a.name)}</option>`).join('')}</select></td><td>${esc(h.profession)}</td><td class="mono small">${esc(h.received)}</td>
@@ -349,12 +350,12 @@ function renderFg(){
    </div>`).join('')}</div>`).join('')||'<p class="mut">Keine Anfragen.</p>';
 }
 $('#fglist').onclick=async e=>{const b=e.target.closest('[data-fg]');if(!b)return;
-  try{await api('/api/approvals/items/'+b.dataset.fg,{method:'POST',body:{status:b.dataset.s,comment:$(`[data-fgc="${b.dataset.fg}"]`).value}});b.blur();toast(b.dataset.s+'. Der Spieler sieht es beim nächsten Abgleich.');loadFg()}catch(x){toast(x.message)}};
+  try{await api('/api/approvals/items/'+b.dataset.fg,{method:'POST',body:{status:b.dataset.s,comment:$(`[data-fgc="${b.dataset.fg}"]`).value}});b.blur();toast(b.dataset.s+'. Der Spieler sieht es beim nächsten Abgleich.');loadFg()}catch(x){toastErr(x.message)}};
 setInterval(loadFg,10000);setInterval(()=>{if(location.hash==='#m-helden')loadHeroes()},15000);
 
 /* ---------- Session ---------- */
 let sessions=[],cur=null,openSess=null;
-async function loadSession(){try{[sessions,heroes]=await Promise.all([api('/api/sessions'),api('/api/heroes')])}catch(e){return toast(e.message)}
+async function loadSession(){try{[sessions,heroes]=await Promise.all([api('/api/sessions'),api('/api/heroes')])}catch(e){return toastErr(e.message)}
   if(openSess!=null&&sessions.find(s=>s.id===openSess))cur=openSess;else cur=sessions[0]?.id??null; // immer die neueste, außer explizit geöffnet
   openSess=null;
   $('#sessSel').innerHTML=sessions.map(s=>`<option value="${s.id}"${s.id===cur?' selected':''}>${esc(s.name)}</option>`).join('')||'<option>Keine Session</option>';
@@ -366,7 +367,7 @@ function renderPick(){const set=inSess();
 $('#sessSel').onchange=e=>{cur=+e.target.value;renderPick();renderSearch();renderAttr();renderAward()};
 /* ---------- Sessions verwalten ---------- */
 let confirmDel=null;
-async function loadSessions(){try{[sessions,heroes]=await Promise.all([api('/api/sessions'),api('/api/heroes')])}catch(e){return toast(e.message)}renderSessions()}
+async function loadSessions(){try{[sessions,heroes]=await Promise.all([api('/api/sessions'),api('/api/heroes')])}catch(e){return toastErr(e.message)}renderSessions()}
 function renderSessions(){
   $('#sesstab').innerHTML=sessions.map(s=>{const n=JSON.parse(s.heroes||'[]').length;
     return `<tr><td><input type="text" value="${esc(s.name)}" data-ren="${s.id}" aria-label="Name"></td><td class="mono small">${esc(s.created||'–')}</td><td>${n}</td>
@@ -375,16 +376,16 @@ function renderSessions(){
         :`<button class="btn sm" data-open="${s.id}">Öffnen</button><button class="btn sm danger" data-ask="${s.id}">Löschen</button>`}</div></td></tr>`}).join('')
     ||'<tr><td colspan="4" class="empty">Noch keine Session. Oben anlegen.</td></tr>'}
 $('#sessForm').onsubmit=async e=>{e.preventDefault();const n=$('#sessName').value.trim();if(!n)return toast('Name der Session fehlt');
-  try{await api('/api/sessions',{method:'POST',body:{name:n}});$('#sessName').value='';toast('Session angelegt');loadSessions()}catch(x){toast(x.message)}};
+  try{await api('/api/sessions',{method:'POST',body:{name:n}});$('#sessName').value='';toast('Session angelegt');loadSessions()}catch(x){toastErr(x.message)}};
 $('#sesstab').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
   if(b.dataset.open){openSess=+b.dataset.open;location.hash='m-session'}
   else if(b.dataset.ask){confirmDel=+b.dataset.ask;renderSessions()}
   else if(b.dataset.nodel!==undefined){confirmDel=null;renderSessions()}
-  else if(b.dataset.del){try{await api('/api/sessions/'+b.dataset.del,{method:'DELETE'});confirmDel=null;toast('Session gelöscht');loadSessions()}catch(x){toast(x.message)}}};
+  else if(b.dataset.del){try{await api('/api/sessions/'+b.dataset.del,{method:'DELETE'});confirmDel=null;toast('Session gelöscht');loadSessions()}catch(x){toastErr(x.message)}}};
 $('#sesstab').addEventListener('change',async e=>{const id=e.target.dataset.ren;if(!id)return;
-  try{await api('/api/sessions/'+id,{method:'PUT',body:{name:e.target.value}});toast('Umbenannt')}catch(x){toast(x.message);loadSessions()}});
+  try{await api('/api/sessions/'+id,{method:'PUT',body:{name:e.target.value}});toast('Umbenannt')}catch(x){toastErr(x.message);loadSessions()}});
 $('#hpick').onchange=async()=>{const files=$$('#hpick input:checked').map(i=>i.dataset.s);
-  try{await api('/api/sessions/'+cur,{method:'PUT',body:{heroes:files}});sessions.find(s=>s.id===cur).heroes=JSON.stringify(files);renderSearch();renderAttr();renderAward()}catch(e){toast(e.message)}};
+  try{await api('/api/sessions/'+cur,{method:'PUT',body:{heroes:files}});sessions.find(s=>s.id===cur).heroes=JSON.stringify(files);renderSearch();renderAttr();renderAward()}catch(e){toastErr(e.message)}};
 const quick=['Sinnenschärfe','Gefahreninstinkt','Selbstbeherrschung','Schwimmen','Menschenkenntnis','Schleichen','IN','MU'];
 $('#quick').innerHTML=quick.map(q=>`<button class="chip" data-q="${q}">${q}</button>`).join('');
 $('#quick').onclick=e=>{const b=e.target.closest('[data-q]');if(b){$('#q').value=b.dataset.q;$('#qcat').value='';renderSearch()}};
@@ -433,11 +434,11 @@ $('#awardCard').addEventListener('keydown',e=>{const t=e.target;if(t.dataset.aws
 $('#awardCard').addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;
   if(b.dataset.awrm){awSe.splice(+b.dataset.awrm,1);renderAward()}
   if(b.dataset.awxr){awOv[b.dataset.awxr].se.splice(+b.dataset.i,1);renderAward()}
-  if(b.dataset.awdel){await api('/api/awards/'+b.dataset.awdel,{method:'DELETE'}).catch(x=>toast(x.message));loadPending()}
+  if(b.dataset.awdel){await api('/api/awards/'+b.dataset.awdel,{method:'DELETE'}).catch(x=>toastErr(x.message));loadPending()}
   if(b.id==='awAdd'){const list=sessHeroes().map(h=>{const o=awOv[h.file]||{};return {file:h.file,ap:+(o.ap??$('#awAp').value)||0,se:[...awSe,...(o.se||[])]}});
-    try{await api('/api/awards',{method:'POST',body:{awards:list,note:$('#awNote').value}});awOv={};awSe=[];$('#awAp').value=0;toast('Vorgemerkt. Mit „Aussenden“ geht es an die Helden.');renderAward()}catch(x){toast(x.message)}}
+    try{await api('/api/awards',{method:'POST',body:{awards:list,note:$('#awNote').value}});awOv={};awSe=[];$('#awAp').value=0;toast('Vorgemerkt. Mit „Aussenden“ geht es an die Helden.');renderAward()}catch(x){toastErr(x.message)}}
   if(b.id==='awSend'){if(b.dataset.ask!=='1'){b.dataset.ask='1';b.textContent='Wirklich aussenden?';return}
-    try{const r=await api('/api/awards/send',{method:'POST'});toast('Ausgesendet: '+r.done.join(' · '));renderAward()}catch(x){toast(x.message)}}});
+    try{const r=await api('/api/awards/send',{method:'POST'});toast('Ausgesendet: '+r.done.join(' · '));renderAward()}catch(x){toastErr(x.message)}}});
 
 function renderAttr(){const hs=sessHeroes(),ks=['MU','KL','IN','CH','FF','GE','KO','KK'];
   $('#attrtab').innerHTML=hs.length?'<thead><tr><th>Held</th>'+ks.map(k=>`<th class="mono">${k}</th>`).join('')+'</tr></thead><tbody>'+
@@ -474,8 +475,8 @@ function fillSheet(root,h){
     const sap=e.target.closest('[data-sap]');
     if(sap){const v=+root.querySelector('.sapv').value;if(!(v>0))return toast('AP eintragen');
       if(sap.dataset.ask!=='1'){sap.dataset.ask='1';sap.textContent=v+' AP wirklich gutschreiben?';return}
-      try{const r=await api('/api/heroes/'+encodeURIComponent(h.file)+'/ap',{method:'POST',body:{ap:v,note:root.querySelector('.sapn').value}});toast('Gutgeschrieben: '+r.done.join(' · '));sap.dataset.ask='';sap.textContent='Sofort gutschreiben';root.querySelector('.sapv').value='';loadHeroes()}catch(x){toast(x.message)}}
-    if(e.target.closest('[data-take]')){try{await api('/api/heroes/'+encodeURIComponent(h.file)+'/accept',{method:'POST'});toast('Held übernommen');h.status='übernommen';loadHeroes()}catch(x){toast(x.message)}}}}
+      try{const r=await api('/api/heroes/'+encodeURIComponent(h.file)+'/ap',{method:'POST',body:{ap:v,note:root.querySelector('.sapn').value}});toast('Gutgeschrieben: '+r.done.join(' · '));sap.dataset.ask='';sap.textContent='Sofort gutschreiben';root.querySelector('.sapv').value='';loadHeroes()}catch(x){toastErr(x.message)}}
+    if(e.target.closest('[data-take]')){try{await api('/api/heroes/'+encodeURIComponent(h.file)+'/accept',{method:'POST'});toast('Held übernommen');h.status='übernommen';loadHeroes()}catch(x){toastErr(x.message)}}}}
 function openSheet(file){const h=heroes.find(x=>x.file===file);if(!h)return;const d=$('#sheet');
   $('#sheetbody').innerHTML=sheetHtml(h,true);fillSheet($('#sheetbody'),h);if(!d.open)d.showModal();$('#sheetbody .sq').focus()}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-sheet]');if(b)openSheet(b.dataset.sheet)});
@@ -484,7 +485,7 @@ $('#sheet').addEventListener('click',e=>{if(e.target===$('#sheet'))$('#sheet').c
 /* ---------- Spieler-Konten ---------- */
 let accts=[],accConfirm=null,accPwOpen=null;
 async function loadAccts(){try{accts=await api('/api/accounts')}catch(e){}}
-async function loadAccounts(){try{[accts,heroes]=await Promise.all([api('/api/accounts'),api('/api/heroes')])}catch(e){return toast(e.message)}renderAccounts()}
+async function loadAccounts(){try{[accts,heroes]=await Promise.all([api('/api/accounts'),api('/api/heroes')])}catch(e){return toastErr(e.message)}renderAccounts()}
 function renderAccounts(){
   $('#acctab').innerHTML=accts.map(a=>{const n=heroes.filter(h=>String(h.account)===String(a.id)).length;
     const mail=a.email?`${esc(a.email)} <span class="pill ok">bestätigt</span>`:a.email_pending?`${esc(a.email_pending)} <span class="pill warn">unbestätigt</span>`:'<span class="mut">keine</span>';
@@ -494,17 +495,17 @@ function renderAccounts(){
     return `<tr><td><b>${esc(a.name)}</b></td><td class="small">${mail}</td><td class="mono small">${esc(a.created||'')}</td><td>${n}</td><td><label class="small" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" data-aup="${a.id}"${a.can_upload==1?' checked':''}> darf</label></td><td><div class="row" style="flex-wrap:nowrap">${act}</div></td></tr>`}).join('')
     ||'<tr><td colspan="6" class="empty">Noch keine Spieler. Oben anlegen.</td></tr>'}
 $('#accForm').onsubmit=async e=>{e.preventDefault();
-  try{await api('/api/accounts',{method:'POST',body:{name:$('#accName').value,password:$('#accPw').value}});toast('Spieler angelegt. Name und Startpasswort weitergeben.');$('#accName').value='';$('#accPw').value='';loadAccounts()}catch(x){toast(x.message)}};
+  try{await api('/api/accounts',{method:'POST',body:{name:$('#accName').value,password:$('#accPw').value}});toast('Spieler angelegt. Name und Startpasswort weitergeben.');$('#accName').value='';$('#accPw').value='';loadAccounts()}catch(x){toastErr(x.message)}};
 $('#acctab').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
   if(b.dataset.aask){accConfirm=+b.dataset.aask;accPwOpen=null;renderAccounts()}
   else if(b.dataset.apw){accPwOpen=+b.dataset.apw;accConfirm=null;renderAccounts();$('#apw-'+b.dataset.apw).focus()}
   else if(b.dataset.ano!==undefined){accConfirm=accPwOpen=null;renderAccounts()}
-  else if(b.dataset.adel){try{await api('/api/accounts/'+b.dataset.adel,{method:'DELETE'});accConfirm=null;toast('Konto gelöscht');loadAccounts()}catch(x){toast(x.message)}}
-  else if(b.dataset.apwset){try{await api('/api/accounts/'+b.dataset.apwset+'/password',{method:'POST',body:{password:$('#apw-'+b.dataset.apwset).value}});accPwOpen=null;toast('Passwort gesetzt, alte Anmeldungen sind abgemeldet');renderAccounts()}catch(x){toast(x.message)}}};
+  else if(b.dataset.adel){try{await api('/api/accounts/'+b.dataset.adel,{method:'DELETE'});accConfirm=null;toast('Konto gelöscht');loadAccounts()}catch(x){toastErr(x.message)}}
+  else if(b.dataset.apwset){try{await api('/api/accounts/'+b.dataset.apwset+'/password',{method:'POST',body:{password:$('#apw-'+b.dataset.apwset).value}});accPwOpen=null;toast('Passwort gesetzt, alte Anmeldungen sind abgemeldet');renderAccounts()}catch(x){toastErr(x.message)}}};
 $('#acctab').addEventListener('change',async e=>{const c=e.target.closest('[data-aup]');if(!c)return;
-  try{await api('/api/accounts/'+c.dataset.aup+'/upload',{method:'POST',body:{on:c.checked}});toast(c.checked?'Darf jetzt Helden-XML hochladen':'Hochladen gesperrt')}catch(x){toast(x.message);c.checked=!c.checked}});
+  try{await api('/api/accounts/'+c.dataset.aup+'/upload',{method:'POST',body:{on:c.checked}});toast(c.checked?'Darf jetzt Helden-XML hochladen':'Hochladen gesperrt')}catch(x){toastErr(x.message);c.checked=!c.checked}});
 document.addEventListener('change',async e=>{const s=e.target.closest('select.owner');if(!s)return;
-  try{await api('/api/heroes/'+encodeURIComponent(s.dataset.file)+'/owner',{method:'POST',body:{account:s.value?+s.value:null}});toast('Besitzer gespeichert');const h=heroes.find(x=>x.file===s.dataset.file);if(h){h.account=s.value?+s.value:null}}catch(x){toast(x.message)}});
+  try{await api('/api/heroes/'+encodeURIComponent(s.dataset.file)+'/owner',{method:'POST',body:{account:s.value?+s.value:null}});toast('Besitzer gespeichert');const h=heroes.find(x=>x.file===s.dataset.file);if(h){h.account=s.value?+s.value:null}}catch(x){toastErr(x.message)}});
 
 /* ---------- Termine ---------- */
 let polls=[],pollDel=null;
@@ -512,7 +513,7 @@ function addOpt(v=''){const d=document.createElement('div');d.className='row';d.
   d.innerHTML=`<input type="datetime-local" class="popt" value="${esc(v)}" aria-label="Termin" style="width:auto"><button type="button" class="btn sm" data-rm aria-label="Termin entfernen">✕</button>`;$('#pOpts').append(d)}
 $('#pAdd').onclick=()=>addOpt();
 $('#pOpts').onclick=e=>{if(e.target.closest('[data-rm]'))e.target.closest('.row').remove()};
-async function loadPolls(){let ss;try{[polls,ss]=await Promise.all([api('/api/polls'),api('/api/sessions')])}catch(e){return toast(e.message)}
+async function loadPolls(){let ss;try{[polls,ss]=await Promise.all([api('/api/polls'),api('/api/sessions')])}catch(e){return toastErr(e.message)}
   const cur=$('#pSess').value;$('#pSess').innerHTML='<option value="">alle Spieler-Konten</option>'+ss.map(s=>`<option value="${s.id}">Session: ${esc(s.name)}</option>`).join('');$('#pSess').value=cur;
   if(!$('#pOpts').children.length){addOpt();addOpt()}
   $('#pollList').innerHTML=polls.map(p=>{const need=p.voters.length*p.options.length,have=p.votes.filter(v=>p.voters.some(x=>String(x.id)===String(v.account))).length;
@@ -527,32 +528,40 @@ async function loadPolls(){let ss;try{[polls,ss]=await Promise.all([api('/api/po
         <button class="btn sm pri" data-pfix="${p.id}">Fixieren und Einladung senden</button></div>`}</div>`}).join('')||'<p class="mut">Noch keine Abstimmung.</p>'}
 $('#pollForm').onsubmit=async e=>{e.preventDefault();const opts=$$('.popt').map(i=>i.value).filter(Boolean);
   try{await api('/api/polls',{method:'POST',body:{title:$('#pTitle').value,note:$('#pNote').value,session:$('#pSess').value?+$('#pSess').value:null,options:opts}});
-    toast('Abstimmung gestartet');$('#pTitle').value='';$('#pNote').value='';$('#pOpts').innerHTML='';loadPolls()}catch(x){toast(x.message)}};
+    toast('Abstimmung gestartet');$('#pTitle').value='';$('#pNote').value='';$('#pOpts').innerHTML='';loadPolls()}catch(x){toastErr(x.message)}};
 $('#pollList').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
   if(b.dataset.pask){pollDel=+b.dataset.pask;loadPolls()}
-  if(b.dataset.pdel){try{await api('/api/polls/'+b.dataset.pdel,{method:'DELETE'});pollDel=null;loadPolls()}catch(x){toast(x.message)}}
+  if(b.dataset.pdel){try{await api('/api/polls/'+b.dataset.pdel,{method:'DELETE'});pollDel=null;loadPolls()}catch(x){toastErr(x.message)}}
   if(b.dataset.pfix){const id=b.dataset.pfix;try{const r=await api('/api/polls/'+id+'/fix',{method:'POST',body:{option:+$('#fx-'+id).value,hours:+$('#fh-'+id).value}});
-    toast(r.sent.length?'Einladung an '+r.sent.join(', ')+' und dich verschickt':'Fixiert. Kein Spieler hat eine bestätigte Mail-Adresse, Einladung nur an dich.');loadPolls()}catch(x){toast(x.message)}}
-  if(b.dataset.pclose){try{await api('/api/polls/'+b.dataset.pclose+'/close',{method:'POST',body:{closed:b.dataset.c==='1'}});loadPolls()}catch(x){toast(x.message)}}};
+    toast(r.sent.length?'Einladung an '+r.sent.join(', ')+' und dich verschickt':'Fixiert. Kein Spieler hat eine bestätigte Mail-Adresse, Einladung nur an dich.');loadPolls()}catch(x){toastErr(x.message)}}
+  if(b.dataset.pclose){try{await api('/api/polls/'+b.dataset.pclose+'/close',{method:'POST',body:{closed:b.dataset.c==='1'}});loadPolls()}catch(x){toastErr(x.message)}}};
 setInterval(()=>{if(location.hash==='#m-termine'&&!$('#pollForm').contains(document.activeElement))loadPolls()},15000);
 
 /* ---------- Konfiguration ---------- */
 const CFG=['steigerLimit','greeting','impressum','mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];
 // Speichern erst nach erfolgreichem Laden: sonst würden leere Felder die gespeicherte Konfiguration überschreiben
 async function loadCfg(){const sb=$('#cfg button[type=submit]');sb.disabled=true;$('#cfgErr').hidden=true;
-  try{const c=await api('/api/config');CFG.forEach(k=>$('#'+k).value=c[k]??'');sb.disabled=false;loadJar()}
+  try{const c=await api('/api/config');CFG.forEach(k=>$('#'+k).value=c[k]??'');sb.disabled=false;saveSt('','');loadJar()}
   catch(e){$('#cfgErr').hidden=false;$('#cfgErrMsg').textContent=e.message}}
 async function loadJar(){try{const j=await api('/api/jar');
   $('#jarinfo').innerHTML=j.present?`<dl class="kv"><dt>Installiert</dt><dd class="mono">${esc(j.version||'?')}</dd>
    <dt>Letzte Prüfung</dt><dd class="mono">${esc(j.lastCheck||'noch nie')}</dd>
    <dt>Ergebnis</dt><dd>${esc(j.lastResult||'–')}</dd></dl>
    <p class="small mut mono">Serverzeit: ${esc(j.serverTime)} · ${esc(j.timezone)}</p>`
-   :`<p class="err">helden.jar fehlt. Bitte per FTP nach <span class="mono">${esc(j.path)}</span> legen.</p>`}catch(e){toast(e.message)}}
-$('#cfg').onsubmit=async e=>{e.preventDefault();const b={};CFG.forEach(k=>b[k]=$('#'+k).value);
-  try{await api('/api/config',{method:'PUT',body:b});toast('Gespeichert. Update-Prüfung täglich '+b.updateTime+' Serverzeit');loadJar()}catch(x){toast(x.message)}};
-$('#testmail').onclick=async()=>{toast('Sende Testmail…');try{await api('/api/config/testmail',{method:'POST'});toast('Testmail verschickt')}catch(e){toast('Mail fehlgeschlagen: '+e.message)}};
-$('#selftest').onclick=async()=>{toast('Selbsttest läuft…');try{const r=await api('/api/jar/selftest',{method:'POST'});toast(r.result)}catch(e){toast('Selbsttest gescheitert: '+e.message)}};
-$('#updnow').onclick=async()=>{toast('Prüfe… das kann ein paar Minuten dauern');try{const r=await api('/api/jar/update',{method:'POST'});toast(r.result);loadJar()}catch(e){toast(e.message)}};
+   :`<p class="err">helden.jar fehlt. Bitte per FTP nach <span class="mono">${esc(j.path)}</span> legen.</p>`}catch(e){toastErr(e.message)}}
+// Speicherstand sichtbar: grün mit Uhrzeit, gelb bei ungespeicherten Änderungen, rot bei Fehler
+function saveSt(cls,txt){const s=$('#savest');s.className='savest '+cls;s.textContent=txt}
+$('#cfg').addEventListener('input',()=>saveSt('dirty','● Ungespeicherte Änderungen'));
+async function saveCfg(){const b={};CFG.forEach(k=>b[k]=$('#'+k).value);
+  try{await api('/api/config',{method:'PUT',body:b});saveSt('ok','✓ Gespeichert um '+new Date().toLocaleTimeString('de-AT'));loadJar();return true}
+  catch(x){saveSt('bad','✗ Nicht gespeichert: '+x.message);toastErr('Nicht gespeichert: '+x.message);return false}}
+$('#cfg').onsubmit=e=>{e.preventDefault();saveCfg()};
+$('#testmail').onclick=async()=>{const r=$('#mailres');r.hidden=false;r.className='resbox';r.textContent='Speichere und sende Testmail an '+($('#mailTo').value||'(keine Meister-Mail eingetragen)')+' …';
+  if(!await saveCfg()){r.className='resbox bad';r.textContent='Nicht gesendet, weil das Speichern gescheitert ist (siehe oben).';return}
+  try{await api('/api/config/testmail',{method:'POST'});r.className='resbox ok';r.textContent='✓ Testmail verschickt an '+$('#mailTo').value+' ('+new Date().toLocaleTimeString('de-AT')+'). Kommt nichts an: Spam-Ordner prüfen.'}
+  catch(e){r.className='resbox bad';r.textContent='✗ Mail fehlgeschlagen ('+new Date().toLocaleTimeString('de-AT')+'):\n'+e.message}};
+$('#selftest').onclick=async()=>{toast('Selbsttest läuft…');try{const r=await api('/api/jar/selftest',{method:'POST'});toast(r.result)}catch(e){toastErr('Selbsttest gescheitert: '+e.message)}};
+$('#updnow').onclick=async()=>{toast('Prüfe… das kann ein paar Minuten dauern');try{const r=await api('/api/jar/update',{method:'POST'});toast(r.result);loadJar()}catch(e){toastErr(e.message)}};
 
 route();loadFg();loadHeroes();
 </script>

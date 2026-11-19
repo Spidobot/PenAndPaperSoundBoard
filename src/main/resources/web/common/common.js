@@ -1,7 +1,18 @@
 // Gemeinsame Helfer für beide Oberflächen
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function toast(t){let e=$('#toast');if(!e){e=document.createElement('div');e.id='toast';e.className='toast';document.body.append(e)}e.textContent=t;e.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>e.hidden=true,3200)}
+/** Kurze Meldung. Fehler (toastErr) bleiben stehen, bis man sie schließt, und lassen sich kopieren. */
+function toast(t,err){let e=$('#toast');if(e&&!e.querySelector('.tmsg')){e.remove();e=null}
+  if(!e){e=document.createElement('div');e.id='toast';e.className='toast';e.setAttribute('role','status');
+    e.innerHTML='<div class="tmsg"></div><div class="tact"><button type="button" data-tcopy>Kopieren</button><button type="button" data-tx aria-label="Schließen">✕</button></div>';document.body.append(e);
+    e.onclick=async ev=>{if(ev.target.closest('[data-tx]')){e.hidden=true;return}
+      if(ev.target.closest('[data-tcopy]')){const txt=e.querySelector('.tmsg').textContent;
+        try{await navigator.clipboard.writeText(txt)}catch(_){const r=document.createRange();r.selectNodeContents(e.querySelector('.tmsg'));getSelection().removeAllRanges();getSelection().addRange(r);document.execCommand('copy')}
+        ev.target.textContent='Kopiert';setTimeout(()=>ev.target.textContent='Kopieren',1500)}};
+    e.onmouseenter=()=>clearTimeout(toast.h);e.onmouseleave=()=>{if(!e.classList.contains('err'))toast.h=setTimeout(()=>e.hidden=true,2500)}}
+  e.querySelector('.tmsg').textContent=t;e.classList.toggle('err',!!err);e.hidden=false;clearTimeout(toast.h);
+  if(!err)toast.h=setTimeout(()=>e.hidden=true,Math.max(3200,t.length*60))}
+function toastErr(t){toast(t,true)}
 async function api(path,opt={}){
   const r=await fetch(path,{headers:{'Content-Type':'application/json'},credentials:'same-origin',...opt,body:opt.body&&typeof opt.body!=='string'?JSON.stringify(opt.body):opt.body});
   const ct=r.headers.get('content-type')||'';const data=ct.includes('json')?await r.json():await r.text();
@@ -80,7 +91,7 @@ function bgEditor(root,html,save){
   ed.oninput=()=>root.querySelector('[data-bgst]').textContent='nicht gespeichert';
   tb.onmousedown=e=>e.preventDefault();
   tb.onclick=e=>{const c=e.target.closest('[data-cmd]');if(!c)return;document.execCommand(c.dataset.cmd,false,c.dataset.v?`<${c.dataset.v}>`:null);ed.oninput()};
-  root.querySelector('[data-bgsave]').onclick=async()=>{try{await save(ed.innerHTML);root.querySelector('[data-bgst]').textContent='gespeichert';toast('Backgroundstory gespeichert')}catch(x){toast(x.message)}};
+  root.querySelector('[data-bgsave]').onclick=async()=>{try{await save(ed.innerHTML);root.querySelector('[data-bgst]').textContent='gespeichert';toast('Backgroundstory gespeichert')}catch(x){toastErr(x.message)}};
 }
 /** PDF-Knopf mit Haken „Backgroundstory anhängen“. base = .../{file} */
 function pdfLink(base,id){return `<span class="row" style="gap:6px;flex-wrap:nowrap"><a class="btn sm" data-pdf="${base}" data-pdfbg="${id}" href="${base}/pdf">PDF</a>

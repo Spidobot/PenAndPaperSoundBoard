@@ -146,31 +146,31 @@ $('#logout').onclick=async()=>{await api('/api/logout',{method:'POST'}).catch(()
 async function loadKonto(){try{me=await api('/api/me')}catch(e){return}
   $('#mailState').innerHTML=me.email?`Bestätigt: <b>${esc(me.email)}</b>`:'<span class="mut">Keine bestätigte Adresse.</span>';
   if(me.emailPending)$('#mailState').innerHTML+=`<br>Wartet auf Bestätigung: <b>${esc(me.emailPending)}</b>`}
-$('#pwForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/account/password',{method:'POST',body:{old:$('#pwOld').value,new:$('#pwNew').value}});$('#pwOld').value=$('#pwNew').value='';toast('Passwort geändert')}catch(x){toast(x.message)}};
-$('#mailForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/account/email',{method:'POST',body:{email:$('#mailNew').value}});$('#mailNew').value='';toast('Bestätigungsmail ist unterwegs. Bitte den Link darin anklicken.');loadKonto()}catch(x){toast(x.message)}};
+$('#pwForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/account/password',{method:'POST',body:{old:$('#pwOld').value,new:$('#pwNew').value}});$('#pwOld').value=$('#pwNew').value='';toast('Passwort geändert')}catch(x){toastErr(x.message)}};
+$('#mailForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/account/email',{method:'POST',body:{email:$('#mailNew').value}});$('#mailNew').value='';toast('Bestätigungsmail ist unterwegs. Bitte den Link darin anklicken.');loadKonto()}catch(x){toastErr(x.message)}};
 
 /* ---------- Entwürfe ---------- */
-async function loadDrafts(){let ds;try{ds=await api('/api/drafts')}catch(e){return toast(e.message)}
+async function loadDrafts(){let ds;try{ds=await api('/api/drafts')}catch(e){return toastErr(e.message)}
   $('#draftList').innerHTML=ds.map(d=>`<div class="item"><div><b>${esc(d.name)}</b> <span class="pill ${d.status==='gesendet'?'ok':''}">${d.status==='gesendet'?'beim Meister':d.haupt?'Werte':'Rasse/Kultur/Profession'}</span><div class="small mut">zuletzt ${esc(d.updated)}</div></div>
     <div class="row">${d.status==='gesendet'?'':`<button class="btn sm pri" data-open="${d.id}">Weiter</button>`}<button class="btn sm danger" data-del="${d.id}">Löschen</button></div></div>`).join('')
     ||'<p class="mut">Noch kein Entwurf. Mit „Neuer Held“ geht es los.</p>'}
-$('#newDraft').onclick=async()=>{try{const r=await api('/api/drafts',{method:'POST'});location.hash='d-'+r.id}catch(e){toast(e.message)}};
+$('#newDraft').onclick=async()=>{try{const r=await api('/api/drafts',{method:'POST'});location.hash='d-'+r.id}catch(e){toastErr(e.message)}};
 let delAsk=null;
 $('#draftList').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
   if(b.dataset.open)location.hash='d-'+b.dataset.open;
   if(b.dataset.del){if(delAsk!==b.dataset.del){delAsk=b.dataset.del;b.textContent='Wirklich löschen?';return}
-    try{await api('/api/drafts/'+b.dataset.del,{method:'DELETE'});delAsk=null;loadDrafts()}catch(x){toast(x.message)}}};
+    try{await api('/api/drafts/'+b.dataset.del,{method:'DELETE'});delAsk=null;loadDrafts()}catch(x){toastErr(x.message)}}};
 
 /* ---------- Assistent ---------- */
 let D=null,inp={},R=null,S=null,step=0;
 const STEPS=['Eigenschaften','Vor- & Nachteile','Sonderfertigkeiten','Talente','Backgroundstory','Prüfen & senden'];
 async function openDraft(id){show('s-create');$('#rkp').innerHTML='<p class="mut">Lade…</p>';$('#phaseA').hidden=false;$('#phaseB').hidden=true;$('#costs').innerHTML='';
-  try{D=await api('/api/drafts/'+id)}catch(e){toast(e.message);return go('s-drafts')}
+  try{D=await api('/api/drafts/'+id)}catch(e){toastErr(e.message);return go('s-drafts')}
   inp=D.input||{};inp.answers=inp.answers||[];$('#cTitle').textContent=D.name;
   if(D.status==='gesendet'){$('#rkp').innerHTML='<p>Dieser Held ist schon beim Meister.</p>';return}
   if(D.haupt){$('#phaseA').hidden=true;$('#phaseB').hidden=false;step=LS.get('hh-step-'+id,0);await edit([])}else await rkp()}
 function busy(on){$('#s-create').classList.toggle('busy',on)}
-async function rkp(){busy(true);try{R=await api('/api/drafts/'+D.id+'/rkp',{method:'POST',body:inp})}catch(e){busy(false);toast(e.message);return}busy(false);
+async function rkp(){busy(true);try{R=await api('/api/drafts/'+D.id+'/rkp',{method:'POST',body:inp})}catch(e){busy(false);toastErr(e.message);return}busy(false);
   $('#engineNote').textContent=`Regeln, Auswahllisten, Kosten und Regelprüfung kommen aus der helden.jar (${R.version}). Alles wird am Server gespeichert.`;
   if(inp.name){D.name=inp.name;$('#cTitle').textContent=inp.name}
   if(R.next==='haupt'){D.haupt=true;$('#phaseA').hidden=true;$('#phaseB').hidden=false;step=0;await edit([]);return}
@@ -229,7 +229,7 @@ $('#rkp').addEventListener('click',e=>{
     inp.answers=inp.answers.slice(0,p.index);inp.answers[p.index]=ans;rkp()}});
 
 /* Phase B: Werte */
-async function edit(ops){busy(true);try{S=await api('/api/drafts/'+D.id+'/edit',{method:'POST',body:{ops}})}catch(e){busy(false);toast(e.message);return false}busy(false);renderCosts();renderStep();return true}
+async function edit(ops){busy(true);try{S=await api('/api/drafts/'+D.id+'/edit',{method:'POST',body:{ops}})}catch(e){busy(false);toastErr(e.message);return false}busy(false);renderCosts();renderStep();return true}
 function renderCosts(){const k=S.kosten,parts=[];
   for(const[n,[u,a]]of Object.entries(k))parts.push(`<span class="cost${a>=0&&u>a?' over':''}">${esc(n)} ${u}${a>=0?' / '+a:''}</span>`);
   parts.push(`<span class="cost${S.eigenschaftenGP[0]>S.eigenschaftenGP[1]?' over':''}">Eigenschafts-GP ${S.eigenschaftenGP[0]} / ${S.eigenschaftenGP[1]}</span>`);
@@ -265,7 +265,7 @@ function renderStep(){LS.set('hh-step-'+D.id,step);
     <p class="small mut">Wird automatisch gespeichert.</p>`;
     $('#ed').innerHTML=D.bg||'';let t;
     const upd=()=>{const n=$('#ed').textContent.trim().length;$('#bgst').textContent=n?`${n} Zeichen`:'optional, später unter „Meine Helden“ nachtragbar';$('#bgst').className='pill '+(n?'ok':'')};
-    $('#ed').oninput=()=>{upd();D.bg=$('#ed').innerHTML;clearTimeout(t);t=setTimeout(()=>api('/api/drafts/'+D.id+'/bg',{method:'PUT',body:{bg:D.bg}}).catch(x=>toast(x.message)),700)};upd();
+    $('#ed').oninput=()=>{upd();D.bg=$('#ed').innerHTML;clearTimeout(t);t=setTimeout(()=>api('/api/drafts/'+D.id+'/bg',{method:'PUT',body:{bg:D.bg}}).catch(x=>toastErr(x.message)),700)};upd();
     $('#tb').onmousedown=e=>e.preventDefault();
     $('#tb').onclick=e=>{const c=e.target.closest('[data-cmd]');if(!c)return;document.execCommand(c.dataset.cmd,false,c.dataset.v?`<${c.dataset.v}>`:null);$('#ed').oninput()};}
   if(step===5)renderCheck();
@@ -289,8 +289,8 @@ async function renderCheck(){
       <button class="btn pri" id="send"${bgOk&&mgOk&&!F.length?'':' disabled'}>An Meister senden</button></div>
     ${F.length?'<p class="small err">Senden ist gesperrt, solange die Regelprüfung Fehler meldet.</p>':''}
     ${mgOk?'':'<p class="small" style="color:var(--warn)">Senden ist gesperrt, bis alle Punkte mit Meistergenehmigung freigegeben oder geändert sind. Der Stand wird automatisch abgeglichen.</p>'}`;
-  if($('#askfg'))$('#askfg').onclick=async()=>{try{await api('/api/drafts/'+D.id+'/approval',{method:'POST'});toast('Anfrage gesendet. Der Meister bekommt eine Mail.');renderCheck()}catch(e){toast(e.message)}};
-  $('#send').onclick=async()=>{try{await api('/api/drafts/'+D.id+'/send',{method:'POST'});toast('Held an den Meister gesendet.');go('s-mine')}catch(e){toast(e.message)}};
+  if($('#askfg'))$('#askfg').onclick=async()=>{try{await api('/api/drafts/'+D.id+'/approval',{method:'POST'});toast('Anfrage gesendet. Der Meister bekommt eine Mail.');renderCheck()}catch(e){toastErr(e.message)}};
+  $('#send').onclick=async()=>{try{await api('/api/drafts/'+D.id+'/send',{method:'POST'});toast('Held an den Meister gesendet.');go('s-mine')}catch(e){toastErr(e.message)}};
 }
 setInterval(()=>{if(location.hash==='#d-'+(D&&D.id)&&D.haupt&&step===5&&!$('#stepbody').contains(document.activeElement))renderCheck()},8000);
 $('#steps').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
@@ -311,12 +311,12 @@ $('#stepbody').addEventListener('click',e=>{const b=e.target.closest('button');i
 
 /* ---------- Meine Helden ---------- */
 let mine=[];
-async function loadMine(){try{[mine,me]=await Promise.all([api('/api/myheroes'),api('/api/me')])}catch(e){return toast(e.message)}$('#mineSheet').hidden=true;$('#upForm').hidden=!me.canUpload;
+async function loadMine(){try{[mine,me]=await Promise.all([api('/api/myheroes'),api('/api/me')])}catch(e){return toastErr(e.message)}$('#mineSheet').hidden=true;$('#upForm').hidden=!me.canUpload;
   $('#mineList').innerHTML=mine.map(h=>`<div class="item"><div><b>${esc(h.name)}</b> <span class="small mut">${esc(h.rasse)} · ${esc(h.profession)}</span><div class="small mut">beim Meister seit ${esc(h.received)}</div></div>
     <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button><button class="btn sm" data-bg="${esc(h.file)}">Backgroundstory</button><a class="btn sm" href="/api/myheroes/${encodeURIComponent(h.file)}/xml">XML</a>${pdfLink('/api/myheroes/'+encodeURIComponent(h.file),'pdfbg-'+esc(h.file).replace(/\W/g,'_'))}${h.status==='neu'?'':`<button class="btn sm pri" data-adv="${esc(h.file)}">Steigern</button>`}</div></div>`).join('')
     ||'<p class="mut">Noch keine Helden beim Meister.</p>'}
 let advFile=null,advQ='';
-async function openAdvance(file){advFile=file;let s;try{s=await api('/api/myheroes/'+encodeURIComponent(file)+'/advance')}catch(e){return toast(e.message)}
+async function openAdvance(file){advFile=file;let s;try{s=await api('/api/myheroes/'+encodeURIComponent(file)+'/advance')}catch(e){return toastErr(e.message)}
   const lim=s.limit,cnt=s.seitAussenden||{};
   const left=n=>lim>0?` <span class="small mut">(${Math.max(0,lim-(cnt[n]||0))} frei)</span>`:'';
   $('#mineSheet').hidden=false;
@@ -334,11 +334,11 @@ function filterAdv(){$$('#mineSheet tr[data-tn]').forEach(r=>r.hidden=advQ&&!r.d
 $('#mineSheet').addEventListener('input',e=>{if(e.target.id==='advq'){advQ=e.target.value;filterAdv()}});
 $('#mineSheet').addEventListener('click',async e=>{const b=e.target.closest('button[data-st]');if(!b||b.disabled)return;
   try{const r=await api('/api/myheroes/'+encodeURIComponent(advFile)+'/steigern',{method:'POST',body:{kind:b.dataset.st,target:b.dataset.t,se:!!b.dataset.se}});
-    toast(r.pending?'Braucht eine Freigabe, der Meister ist informiert: '+r.text:b.dataset.t+' gesteigert für '+r.cost+' AP');openAdvance(advFile)}catch(x){toast(x.message)}});
+    toast(r.pending?'Braucht eine Freigabe, der Meister ist informiert: '+r.text:b.dataset.t+' gesteigert für '+r.cost+' AP');openAdvance(advFile)}catch(x){toastErr(x.message)}});
 $('#upForm').onsubmit=async e=>{e.preventDefault();const f=$('#upFile').files[0];if(!f)return toast('Datei wählen');
   const fd=new FormData();fd.append('file',f);
   try{const r=await fetch('/api/myheroes/upload',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||d.title||'Fehler '+r.status);
-    toast('Hochgeladen. Der Meister ist informiert.');$('#upFile').value='';loadMine()}catch(x){toast(x.message)}};
+    toast('Hochgeladen. Der Meister ist informiert.');$('#upFile').value='';loadMine()}catch(x){toastErr(x.message)}};
 $('#mineList').onclick=e=>{const a=e.target.closest('[data-adv]');if(a){openAdvance(a.dataset.adv);$('#mineSheet').scrollIntoView({behavior:'smooth'});return}
   const g=e.target.closest('[data-bg]');
   if(g){const h=mine.find(x=>x.file===g.dataset.bg);$('#mineSheet').hidden=false;
@@ -353,7 +353,7 @@ $('#mineList').onclick=e=>{const a=e.target.closest('[data-adv]');if(a){openAdva
 
 /* ---------- Termine ---------- */
 let polls=[],pdraft={};
-async function loadPolls(){try{polls=await api('/api/polls')}catch(e){return toast(e.message)}renderPolls()}
+async function loadPolls(){try{polls=await api('/api/polls')}catch(e){return toastErr(e.message)}renderPolls()}
 function renderPolls(){const myId=me&&me.id;
   $('#pollList').innerHTML=polls.map(p=>`<div class="card" data-poll="${p.id}"><h3>${esc(p.title)}</h3>${p.note?`<p class="small mut">${esc(p.note)}</p>`:''}
     ${p.fixed?`<p><span class="pill ok">Termin steht</span> <b>${esc(fmtTermin((p.options.find(o=>o.id===p.fixed)||{}).label||''))}</b>, ${p.fixed_hours} Stunden. Die Einladung kommt per Mail, falls du eine bestätigte Adresse hast.</p>`
@@ -364,7 +364,7 @@ $('#pollList').onclick=async e=>{const b=e.target.closest('button');if(!b)return
   const card=b.closest('[data-poll]'),pid=card&&card.dataset.poll;
   if(b.dataset.a){const opt=b.closest('[data-opt]').dataset.opt;(pdraft[pid]=pdraft[pid]||{})[opt]=b.dataset.a;renderPolls()}
   if(b.dataset.save){const ans=pdraft[pid]||{};if(!Object.keys(ans).length)return toast('Erst bei den Terminen „kann“, „vielleicht“ oder „kann nicht“ wählen');
-    try{await api('/api/polls/'+pid+'/vote',{method:'POST',body:{answers:ans}});delete pdraft[pid];toast('Gespeichert');loadPolls()}catch(x){toast(x.message)}}};
+    try{await api('/api/polls/'+pid+'/vote',{method:'POST',body:{answers:ans}});delete pdraft[pid];toast('Gespeichert');loadPolls()}catch(x){toastErr(x.message)}}};
 
 /* ---------- Soundstream ---------- */
 const pl=new Player();let es=null;
