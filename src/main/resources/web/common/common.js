@@ -66,3 +66,24 @@ async function showImpressum(){let d=document.getElementById('imprDlg');
     d.innerHTML='<div class="spread"><h2>Impressum</h2><button class="btn sm" type="button" data-x>Schließen</button></div><div class="impr" id="imprTxt">…</div>';
     document.body.append(d);d.addEventListener('click',e=>{if(e.target===d||e.target.closest('[data-x]'))d.close()})}
   d.showModal();try{const r=await fetch('/api/public').then(r=>r.json());d.querySelector('#imprTxt').textContent=r.impressum}catch(e){d.querySelector('#imprTxt').textContent='Impressum nicht erreichbar.'}}
+
+/** Formatierter Backgroundstory-Editor (gleich wie bei der Heldenerstellung). save(html) wird beim Klick auf Speichern gerufen. */
+function bgEditor(root,html,save){
+  root.innerHTML=`<div class="tb">
+    <button type="button" data-cmd="bold" title="Fett"><b>F</b></button><button type="button" data-cmd="italic" title="Kursiv"><i>K</i></button><button type="button" data-cmd="underline" title="Unterstrichen"><u>U</u></button>
+    <button type="button" data-cmd="formatBlock" data-v="h3" title="Überschrift">Ü</button><button type="button" data-cmd="formatBlock" data-v="p" title="Absatz">¶</button>
+    <button type="button" data-cmd="insertUnorderedList" title="Liste">• Liste</button><button type="button" data-cmd="insertOrderedList" title="Nummeriert">1. Liste</button>
+    <button type="button" data-cmd="formatBlock" data-v="blockquote" title="Zitat">„Zitat“</button><button type="button" data-cmd="removeFormat" title="Formatierung entfernen">⌫ Format</button></div>
+    <div class="ed" contenteditable="true" data-ph="Woher kommt der Held? Was treibt ihn an? Familie, Feinde, Geheimnisse…"></div>
+    <div class="row" style="margin-top:8px"><button type="button" class="btn sm pri" data-bgsave>Backgroundstory speichern</button><span class="small mut" data-bgst></span></div>`;
+  const ed=root.querySelector('.ed'),tb=root.querySelector('.tb');ed.innerHTML=html||'';
+  ed.oninput=()=>root.querySelector('[data-bgst]').textContent='nicht gespeichert';
+  tb.onmousedown=e=>e.preventDefault();
+  tb.onclick=e=>{const c=e.target.closest('[data-cmd]');if(!c)return;document.execCommand(c.dataset.cmd,false,c.dataset.v?`<${c.dataset.v}>`:null);ed.oninput()};
+  root.querySelector('[data-bgsave]').onclick=async()=>{try{await save(ed.innerHTML);root.querySelector('[data-bgst]').textContent='gespeichert';toast('Backgroundstory gespeichert')}catch(x){toast(x.message)}};
+}
+/** PDF-Knopf mit Haken „Backgroundstory anhängen“. base = .../{file} */
+function pdfLink(base,id){return `<span class="row" style="gap:6px;flex-wrap:nowrap"><a class="btn sm" data-pdf="${base}" data-pdfbg="${id}" href="${base}/pdf">PDF</a>
+  <label class="small" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="${id}" checked> Backgroundstory anhängen</label></span>`}
+document.addEventListener('click',e=>{const a=e.target.closest('a[data-pdf]');if(!a)return;
+  const c=document.getElementById(a.dataset.pdfbg);a.href=a.dataset.pdf+'/pdf'+(c&&c.checked?'?bg=1':'');toast('PDF wird von der helden.jar erzeugt…')});

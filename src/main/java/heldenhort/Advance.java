@@ -209,10 +209,13 @@ public final class Advance {
 
     // ------------------------------------------------------------------ Aussenden
 
-    synchronized List<String> aussenden() throws Exception {
+    synchronized List<String> aussenden() throws Exception { return aussenden(null); }
+
+    /** only = nur diese Vormerkung (Sonder-AP für einen einzelnen Helden), sonst alle offenen. */
+    synchronized List<String> aussenden(Long only) throws Exception {
         List<String> done = new ArrayList<>();
         String now = App.now();
-        for (var a : db.query("SELECT * FROM award WHERE sent IS NULL ORDER BY id")) {
+        for (var a : only == null ? db.query("SELECT * FROM award WHERE sent IS NULL ORDER BY id") : db.query("SELECT * FROM award WHERE sent IS NULL AND id=?", only)) {
             String file = String.valueOf(a.get("file"));
             int ap = ((Number) a.get("ap")).intValue();
             List<?> se = App.JSON.readValue(String.valueOf(a.get("se")), List.class);
@@ -252,15 +255,24 @@ public final class Advance {
         var t = javax.xml.transform.TransformerFactory.newInstance().newTransformer();
         t.setOutputProperty(javax.xml.transform.OutputKeys.ENCODING, "UTF-8");
         try (var out = Files.newOutputStream(tmp)) { t.transform(new javax.xml.transform.dom.DOMSource(d), new javax.xml.transform.stream.StreamResult(out)); }
-        ClassLoader old = Thread.currentThread().getContextClassLoader();
-        try {
-            ClassLoader l = jar.loader();
-            Thread.currentThread().setContextClassLoader(l);
-            Object xp = l.loadClass("helden.framework.held.persistenz.XMLPersistierer").getConstructor().newInstance();
-            if (((List<?>) Creation.call(xp, "ladeHelden", tmp.toFile())).isEmpty()) throw new IllegalStateException("helden.jar liest die geänderte Datei nicht");
-        } catch (Exception e) { Files.deleteIfExists(tmp); throw new IllegalStateException("Änderung verworfen: " + e.getMessage()); }
-        finally { Thread.currentThread().setContextClassLoader(old); }
+        try { probe(tmp); }
+        catch (Exception e) { Files.deleteIfExists(tmp); throw new IllegalStateException("Änderung verworfen: " + e.getMessage()); }
         Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    /** Lässt die helden.jar die Datei laden. Wirft mit der Meldung der Jar (z. B. „Alte Version! Kein Import möglich!“). */
+    void probe(Path p) throws Exception {
+        synchronized (jar) {
+            ClassLoader old = Thread.currentThread().getContextClassLoader();
+            try {
+                ClassLoader l = jar.loader();
+                Thread.currentThread().setContextClassLoader(l);
+                Object xp = l.loadClass("helden.framework.held.persistenz.XMLPersistierer").getConstructor().newInstance();
+                if (((List<?>) Creation.call(xp, "ladeHelden", p.toFile())).isEmpty()) throw new IllegalStateException("helden.jar findet keinen Helden in der Datei");
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                throw new IllegalStateException(e.getCause() == null ? e.toString() : String.valueOf(e.getCause().getMessage()));
+            } finally { Thread.currentThread().setContextClassLoader(old); }
+        }
     }
 
     private static void setFreieAp(Document d, Element held, int v) {
@@ -307,6 +319,17 @@ public final class Advance {
         });
         m.delete("/api/awards/{id}", ctx -> { db.exec("DELETE FROM award WHERE id=? AND sent IS NULL", ctx.pathParam("id")); ctx.json(Map.of("ok", true)); });
         m.post("/api/awards/send", ctx -> ctx.json(Map.of("done", aussenden())));
+        // Sonder-AP: ein Held, sofort, ohne Session (z. B. handschriftlichen Helden nachgebaut)
+        m.post("/api/heroes/{file}/ap", ctx -> {
+            String file = ctx.pathParam("file");
+            heroes.file(file);
+            Map<?, ?> b = ctx.bodyAsClass(Map.class);
+            int ap = b.get("ap") instanceof Number n ? n.intValue() : 0;
+            if (ap <= 0 || ap > 100000) throw new IllegalArgumentException("AP bitte als positive Zahl");
+            String note = App.str(b.get("note"));
+            long id = db.exec("INSERT INTO award(file,ap,se,note,created) VALUES(?,?,?,?,?)", file, ap, "[]", note.isEmpty() ? "Sonder-AP vom Meister" : note, App.now());
+            ctx.json(Map.of("done", aussenden(id)));
+        });
         m.get("/api/advance/{file}", ctx -> ctx.json(state(ctx.pathParam("file"))));
 
         // Spieler: eigener Held
@@ -331,7 +354,7 @@ public final class Advance {
         } catch (Exception e) { return "nicht ausgeführt: " + e.getMessage(); }
     }
 
-    private String own(String file, io.javalin.http.Context ctx) {
+    String own(String file, io.javalin.http.Context ctx) {
         Object me = accounts.current(ctx).get("id");
         var r = db.query("SELECT file FROM hero WHERE file=? AND account=?", file, me);
         if (r.isEmpty()) throw new NotFoundResponse("Held unbekannt");

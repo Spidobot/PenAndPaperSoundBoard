@@ -19,7 +19,7 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
  * Weg wie beim Drucken in der Helden-Software: Held laden, über die Plugin-Schnittstelle
  * (DatenAustausch3Impl.printHeld) das Printable holen und jede Seite in eine PDF-Seite zeichnen.
  * Vorher berechnet XMLDatenGenerator.genDaten die Bewaffnung; ohne das bricht die Jar bei den Kampfseiten ab.
- * Die Hintergrundgeschichte wird auf Wunsch als eigene Seiten angehängt.
+ * Die Backgroundstory wird auf Wunsch als eigene Seiten angehängt.
  */
 public final class Pdf {
     private static final float W = PDRectangle.A4.getWidth(), H = PDRectangle.A4.getHeight();
@@ -72,11 +72,11 @@ public final class Pdf {
         try (PDPageContentStream cs = new PDPageContentStream(doc, page)) { cs.drawForm(g.getXFormObject()); }
     }
 
-    /** Hintergrundgeschichte als Seiten (HTML wie im Editor, gesetzt von Swing). */
+    /** Backgroundstory als Seiten (HTML wie im Editor, gesetzt von Swing). */
     private static void appendHtml(PDDocument doc, String title, String html) throws Exception {
         float margin = 50, width = W - 2 * margin, pageH = H - 2 * margin;
         JEditorPane ed = new JEditorPane("text/html", "<html><body style='font-family:serif;font-size:11pt'>"
-                + "<h2>" + escape(title) + " – Hintergrundgeschichte</h2>" + html + "</body></html>");
+                + "<h2>" + escape(title) + " – Backgroundstory</h2>" + html + "</body></html>");
         ed.setSize(new Dimension((int) width, Integer.MAX_VALUE / 4));
         int total = ed.getPreferredSize().height;
         ed.setSize(new Dimension((int) width, total));

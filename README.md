@@ -1,3 +1,5 @@
+<p align="center"><img src="unraid/icon.png" alt="Heldenhort-Logo (W20)" width="120"></p>
+
 # Heldenhort
 
 DSA-Spieltisch für Unraid: Soundboard mit Stream an die Spieler, Heldenerstellung über die helden.jar, Meisterfreigaben per Mail, Session-Suche über alle Heldenwerte.
@@ -55,3 +57,8 @@ docker build -t heldenhort .
 - In Arbeit: Heldenerstellung. Regelbasis, Geschlecht, Rasse, Kultur und der Hintergrund-Editor sind an die helden.jar angebunden. Profession, Eigenschaften, Vor- und Nachteile, Talente, Regelprüfung und XML-Export folgen.
 
 Icons: [Icons8](https://icons8.com).
+
+## Dateirechte
+
+Der Container startet als root, legt seine Ordner an und läuft danach als `PUID:PGID` (Standard 99:100 = nobody:users, wie bei Unraid üblich). Hochgeladene MP3s und Helden-XML gehören damit nobody:users.
+Extra-Parameter bleiben leer, **kein** `--user 99:100`: damit kann der Container fehlende Ordner nicht anlegen und root-eigene Dateien nicht schreiben.

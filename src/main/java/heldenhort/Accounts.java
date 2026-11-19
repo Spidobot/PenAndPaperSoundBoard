@@ -21,10 +21,11 @@ public final class Accounts {
         this.db = db;
         db.exec("CREATE TABLE IF NOT EXISTS account(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE COLLATE NOCASE, pw TEXT, "
                 + "tokver INTEGER DEFAULT 0, email TEXT, email_pending TEXT, email_token TEXT, created TEXT)");
+        try { db.exec("ALTER TABLE account ADD COLUMN can_upload INTEGER DEFAULT 0"); } catch (RuntimeException alreadyThere) { }
     }
 
     public List<Map<String, Object>> list() {
-        return db.query("SELECT id,name,email,email_pending,created FROM account ORDER BY name COLLATE NOCASE");
+        return db.query("SELECT id,name,email,email_pending,created,can_upload FROM account ORDER BY name COLLATE NOCASE");
     }
 
     public long create(String name, String pw) {
@@ -66,7 +67,7 @@ public final class Accounts {
     }
 
     public Map<String, Object> get(long id) {
-        var r = db.query("SELECT id,name,email,email_pending,tokver FROM account WHERE id=?", id);
+        var r = db.query("SELECT id,name,email,email_pending,tokver,can_upload FROM account WHERE id=?", id);
         return r.isEmpty() ? null : r.get(0);
     }
 

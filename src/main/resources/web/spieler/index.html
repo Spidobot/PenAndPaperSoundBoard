@@ -45,7 +45,7 @@ html,body{margin:0}
   <div id="s-home" hidden>
     <div class="spread" style="margin-bottom:18px"><div style="display:grid;gap:4px"><span class="smalllogo"><img src="/common/d20.svg" alt=""> Heldenhort</span><h1 id="greet"></h1></div><button class="btn sm" id="logout">Abmelden</button></div>
     <div class="tiles">
-      <button class="tile" data-go="s-drafts"><span class="ico">✦</span><h2>Heldenerstellung</h2><span class="mut">Neue Helden bauen, mit Hintergrundgeschichte an den Meister senden.</span></button>
+      <button class="tile" data-go="s-drafts"><span class="ico">✦</span><h2>Heldenerstellung</h2><span class="mut">Neue Helden bauen, mit Backgroundstory an den Meister senden.</span></button>
       <button class="tile" data-go="s-mine"><span class="ico">⚔</span><h2>Meine Helden</h2><span class="mut">Deine Helden beim Meister ansehen.</span></button>
       <button class="tile" data-go="s-stream"><span class="ico">♪</span><h2>Soundstream</h2><span class="mut">Musik und Geräusche vom Spieltisch. Du regelst nur deine Lautstärke.</span></button>
       <button class="tile" data-go="s-termine"><span class="ico">⧗</span><h2>Termine</h2><span class="mut">Abstimmen, wann die nächste Runde stattfindet.</span></button>
@@ -78,6 +78,9 @@ html,body{margin:0}
   <!-- Meine Helden -->
   <div id="s-mine" hidden>
     <div class="row" style="margin-bottom:14px"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Meine Helden</h1></div>
+    <form class="card" id="upForm" hidden style="margin-bottom:14px"><h3>Helden-XML hochladen</h3>
+      <p class="small mut">Ein Held aus der Helden-Software (Datei → Exportieren/Speichern als XML). Der Meister bekommt ihn wie einen neu erstellten.</p>
+      <div class="row"><input type="file" id="upFile" accept=".xml,application/xml,text/xml" aria-label="Helden-XML"><button class="btn pri sm" type="submit">Hochladen</button></div></form>
     <div class="list" id="mineList"></div>
     <div class="card" id="mineSheet" hidden style="margin-top:14px"></div>
   </div>
@@ -160,7 +163,7 @@ $('#draftList').onclick=async e=>{const b=e.target.closest('button');if(!b)retur
 
 /* ---------- Assistent ---------- */
 let D=null,inp={},R=null,S=null,step=0;
-const STEPS=['Eigenschaften','Vor- & Nachteile','Sonderfertigkeiten','Talente','Hintergrund','Prüfen & senden'];
+const STEPS=['Eigenschaften','Vor- & Nachteile','Sonderfertigkeiten','Talente','Backgroundstory','Prüfen & senden'];
 async function openDraft(id){show('s-create');$('#rkp').innerHTML='<p class="mut">Lade…</p>';$('#phaseA').hidden=false;$('#phaseB').hidden=true;$('#costs').innerHTML='';
   try{D=await api('/api/drafts/'+id)}catch(e){toast(e.message);return go('s-drafts')}
   inp=D.input||{};inp.answers=inp.answers||[];$('#cTitle').textContent=D.name;
@@ -252,7 +255,7 @@ function renderStep(){LS.set('hh-step-'+D.id,step);
     <div class="tw"><table class="vals"><thead><tr><th>Talent</th><th>Probe</th><th>TaW</th><th>max</th></tr></thead><tbody id="tbody">${S.talente.map(t=>`<tr data-tn="${esc(t.name.toLowerCase())}"><td>${esc(t.name)}</td><td class="mono small">${esc(t.probe)}</td><td><input type="number" data-tal="${esc(t.name)}" value="${t.value}"${t.max!=null?` max="${t.max}"`:''}></td><td class="mono small mut">${t.max??''}</td></tr>`).join('')}</tbody></table></div>
     <div class="row" style="flex-wrap:nowrap"><input type="text" id="tname" list="tlist" placeholder="Talent aktivieren (${S.talenteAktivierbar[0]}/${S.talenteAktivierbar[1]} aktiviert)" aria-label="Talent aktivieren"><button class="btn pri" id="tadd">Aktivieren</button></div>
     <datalist id="tlist">${S.talenteMoeglich.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
-  if(step===4){b.innerHTML=`<div class="spread"><h2>Hintergrund</h2><span class="pill" id="bgst"></span></div>
+  if(step===4){b.innerHTML=`<div class="spread"><h2>Backgroundstory</h2><span class="pill" id="bgst"></span></div>
     <div><div class="tb" id="tb">
       <button data-cmd="bold" title="Fett"><b>F</b></button><button data-cmd="italic" title="Kursiv"><i>K</i></button><button data-cmd="underline" title="Unterstrichen"><u>U</u></button>
       <button data-cmd="formatBlock" data-v="h3" title="Überschrift">Ü</button><button data-cmd="formatBlock" data-v="p" title="Absatz">¶</button>
@@ -261,7 +264,7 @@ function renderStep(){LS.set('hh-step-'+D.id,step);
     <div class="ed" id="ed" contenteditable="true" data-ph="Woher kommt dein Held? Was treibt ihn an? Familie, Feinde, Geheimnisse…"></div></div>
     <p class="small mut">Wird automatisch gespeichert.</p>`;
     $('#ed').innerHTML=D.bg||'';let t;
-    const upd=()=>{const n=$('#ed').textContent.trim().length;$('#bgst').textContent=n>=50?`${n} Zeichen · ok`:`${n}/50 Zeichen Minimum`;$('#bgst').className='pill '+(n>=50?'ok':'warn')};
+    const upd=()=>{const n=$('#ed').textContent.trim().length;$('#bgst').textContent=n?`${n} Zeichen`:'optional, später unter „Meine Helden“ nachtragbar';$('#bgst').className='pill '+(n?'ok':'')};
     $('#ed').oninput=()=>{upd();D.bg=$('#ed').innerHTML;clearTimeout(t);t=setTimeout(()=>api('/api/drafts/'+D.id+'/bg',{method:'PUT',body:{bg:D.bg}}).catch(x=>toast(x.message)),700)};upd();
     $('#tb').onmousedown=e=>e.preventDefault();
     $('#tb').onclick=e=>{const c=e.target.closest('[data-cmd]');if(!c)return;document.execCommand(c.dataset.cmd,false,c.dataset.v?`<${c.dataset.v}>`:null);$('#ed').oninput()};}
@@ -274,14 +277,14 @@ async function renderCheck(){
   try{[appr,hs]=await Promise.all([api('/api/drafts/'+D.id+'/approval'),api('/api/drafts/'+D.id+'/check').then(r=>r.hinweise)])}catch(e){appr=appr||{}}
   const F=hs.filter(h=>h.art==='F'),MG=hs.filter(h=>h.art==='MG'),H=hs.filter(h=>h.art==='H');
   const items=appr&&appr.items?appr.items:[],okSet=new Set(items.filter(i=>i.status==='freigegeben'||i.status==='geändert').map(i=>i.text));
-  const bgOk=(D.bg||'').replace(/<[^>]+>/g,'').trim().length>=50,mgOk=MG.every(h=>okSet.has(h.text));
+  const bgOk=true,hasBg=(D.bg||'').replace(/<[^>]+>/g,'').trim().length>0,mgOk=MG.every(h=>okSet.has(h.text));
   const openMG=MG.filter(h=>!items.some(i=>i.text===h.text));
   $('#stepbody').innerHTML=`<h2>Prüfen & senden</h2>
     ${F.map(h=>`<div class="hint F"><b>Fehler:</b> ${esc(h.text)}</div>`).join('')}
     ${MG.map(h=>{const it=items.find(i=>i.text===h.text);return `<div class="hint MG"><b>Meistergenehmigung:</b> ${esc(h.text)} ${it?`<span class="pill ${ST[it.status]}">${esc(it.status)}</span>${it.comment?`<div class="small"><b>Meister:</b> ${esc(it.comment)}</div>`:''}`:'<span class="pill">noch nicht angefragt</span>'}</div>`}).join('')}
     ${H.map(h=>`<div class="hint H">${esc(h.text)}</div>`).join('')}
     ${!hs.length?'<p class="mut">Die Regelprüfung meldet nichts.</p>':''}
-    <p class="small">${bgOk?'<span class="pill ok">Hintergrund ok</span>':'<span class="pill warn">Hintergrund fehlt</span> mindestens 50 Zeichen'}</p>
+    <p class="small">${hasBg?'<span class="pill ok">Backgroundstory dabei</span>':'<span class="pill">ohne Backgroundstory</span> kannst du später unter „Meine Helden“ nachtragen'}</p>
     <div class="row">${openMG.length?'<button class="btn" id="askfg">Freigabe beim Meister anfragen</button>':''}
       <button class="btn pri" id="send"${bgOk&&mgOk&&!F.length?'':' disabled'}>An Meister senden</button></div>
     ${F.length?'<p class="small err">Senden ist gesperrt, solange die Regelprüfung Fehler meldet.</p>':''}
@@ -308,9 +311,9 @@ $('#stepbody').addEventListener('click',e=>{const b=e.target.closest('button');i
 
 /* ---------- Meine Helden ---------- */
 let mine=[];
-async function loadMine(){try{mine=await api('/api/myheroes')}catch(e){return toast(e.message)}$('#mineSheet').hidden=true;
+async function loadMine(){try{[mine,me]=await Promise.all([api('/api/myheroes'),api('/api/me')])}catch(e){return toast(e.message)}$('#mineSheet').hidden=true;$('#upForm').hidden=!me.canUpload;
   $('#mineList').innerHTML=mine.map(h=>`<div class="item"><div><b>${esc(h.name)}</b> <span class="small mut">${esc(h.rasse)} · ${esc(h.profession)}</span><div class="small mut">beim Meister seit ${esc(h.received)}</div></div>
-    <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button>${h.status==='neu'?'':`<button class="btn sm pri" data-adv="${esc(h.file)}">Steigern</button>`}</div></div>`).join('')
+    <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button><button class="btn sm" data-bg="${esc(h.file)}">Backgroundstory</button><a class="btn sm" href="/api/myheroes/${encodeURIComponent(h.file)}/xml">XML</a>${pdfLink('/api/myheroes/'+encodeURIComponent(h.file),'pdfbg-'+esc(h.file).replace(/\W/g,'_'))}${h.status==='neu'?'':`<button class="btn sm pri" data-adv="${esc(h.file)}">Steigern</button>`}</div></div>`).join('')
     ||'<p class="mut">Noch keine Helden beim Meister.</p>'}
 let advFile=null,advQ='';
 async function openAdvance(file){advFile=file;let s;try{s=await api('/api/myheroes/'+encodeURIComponent(file)+'/advance')}catch(e){return toast(e.message)}
@@ -332,7 +335,16 @@ $('#mineSheet').addEventListener('input',e=>{if(e.target.id==='advq'){advQ=e.tar
 $('#mineSheet').addEventListener('click',async e=>{const b=e.target.closest('button[data-st]');if(!b||b.disabled)return;
   try{const r=await api('/api/myheroes/'+encodeURIComponent(advFile)+'/steigern',{method:'POST',body:{kind:b.dataset.st,target:b.dataset.t,se:!!b.dataset.se}});
     toast(r.pending?'Braucht eine Freigabe, der Meister ist informiert: '+r.text:b.dataset.t+' gesteigert für '+r.cost+' AP');openAdvance(advFile)}catch(x){toast(x.message)}});
+$('#upForm').onsubmit=async e=>{e.preventDefault();const f=$('#upFile').files[0];if(!f)return toast('Datei wählen');
+  const fd=new FormData();fd.append('file',f);
+  try{const r=await fetch('/api/myheroes/upload',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||d.title||'Fehler '+r.status);
+    toast('Hochgeladen. Der Meister ist informiert.');$('#upFile').value='';loadMine()}catch(x){toast(x.message)}};
 $('#mineList').onclick=e=>{const a=e.target.closest('[data-adv]');if(a){openAdvance(a.dataset.adv);$('#mineSheet').scrollIntoView({behavior:'smooth'});return}
+  const g=e.target.closest('[data-bg]');
+  if(g){const h=mine.find(x=>x.file===g.dataset.bg);$('#mineSheet').hidden=false;
+    $('#mineSheet').innerHTML=`<h2>${esc(h.name)}: Backgroundstory</h2><div id="mineBg"></div>`;
+    bgEditor($('#mineBg'),h.background,async html=>{await api('/api/myheroes/'+encodeURIComponent(h.file)+'/bg',{method:'PUT',body:{bg:html}});h.background=html});
+    $('#mineSheet').scrollIntoView({behavior:'smooth'});return}
   const b=e.target.closest('[data-h]');if(!b)return;const h=mine.find(x=>x.file===b.dataset.h);const s=h.sheet||{basis:{},sections:[]};
   $('#mineSheet').hidden=false;
   $('#mineSheet').innerHTML=`<h2>${esc(h.name)}</h2><dl class="kv">${Object.entries({...s.basis,'Profession':h.profession}).filter(([k,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>

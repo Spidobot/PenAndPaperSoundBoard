@@ -11,7 +11,7 @@ import org.w3c.dom.*;
 
 /**
  * Helden-XMLs in /data/helden. Kommen vom Spieler-Upload oder per FTP.
- * Jede Datei wird bei Bedarf neu gelesen; Metadaten (Spieler, Status, Hintergrund) liegen in der DB.
+ * Jede Datei wird bei Bedarf neu gelesen; Metadaten (Spieler, Status, Backgroundstory) liegen in der DB.
  */
 public final class Heroes {
     static final Map<String, String> SHORT = Map.of("Mut", "MU", "Klugheit", "KL", "Intuition", "IN", "Charisma", "CH",

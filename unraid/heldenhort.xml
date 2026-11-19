@@ -17,5 +17,7 @@
   <Config Name="Sounds (_DSA)" Target="/data/audio" Default="" Mode="rw" Description="Ordner mit Music/ und Sounds/ (je Village, Travel, Dungeon, Castle, Fight) und Effects/" Type="Path" Display="always" Required="true"></Config>
   <Config Name="Helden-XML" Target="/data/helden" Default="/mnt/user/appdata/heldenhort/helden" Mode="rw" Description="Helden-XML. Per FTP befüllbar." Type="Path" Display="always" Required="true">/mnt/user/appdata/heldenhort/helden</Config>
   <Config Name="ADMIN_PASSWORD" Target="ADMIN_PASSWORD" Default="" Mode="" Description="Passwort für die Meister-UI. Ohne Passwort bleibt die Meister-UI gesperrt." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="Benutzer, dem neue Dateien gehören (Unraid: 99 = nobody). Statt --user in den Extra-Parametern." Type="Variable" Display="advanced" Required="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Gruppe neuer Dateien (Unraid: 100 = users)" Type="Variable" Display="advanced" Required="false">100</Config>
   <Config Name="TZ" Target="TZ" Default="Europe/Vienna" Mode="" Description="Zeitzone (für die tägliche Update-Uhrzeit)" Type="Variable" Display="advanced" Required="false">Europe/Vienna</Config>
 </Container>
