@@ -163,6 +163,7 @@ mark{background:var(--acc-soft);color:inherit;padding:0 2px}
     <div class="brand">Heldenhort</div>
     <a href="#m-sound" data-v="m-sound">Soundboard</a>
     <a href="#m-helden" data-v="m-helden">Helden <span class="pill new">2</span></a>
+    <a href="#m-freigaben" data-v="m-freigaben">Freigaben <span class="pill new" id="fgBadge">1</span></a>
     <a href="#m-session" data-v="m-session">Session</a>
     <a href="#m-config" data-v="m-config">Konfiguration</a>
     <div class="foot">Jeder Bereich hat eine eigene Adresse. Mehrere Tabs gleichzeitig möglich, z. B. Soundboard links, Session rechts.</div>
@@ -210,6 +211,13 @@ mark{background:var(--acc-soft);color:inherit;padding:0 2px}
         </table>
       </div>
       <div class="card" id="hdet"></div>
+    </section>
+
+    <!-- Freigaben -->
+    <section class="view" id="m-freigaben" hidden>
+      <div class="spread"><h1>Meisterfreigaben</h1><span class="small mut">Neue Anfragen kommen zusätzlich per Mail an meister@example.org</span></div>
+      <p class="small mut">Die Punkte kommen aus der Regelprüfung der helden.jar (Art „Meistergenehmigung“). Der Spieler sieht deine Entscheidung und deinen Kommentar automatisch.</p>
+      <div id="fglist" style="display:grid;gap:14px"></div>
     </section>
 
     <!-- Session -->
@@ -261,10 +269,12 @@ mark{background:var(--acc-soft);color:inherit;padding:0 2px}
         </div>
         <div class="card">
           <h3>Speicherorte im Container</h3>
+          <p class="small mut">Alles unter <span class="mono">/data</span> liegt auf einem Unraid-Volume und bleibt bei Container-Updates erhalten.</p>
           <table class="small">
-            <tr><td class="mono">/data/sounds</td><td>Sounddateien je Kategorie</td></tr>
+            <tr><td class="mono">/data/audio/Music/&lt;Szene&gt;</td><td>Musik (Village, Travel, Dungeon, Castle, Fight)</td></tr>
+            <tr><td class="mono">/data/audio/Sounds/&lt;Szene&gt;</td><td>Hintergrundgeräusche</td></tr>
+            <tr><td class="mono">/data/db/heldenhort.sqlite</td><td>Einstellungen, Sessions, Freigaben, Helden-Status</td></tr>
             <tr><td class="mono">/data/helden</td><td>Eingegangene XML + Hintergrund</td></tr>
-            <tr><td class="mono">/data/config</td><td>Einstellungen, Sessions</td></tr>
             <tr><td class="mono">/app/helden.jar</td><td>ersetzt sich selbst über ihren Updater</td></tr>
           </table>
         </div>
@@ -302,7 +312,7 @@ mark{background:var(--acc-soft);color:inherit;padding:0 2px}
         <div class="row"><button class="btn sm" data-back>← Zurück</button><h1>Heldenerstellung</h1></div>
         <div class="row small mut"><span>Entwurf im Browser gespeichert</span><select id="drafts" style="width:auto"><option>Thorgrim Eisenfaust</option><option>+ Neuer Held</option></select></div>
       </div>
-      <div class="note" style="margin-bottom:14px">Regeln, Auswahllisten und GP-Berechnung kommen aus helden.jar (5.5.4). XML-Export ebenfalls von dort.</div>
+      <div class="note" style="margin-bottom:14px">Regeln, Auswahllisten, GP-Berechnung und Regelprüfung kommen aus helden.jar (5.5.4). XML-Export ebenfalls von dort. Punkte mit Meistergenehmigung gehen als Anfrage an den Meister.</div>
       <div class="steps" id="steps"></div>
       <div class="card" id="stepbody" style="margin-top:12px"></div>
       <div class="spread" style="margin-top:12px">
@@ -370,28 +380,28 @@ stop:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABJ0lE
 qadd:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgAQMAAADYVuV7AAAABlBMVEVHcEwAAACfKoRRAAAAAXRSTlMAQObYZgAAACRJREFUOMtjYBjkgPH//wYqcn7Ij3KGG4eqKWQEpd5BHG5UAwAvUH7ZTQmHIwAAAABJRU5ErkJggg==',
 ordner:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAACTElEQVR4Xu2acVHFMAzG8xSAA3AADsACDsAJDpAAEsABOAAHSMABXB4LjL62y9dmrFuzu93+eOma/PIl295lR50fu87jJwfgCuicgJcAIIBPwLYFU1VyVUZDNA6ghbQCPqiSqzJyBXwTCEvgiYguiegIyAqbfhDR83C+ENEruD5lHvqnSq7KKKEAWXs+gGAYNUCuKkEsBiD0uxQIkowYq2YAlALZLIAUkLvgh24ASNxFks30iaL7IdSLNrB22Pp+DgB49LgCWmhaXgJpAkUK9R7gPUBPoEhi1jVrfT8vAb0ADj6HEXhmHy8Jf6+J6L7kKYUE0WoJxIJnFqrYVEYT/wcAIvpjagE0FfwNET1oHFszgOrg1TJpVAGxf6nVmRd1tKQA1PkQALp+z6AlAOwPEoRFD1kUQG0Nrx4AZ7wGwiYA5CBMledmAKQgdAWAIaAZRe2j70VTlMeLTDY0/Joz8ccBaN6XZ3oTDLdGM4raewnECHgJeAnoCZjUnD8F0gRQwKi9N0FvghEC/hTQ90D4XR249d4UrWnU3nuA9wDvAYcEaprg7TDl+UZE72jBR+xrh7GRWH62RxblHGQAPPLKJ4/BMhQeiUWOVQOIBSpA5MpzwbmjeQCcWR6DRYejx0GLQvjKKhkPSjcPQAI5HUDwYDQDuUB0HrGVyXHuKeMDKc9iF6w2YRByMpizYo9+F1r5lnVlzk1EIQIGhTKnb0VPgdqkHgelw2BOMjfdHIBYrAxFlCJXabJdAIhBkSb7WCs5zfp/oaxxZCmb7gF8AdbXsEHNL9MLAAAAAElFTkSuQmCC'};
 const ICN=(k,alt='')=>`<img class="ic" src="${IC[k]}" alt="${alt}">`;
-const scenes=[['dorf','Dorf / Stadt'],['reisen','Reisen'],['dungeon','Dungeon'],['burg','Burg'],['kampf','Kampf']];
+const scenes=[['Village','Dorf / Stadt','dorf'],['Travel','Reisen','reisen'],['Dungeon','Dungeon','dungeon'],['Castle','Burg','burg'],['Fight','Kampf','kampf']];
 const lib={
- dorf:{Music:[['Marktlied',184],['Tavernenweise',221],['Ruhiger Abend',305]],Sounds:[['Marktplatz Gareth',325],['Taverne voll',450],['Schmiede',190]]},
- reisen:{Music:[['Nordische Weite',302],['Unterwegs',248]],Sounds:[['Nachtwald mit Eulen',372],['Regen stark',600],['Pferdewagen',280]]},
- dungeon:{Music:[['Spannung leise',200],['Unheil naht',176]],Sounds:[['Höhle, tropfend',483],['Ketten im Wind',210]]},
- burg:{Music:[['Thronsaal',260],['Bankett',233]],Sounds:[['Burghof',300],['Kaminfeuer',540]]},
- kampf:{Music:[['Schlacht',240],['Boss-Thema',168]],Sounds:[['Schlachtgetümmel',240],['Orkhorde naht',105]]}
+ Village:{Music:[['Marktlied',184],['Tavernenweise',221],['Ruhiger Abend',305]],Sounds:[['Marktplatz Gareth',325],['Taverne voll',450],['Schmiede',190]]},
+ Travel:{Music:[['Nordische Weite',302],['Unterwegs',248]],Sounds:[['Nachtwald mit Eulen',372],['Regen stark',600],['Pferdewagen',280]]},
+ Dungeon:{Music:[['Spannung leise',200],['Unheil naht',176]],Sounds:[['Höhle, tropfend',483],['Ketten im Wind',210]]},
+ Castle:{Music:[['Thronsaal',260],['Bankett',233]],Sounds:[['Burghof',300],['Kaminfeuer',540]]},
+ Fight:{Music:[['Schlacht',240],['Boss-Thema',168]],Sounds:[['Schlachtgetümmel',240],['Orkhorde naht',105]]}
 };
 const fx=[['truhe','Schatztruhe öffnen'],['kuh','Cliffhanger-Kuh'],['avengers','Avengers'],['ziege','Bertha (solo)'],['qadd','Quest hinzugefügt'],['qdone','Quest abgeschlossen']];
-let scene='dorf',compact=false;
+let scene='Village',compact=false;
 const ch={music:{title:'Musik',dir:'Music',t:null,pos:0,play:false,vol:70,rep:true},bg:{title:'Hintergrundgeräusche',dir:'Sounds',t:null,pos:0,play:false,vol:50,rep:true}};
 const mmss=s=>String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0');
 function renderScenes(){
   $('#scenes').className='scenes'+(compact?' compact':'');
   $('#scenes').innerHTML=`<button data-menu title="Menü">${ICN('menu')}<span>Menü</span></button>`+
-   scenes.map(([k,l])=>`<button data-sc="${k}" aria-current="${k===scene}" title="${l}">${ICN(k)}<span>${l}</span></button>`).join('')+
+   scenes.map(([k,l,i])=>`<button data-sc="${k}" aria-current="${k===scene}" title="${l}">${ICN(i)}<span>${l}</span></button>`).join('')+
    `<hr><button data-folder title="Dateiordner">${ICN('ordner')}<span>Dateiordner</span></button><button data-pizza title="Pizza">${ICN('pizza')}<span>Pizza</span></button>`;
 }
 function renderFx(){$('#fx').innerHTML=fx.map(([k,l])=>`<button data-fx="${k}" title="${l}" aria-label="${l}">${ICN(k)}</button>`).join('')}
 function renderList(id){
   const c=ch[id],el=$(`.plist[data-ch="${id}"]`),items=lib[scene][c.dir];
-  el.innerHTML=`<div class="spread"><h3>${c.title}</h3><span class="small mut mono">/data/sounds/${scene}/${c.dir}</span></div>
+  el.innerHTML=`<div class="spread"><h3>${c.title}</h3><span class="small mut mono">/data/audio/${c.dir}/${scene}</span></div>
    <ul>${items.map(([n,d])=>`<li><button data-pick="${id}" data-n="${esc(n)}" data-d="${d}" aria-current="${!!(c.t&&c.t[0]===n)}">${mmss(d)} - ${esc(n)}</button></li>`).join('')}</ul>
    <div class="small"><span class="mono" data-pos="${id}">${c.t?mmss(c.pos)+' / '+mmss(c.t[1]):'--:-- / --:--'}</span> ${c.t?esc(c.t[0]):'<span class="mut">nichts gewählt</span>'}</div>
    <div class="prog"><i data-prog="${id}" style="width:${c.t?c.pos/c.t[1]*100:0}%"></i></div>
@@ -419,9 +429,9 @@ $('#m-sound').addEventListener('click',e=>{
     renderSound()}
 });
 $('#m-sound').addEventListener('input',e=>{const id=e.target.dataset.chvol;if(!id)return;ch[id].vol=+e.target.value;$(`[data-volv="${id}"]`).textContent=e.target.value});
-function showUpl(){$('#upl').hidden=false;$('#uplScene').textContent=scenes.find(s=>s[0]===scene)[1];$('#uplPath').textContent=`/data/sounds/${scene}/${$('#uplTarget').value}/`}
+function showUpl(){$('#upl').hidden=false;$('#uplScene').textContent=scenes.find(s=>s[0]===scene)[1];$('#uplPath').textContent=`/data/audio/${$('#uplTarget').value}/${scene}/`}
 $('#uplTarget').onchange=showUpl;$('#uplClose').onclick=()=>$('#upl').hidden=true;
-$('#upfile').onchange=e=>{const f=[...e.target.files].filter(x=>/\.mp3$/i.test(x.name));const t=$('#uplTarget').value;f.forEach(x=>lib[scene][t].push([x.name.replace(/\.mp3$/i,''),0]));renderSound();toast(`${f.length} MP3 nach ${scene}/${t} hochgeladen`)};
+$('#upfile').onchange=e=>{const f=[...e.target.files].filter(x=>/\.mp3$/i.test(x.name));const t=$('#uplTarget').value;f.forEach(x=>lib[scene][t].push([x.name.replace(/\.mp3$/i,''),0]));renderSound();toast(`${f.length} MP3 nach ${t}/${scene} hochgeladen`)};
 setInterval(()=>{for(const id in ch){const c=ch[id];if(!c.play||!c.t)continue;c.pos++;
   if(c.pos>=c.t[1]){c.pos=0;if(!c.rep){c.play=false;renderSound();continue}}
   const p=$(`[data-pos="${id}"]`);if(p)p.textContent=mmss(c.pos)+' / '+mmss(c.t[1]);const g=$(`[data-prog="${id}"]`);if(g)g.style.width=c.pos/c.t[1]*100+'%'}},1000);
@@ -475,6 +485,26 @@ $('#hdet').onclick=e=>{
   if(e.target.closest('[data-dl]'))toast('Mock: XML-Download');
   if(e.target.closest('[data-hl]'))toast('Mock: Öffnet die XML in der lokal installierten Helden-Software');
 };
+
+/* ---------- Meisterfreigaben (gemeinsamer Stand, im echten Betrieb in der DB) ---------- */
+const reqs=[{id:1,hero:'Bosper Krötenschlucker',p:'Tobias',at:'18.11.2026 22:05',items:[
+  {t:'MG',txt:'Die folgenden Vor- bzw. Nachteile unterliegen der Meistergenehmigung: Glück',st:'offen',c:''}]}];
+const ST={offen:'warn',freigegeben:'ok',geändert:'ok',abgelehnt:'warn'};
+const ART={MG:'Meistergenehmigung',H:'Hinweis',F:'Fehler'};
+function renderFg(){
+  const open=reqs.reduce((n,r)=>n+r.items.filter(i=>i.st==='offen').length,0);
+  $('#fgBadge').textContent=open;$('#fgBadge').hidden=!open;
+  $('#fglist').innerHTML=reqs.map(r=>`<div class="card"><div class="spread"><h3>${esc(r.hero)}</h3><span class="small mut">${esc(r.p)} · ${r.at}</span></div>
+   ${r.items.map((i,k)=>`<div style="display:grid;gap:8px;border-top:1px solid var(--line);padding-top:10px">
+     <div class="spread"><span>${esc(i.txt)}</span><span class="pill ${ST[i.st]}">${i.st}</span></div>
+     <div class="row" style="flex-wrap:nowrap"><input type="text" placeholder="Kommentar an den Spieler (bei Ändern Pflicht)" value="${esc(i.c)}" data-fgc="${r.id}-${k}">
+       <button class="btn sm pri" data-fg="${r.id}-${k}-freigegeben">Freigeben</button><button class="btn sm" data-fg="${r.id}-${k}-geändert">Ändern</button><button class="btn sm danger" data-fg="${r.id}-${k}-abgelehnt">Ablehnen</button></div>
+   </div>`).join('')}</div>`).join('')||'<p class="mut">Keine offenen Anfragen.</p>';
+}
+$('#fglist').onclick=e=>{const b=e.target.closest('[data-fg]');if(!b)return;const[r,k,st]=b.dataset.fg.split('-');
+  const it=reqs.find(x=>x.id==r).items[k];const c=$(`[data-fgc="${r}-${k}"]`).value.trim();
+  if(st==='geändert'&&!c)return toast('Bitte im Kommentar schreiben, was du geändert hast');
+  it.st=st;it.c=c;renderFg();toast(`${st}. Der Spieler sieht es beim nächsten Abgleich.`)};
 
 /* ---------- Meister: Session ---------- */
 const inSess=new Set([1,2,3,4]);
@@ -530,9 +560,12 @@ $$('[data-back]').forEach(b=>b.onclick=()=>location.hash='s-home');
 
 /* ---------- Spieler: Heldenerstellung ---------- */
 const steps=['Grunddaten','Rasse · Kultur · Profession','Eigenschaften','Vor- & Nachteile','Talente','Hintergrund','Prüfen & senden'];
-let step=0;const draft={name:'Thorgrim Eisenfaust',sex:'männlich',rasse:'Thorwaler',kultur:'Thorwal',prof:'Seefahrer',E:{MU:14,KL:10,IN:12,CH:11,FF:11,GE:13,KO:15,KK:15},bg:'',sent:false};
+let step=0;const draft={name:'Thorgrim Eisenfaust',sex:'männlich',rasse:'Thorwaler',kultur:'Thorwal',prof:'Seefahrer',E:{MU:14,KL:10,IN:12,CH:11,FF:11,GE:13,KO:15,KK:15},bg:'',sent:false,req:null,hw:[
+  {t:'MG',txt:'Die folgenden Vor- bzw. Nachteile unterliegen der Meistergenehmigung: Adlige Abstammung'},
+  {t:'MG',txt:'Eine größere Menge (12) AP wurde nicht genutzt und dem Helden gut geschrieben'},
+  {t:'H',txt:'Die Größe sollte nach Rasse und Nachteilen zwischen 175 und 205 liegen (aktuell: 172). Bitte die Größe nach Erschaffung im Angaben-Menü korrigieren.'}]};
 const bgText=()=>draft.bg.replace(/<[^>]+>/g,'').trim();
-function gp(){const e=Object.values(draft.E).reduce((a,b)=>a+b,0);return{used:e-8*8+74,max:110}}
+function gp(){const e=Object.values(draft.E).reduce((a,b)=>a+b,0);return{used:e-8*8+72,max:110}}
 function renderStep(){
   $('#steps').innerHTML=steps.map((s,i)=>`<button data-st="${i}"${i===step?' aria-current="step"':''} class="${i<step?'done':''}">${i+1}. ${s}</button>`).join('');
   const b=$('#stepbody');
@@ -558,12 +591,23 @@ function renderStep(){
     $('#ed').oninput=upd;upd();
     $('#tb').onmousedown=e=>e.preventDefault();
     $('#tb').onclick=e=>{const t=e.target.closest('[data-cmd]');if(!t)return;document.execCommand(t.dataset.cmd,false,t.dataset.v?`<${t.dataset.v}>`:null);upd()};}
-  if(step===6){const ok=bgText().length>=50;
+  if(step===6){const ok=bgText().length>=50,req=reqs.find(r=>r.id===draft.req),items=req?[...req.items,...draft.hw.filter(i=>i.t!=='MG')]:draft.hw;
+    const mg=items.filter(i=>i.t==='MG'),done=mg.filter(i=>i.st==='freigegeben'||i.st==='geändert').length,fgOk=done===mg.length;
     b.innerHTML=`<h2>Prüfen & senden</h2><table class="small"><tr><td>Name</td><td><b>${esc(draft.name)}</b></td></tr><tr><td>Rasse / Kultur / Profession</td><td>${draft.rasse} / ${draft.kultur} / ${draft.prof}</td></tr>
       <tr><td>GP</td><td class="mono">${gp().used} / ${gp().max} ${gp().used<=gp().max?'<span class="pill ok">ok</span>':'<span class="pill warn">zu viel</span>'}</td></tr>
       <tr><td>Hintergrund</td><td>${ok?'<span class="pill ok">ausgefüllt</span>':'<span class="pill warn">fehlt</span> mindestens 50 Zeichen nötig'}</td></tr></table>
-      <div class="row"><button class="btn" id="dlxml">XML für mich herunterladen</button><button class="btn pri" id="send"${ok&&!draft.sent?'':' disabled'}>${draft.sent?'Gesendet ✓':'An Meister senden'}</button></div>
-      ${ok?'':'<p class="small" style="color:var(--warn)">Senden ist gesperrt, bis die Hintergrundgeschichte ausgefüllt ist.</p>'}`;
+      <div class="spread"><h3>Regelprüfung (helden.jar)</h3><span class="small mut">${req?`Meisterfreigaben: ${done}/${mg.length} · zuletzt abgeglichen <span class="mono">${new Date().toLocaleTimeString('de-AT')}</span>`:'noch nicht angefragt'}</span></div>
+      <div class="tw"><table class="small"><thead><tr><th>Art</th><th>Meldung</th><th>Status</th></tr></thead><tbody>${items.map(i=>`<tr><td><span class="pill ${i.t==='MG'?'new':''}">${ART[i.t]}</span></td><td>${esc(i.txt)}${i.c?`<div style="margin-top:4px"><b>Meister:</b> ${esc(i.c)}</div>`:''}</td><td>${i.t==='MG'?`<span class="pill ${ST[i.st]}">${i.st}</span>`:'<span class="mut">nur Info</span>'}</td></tr>`).join('')}</tbody></table></div>
+      ${mg.some(i=>i.st==='abgelehnt')?'<p class="small" style="color:var(--warn)">Ein Punkt wurde abgelehnt. Bitte den Helden anpassen und neu anfragen.</p>':''}
+      <div class="row"><button class="btn" id="dlxml">XML für mich herunterladen</button>
+        ${!req&&mg.length?'<button class="btn" id="askfg">Freigabe beim Meister anfragen</button>':''}
+        ${req&&mg.some(i=>i.st==='abgelehnt')?'<button class="btn" id="reask">Angepasst, neu anfragen</button>':''}
+        <button class="btn pri" id="send"${ok&&fgOk&&!draft.sent?'':' disabled'}>${draft.sent?'Gesendet ✓':'An Meister senden'}</button></div>
+      ${ok?'':'<p class="small" style="color:var(--warn)">Senden ist gesperrt, bis die Hintergrundgeschichte ausgefüllt ist.</p>'}
+      ${fgOk?'':'<p class="small" style="color:var(--warn)">Senden ist gesperrt, bis alle Punkte mit Meistergenehmigung freigegeben oder geändert sind.</p>'}`;
+    const ask=()=>{const id=Date.now();reqs.unshift({id,hero:draft.name,p:$('#who').textContent,at:new Date().toLocaleString('de-AT').slice(0,-3),items:draft.hw.filter(i=>i.t==='MG').map(i=>({...i,st:'offen',c:''}))});draft.req=id;renderFg();renderStep();toast('Anfrage gesendet. Der Meister bekommt eine Mail.')};
+    if($('#askfg'))$('#askfg').onclick=ask;
+    if($('#reask'))$('#reask').onclick=()=>{req.items.forEach(i=>{if(i.st==='abgelehnt'){i.st='offen';i.c=''}});renderFg();renderStep();toast('Neu angefragt. Der Meister bekommt eine Mail.')};
     $('#send').onclick=()=>{draft.sent=true;heroes.unshift({id:99,n:draft.name+' (neu)',p:$('#who').textContent,prof:draft.rasse+' '+draft.prof,in:new Date().toLocaleString('de-AT').slice(0,-3),st:'neu',E:{...draft.E},T:{'Sinnenschärfe':5},V:[],SF:[],G:[],bg:draft.bg});renderHeroes();renderPick();renderStep();toast('Held an den Meister gesendet. Mail ist raus.')};
     $('#dlxml').onclick=()=>toast('Mock: XML-Download (erzeugt von helden.jar)');}
   const g=gp();$('#gp').textContent=`GP ${g.used} / ${g.max}`;
@@ -576,6 +620,8 @@ $('#stepbody').addEventListener('input',e=>{if(e.target.id==='dn')draft.name=e.t
 $('#stepbody').addEventListener('change',e=>{if(e.target.dataset.k)draft[e.target.dataset.k]=e.target.value});
 $('#stepbody').addEventListener('click',e=>{const t=e.target.closest('[data-e]');if(!t)return;const k=t.dataset.e,mx=(k==='KO'||k==='KK')?15:14;draft.E[k]=Math.min(mx,Math.max(8,draft.E[k]+ +t.dataset.d));renderStep()});
 
+setInterval(()=>{if(location.hash==='#s-create'&&step===6&&draft.req&&!document.activeElement.closest('#stepbody'))renderStep()},3000); /* Spieler-UI fragt den Server alle paar Sekunden nach dem Stand */
+
 /* ---------- Spieler: Stream ---------- */
 $('#wave').innerHTML='<i></i>'.repeat(16);
 let playing=false;
@@ -585,5 +631,5 @@ $('#pvol').oninput=e=>toast('Lautstärke '+e.target.value+' %');
 setInterval(()=>{$$('#wave i').forEach(i=>i.style.height=(playing?4+Math.random()*30*($('#pvol').value/100):4)+'px')},200);
 
 /* ---------- Start ---------- */
-renderSound();renderHeroes();renderPick();renderSearch();renderAttr();route();
+renderSound();renderHeroes();renderFg();renderPick();renderSearch();renderAttr();route();
 </script>
