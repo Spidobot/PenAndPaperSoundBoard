@@ -57,7 +57,10 @@ public final class Mail {
         }
         MimeMessage m = new MimeMessage(s);
         String from = db.get("smtpFrom", "");
-        m.setFrom(new InternetAddress(from.isBlank() ? (user.contains("@") ? user : to) : from));
+        // Absender muss zum SMTP-Postfach gehören. Nie den Empfänger als Absender nehmen: das lehnt jeder Server ab.
+        if (from.isBlank() && !user.contains("@"))
+            throw new MessagingException("Absender fehlt: Der SMTP-Benutzer „" + user + "“ ist keine Mail-Adresse. Bitte unter „Absender“ die Adresse eintragen, die zu diesem Postfach gehört.");
+        m.setFrom(new InternetAddress(from.isBlank() ? user : from));
         m.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to));
         m.setSubject("[Heldenhort] " + subject, "UTF-8");
         if (ics == null) m.setText(text, "UTF-8");
