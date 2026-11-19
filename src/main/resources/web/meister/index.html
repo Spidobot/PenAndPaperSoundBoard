@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119b">
+<link rel="stylesheet" href="/common/app.css?v=20261119d">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -171,7 +171,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119b"></script>
+<script src="/common/common.js?v=20261119d"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -213,14 +213,14 @@ function fuzzy(q,name){q=norm(q);if(!q)return true;const n=norm(name);if(n.inclu
 function renderList(id){
   if(!st||!lib)return;const c=st.ch[id],[title,dir]=CH[id],el=$(`.plist[data-ch="${id}"]`),all=lib[dir]||[],items=all.filter(n=>fuzzy(qs[id],n));
   const oldUl=el.querySelector('ul'),scroll=oldUl?oldUl.scrollTop:0,inp=el.querySelector('.lsearch'),focused=inp&&document.activeElement===inp,caret=focused?inp.selectionStart:0;
-  el.innerHTML=`<div class="head"><h3>${title}</h3><span class="small mut mono">/data/audio/${dir}/${esc(st.scene)}</span></div>
+  el.innerHTML=`<div class="spread head"><div><h3>${title}</h3><span class="small mut mono">/data/audio/${dir}/${esc(st.scene)}</span></div>
+     <label class="hvol" title="Lautstärke ${title}">${IMG('vol','Lautstärke')}<input type="range" min="0" max="100" value="${c.volume}" data-chvol="${id}" aria-label="Lautstärke ${title}"><span class="mono small" data-volv="${id}">${c.volume}</span></label></div>
    <input type="search" class="lsearch" data-ls="${id}" value="${esc(qs[id])}" placeholder="${title} durchsuchen… (${all.length})" aria-label="${title} durchsuchen">
    <ul>${items.map(n=>`<li><button data-pick="${id}" data-f="${esc(dir+'/'+st.scene+'/'+n)}" title="Klick: auswählen · Doppelklick oder Play: abspielen"><span class="mk"></span>${esc(n.replace(/\.mp3$/i,''))}</button></li>`).join('')||`<li class="empty small">${all.length?'Kein Treffer.':'Keine MP3 in diesem Ordner.'}</li>`}</ul>
    <div class="small"><span class="mono" data-pos="${id}">--:-- / --:--</span> <span data-now="${id}"></span> <span class="loading" data-load="${id}" hidden>lädt …</span></div>
    <input type="range" class="seek" data-seek="${id}" min="0" max="0" step="1" value="0" aria-label="${title}: Position">
    <div class="pbar">
      <button class="ib tog" data-act="toggle" data-ch="${id}" title="Abspielen / Pause"></button>
-     <span title="Lautstärke">${IMG('vol','Lautstärke')}</span><input type="range" min="0" max="100" value="${c.volume}" data-chvol="${id}" aria-label="Lautstärke ${title}"><span class="mono small" data-volv="${id}">${c.volume}</span>
      <button class="ib tog" data-act="repeat" data-ch="${id}"></button>
    </div>`;
   el.querySelector('ul').scrollTop=scroll;
@@ -240,8 +240,12 @@ function updateStatus(id){const c=st&&st.ch[id],a=pl.a[id],l=$(`[data-load="${id
   const loading=c.playing&&pl.enabled&&(a.readyState<3||a.seeking);l.hidden=!(loading||starting[id]);
   if(starting[id]&&c.file===starting[id]&&(!pl.enabled||(!a.paused&&a.readyState>=3))){starting[id]=null;updateList(id)}}
 /** Listen bis zum unteren Fensterrand strecken */
-function fitLists(){if($('#m-sound').hidden)return;$$('.plist ul').forEach(ul=>{const card=ul.closest('.plist'),below=card.getBoundingClientRect().bottom-ul.getBoundingClientRect().bottom;
-  ul.style.height=Math.max(180,innerHeight-ul.getBoundingClientRect().top-below-24)+'px'})}
+/** Listen so hoch, dass die Seite selbst nie scrollt: erst Probehöhe setzen, dann um den Überstand kürzen bzw. den Platz auffüllen */
+function fitLists(){if($('#m-sound').hidden)return;const uls=$$('.plist ul');if(!uls.length)return;
+  const H=200;uls.forEach(u=>u.style.height=H+'px');
+  const stacked=uls.length>1&&Math.abs(uls[0].getBoundingClientRect().top-uls[1].getBoundingClientRect().top)>5;
+  const sec=$('#m-sound'),pad=parseFloat(getComputedStyle(sec.parentElement).paddingBottom)||0,over=sec.getBoundingClientRect().bottom+scrollY+pad-innerHeight;
+  const h=Math.max(80,Math.floor(H-over/(stacked?uls.length:1))-1);uls.forEach(u=>u.style.height=h+'px')}
 addEventListener('resize',fitLists);
 let lastLib='',lastFile={music:null,bg:null};
 function renderSound(){renderScenes();renderFx();
@@ -277,7 +281,7 @@ const volT={},seeking={};
 $('#m-sound').addEventListener('change',e=>{const t=e.target;if(!t.dataset.seek)return;const id=t.dataset.seek;seeking[id]=false;
   const a=pl.a[id];if(pl.enabled){try{a.currentTime=+t.value}catch(_){}}cmd({action:'seek',ch:id,pos:+t.value})});
 /* Upload */
-function showUpl(){setTimeout(fxDiag,0);$('#upl').hidden=false;const sc=SCENES.find(s=>s[0]===st.scene);$('#uplScene').textContent=sc?sc[1]:st.scene;
+function showUpl(){setTimeout(fxDiag,0);$('#upl').hidden=false;setTimeout(fitLists,0);const sc=SCENES.find(s=>s[0]===st.scene);$('#uplScene').textContent=sc?sc[1]:st.scene;
   const t=$('#uplTarget').value;$('#uplPath').textContent=`/data/audio/${t}/${st.scene}/`}
 $('#uplTarget').onchange=showUpl;
 async function fxDiag(){let r;try{r=await api('/api/sound/fxinfo')}catch(e){return}
@@ -290,7 +294,8 @@ async function fxDiag(){let r;try{r=await api('/api/sound/fxinfo')}catch(e){retu
 $('#fxDiag').addEventListener('click',e=>{const b=e.target.closest('[data-fxtest]');if(!b)return;const a=new Audio('/audio/'+b.dataset.fxtest.split('/').map(encodeURIComponent).join('/')+'?t='+Date.now());
   a.onerror=()=>toast('Kann '+b.dataset.fxtest+' nicht abspielen: '+(a.error?('Code '+a.error.code+' '+(a.error.message||'')):'unbekannt'));
   a.onplaying=()=>toast(b.dataset.fxtest+' spielt ('+a.duration.toFixed(1)+' s)');a.play().catch(x=>toastErr('Abspielen blockiert: '+x.message))});
-pl.onFxError=(file,why)=>toast('Effekt '+file+' konnte hier nicht abgespielt werden: '+why);$('#uplClose').onclick=()=>$('#upl').hidden=true;
+pl.onFxError=(file,why)=>toast('Effekt '+file+' konnte hier nicht abgespielt werden: '+why);$('#uplClose').onclick=()=>{$('#upl').hidden=true;fitLists()};
+$('#upl').addEventListener('toggle',()=>fitLists(),true);
 function upload(files){files=[...files].filter(f=>/\.mp3$/i.test(f.name));if(!files.length)return toast('Nur MP3-Dateien');
   const fd=new FormData();fd.append('target',$('#uplTarget').value);fd.append('scene',st.scene);files.forEach(f=>fd.append('files',f));
   const x=new XMLHttpRequest(),bar=$('#uplProg');bar.hidden=false;

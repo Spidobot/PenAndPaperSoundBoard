@@ -208,3 +208,8 @@ a.btn{text-decoration:none;color:inherit;display:inline-flex;align-items:center}
 .savest.ok{color:var(--ok,#3c8a4a)}.savest.dirty{color:var(--warn,#b8860b)}.savest.bad{color:#c0392b}
 .resbox{white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;font-family:var(--f-mono,monospace);font-size:.82rem;border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;background:var(--panel2)}
 .resbox.bad{border-color:#c0392b}.resbox.ok{border-color:var(--ok,#3c8a4a)}
+.plist .head.spread{display:flex;align-items:flex-start;gap:12px}
+.hvol{display:flex;align-items:center;gap:6px;min-width:180px;flex:0 1 260px}
+.hvol input[type=range]{flex:1;accent-color:var(--acc)}
+.pbar{justify-content:space-between}
+@media (min-width:761px){.side{position:sticky;top:0;height:100vh;overflow-y:auto}}
