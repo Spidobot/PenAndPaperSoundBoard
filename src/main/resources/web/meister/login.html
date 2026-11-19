@@ -6,13 +6,13 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css">
+<link rel="stylesheet" href="/common/app.css?v=20261119b">
 <style>html,body{margin:0}</style>
 </head>
 <body>
 <div class="pl"><div class="inner">
   <div class="login">
-    <h1 class="brandlogo"><img src="/common/d20.svg" alt=""> Heldenhort · Meister</h1>
+    <h1 class="brandlogo"><img src="/common/d20.svg" alt="" width="34" height="34"> Heldenhort · Meister</h1>
     <form id="f" class="card">
       <div class="field"><label class="label" for="pw">Admin-Passwort</label><input type="password" id="pw" autocomplete="current-password" required autofocus></div>
       <button class="btn pri" type="submit">Anmelden</button>
@@ -22,7 +22,7 @@
     <p class="footlinks"><button type="button" onclick="showImpressum()">Impressum</button></p>
   </div>
 </div></div>
-<script src="/common/common.js"></script>
+<script src="/common/common.js?v=20261119b"></script>
 <script>
 $('#f').onsubmit=async e=>{e.preventDefault();$('#err').hidden=true;
   try{await api('/api/admin/login',{method:'POST',body:{password:$('#pw').value}});location.href='/'}

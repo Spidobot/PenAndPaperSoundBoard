@@ -6,7 +6,7 @@
 <title>Heldenhort</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css">
+<link rel="stylesheet" href="/common/app.css?v=20261119b">
 <style>
 html,body{margin:0}
 .pl .inner{width:min(1200px,100%)}
@@ -30,7 +30,7 @@ html,body{margin:0}
 
   <!-- Anmeldung -->
   <div id="s-login" class="login" hidden>
-    <h1 class="brandlogo"><img src="/common/d20.svg" alt=""> Heldenhort</h1>
+    <h1 class="brandlogo"><img src="/common/d20.svg" alt="" width="34" height="34"> Heldenhort</h1>
     <p class="mut">Zugang für die Spielrunde. Name und Startpasswort bekommst du vom Meister.</p>
     <form id="lform" class="card">
       <div class="field"><label class="label" for="lname">Name</label><input type="text" id="lname" maxlength="40" autocomplete="username" required></div>
@@ -43,7 +43,7 @@ html,body{margin:0}
 
   <!-- Start -->
   <div id="s-home" hidden>
-    <div class="spread" style="margin-bottom:18px"><div style="display:grid;gap:4px"><span class="smalllogo"><img src="/common/d20.svg" alt=""> Heldenhort</span><h1 id="greet"></h1></div><button class="btn sm" id="logout">Abmelden</button></div>
+    <div class="spread" style="margin-bottom:18px"><div style="display:grid;gap:4px"><span class="smalllogo"><img src="/common/d20.svg" alt="" width="22" height="22"> Heldenhort</span><h1 id="greet"></h1></div><button class="btn sm" id="logout">Abmelden</button></div>
     <div class="tiles">
       <button class="tile" data-go="s-drafts"><span class="ico">✦</span><h2>Heldenerstellung</h2><span class="mut">Neue Helden bauen, mit Backgroundstory an den Meister senden.</span></button>
       <button class="tile" data-go="s-mine"><span class="ico">⚔</span><h2>Meine Helden</h2><span class="mut">Deine Helden beim Meister ansehen.</span></button>
@@ -121,7 +121,7 @@ html,body{margin:0}
 </div></div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js"></script>
+<script src="/common/common.js?v=20261119b"></script>
 <script>
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const VIEWS=['s-login','s-home','s-drafts','s-create','s-mine','s-konto','s-stream','s-termine'];

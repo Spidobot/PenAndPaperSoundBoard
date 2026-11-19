@@ -6,13 +6,13 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css">
+<link rel="stylesheet" href="/common/app.css?v=20261119b">
 <style>html,body{margin:0}</style>
 </head>
 <body>
 <div class="shell">
   <nav class="side" aria-label="Meister-Navigation">
-    <div class="brand brandlogo"><img src="/common/d20.svg" alt=""> Heldenhort</div>
+    <div class="brand brandlogo"><img src="/common/d20.svg" alt="" width="34" height="34"> Heldenhort</div>
     <a href="#m-sound" data-v="m-sound">Soundboard</a>
     <a href="#m-helden" data-v="m-helden">Helden <span class="pill new" id="hBadge" hidden></span></a>
     <a href="#m-freigaben" data-v="m-freigaben">Freigaben <span class="pill new" id="fgBadge" hidden></span></a>
@@ -171,7 +171,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js"></script>
+<script src="/common/common.js?v=20261119b"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
