@@ -12,7 +12,7 @@
 <body>
 <div class="shell">
   <nav class="side" aria-label="Meister-Navigation">
-    <div class="brand">Heldenhort</div>
+    <div class="brand brandlogo"><img src="/common/d20.svg" alt=""> Heldenhort</div>
     <a href="#m-sound" data-v="m-sound">Soundboard</a>
     <a href="#m-helden" data-v="m-helden">Helden <span class="pill new" id="hBadge" hidden></span></a>
     <a href="#m-freigaben" data-v="m-freigaben">Freigaben <span class="pill new" id="fgBadge" hidden></span></a>
@@ -22,7 +22,7 @@
     <a href="#m-termine" data-v="m-termine">Termine</a>
     <a href="#m-config" data-v="m-config">Konfiguration</a>
     <a href="#" id="logout">Abmelden</a>
-    <div class="foot">Jeder Bereich hat eine eigene Adresse. Mehrere Tabs gleichzeitig möglich.<br><br>Icons: <a href="https://icons8.com" target="_blank" rel="noopener" style="display:inline;padding:0">Icons8</a></div>
+    <div class="foot">Jeder Bereich hat eine eigene Adresse. Mehrere Tabs gleichzeitig möglich.<br><br><button type="button" class="link" onclick="showImpressum()">Impressum</button><br>Icons: <a href="https://icons8.com" target="_blank" rel="noopener" style="display:inline;padding:0">Icons8</a></div>
   </nav>
   <main>
 
@@ -132,30 +132,36 @@
 
     <section class="view" id="m-config" hidden>
       <h1>Konfiguration</h1>
-      <form id="cfg" class="cfggrid">
+      <form id="cfg" class="cfgcol">
         <div class="card">
-          <h3>Benachrichtigung</h3>
-          <div class="field"><label class="label" for="mailTo">Mail an Meister</label><input type="email" id="mailTo"></div>
+          <h3>Die E-Mail des erhabenen Meisters</h3>
+          <div class="field"><label class="label" for="mailTo">Hierhin gehen alle Nachrichten an den Meister</label><input type="email" id="mailTo"></div>
+          <div class="field"><label class="label" for="steigerLimit">Steigerungen ohne Freigabe</label><input type="number" id="steigerLimit" min="0" max="999" style="max-width:160px"></div>
+          <p class="small mut">Wie oft eine Fertigkeit seit dem letzten Aussenden gesteigert werden darf, bevor du freigeben musst (mit Mail an dich). 0 = keine Grenze.</p>
+        </div>
+        <div class="card">
+          <h3>Spielerseite</h3>
+          <div class="field"><label class="label" for="greeting">Begrüßung nach dem Anmelden ({name} = Name des Spielers, Emojis erlaubt)</label><input type="text" id="greeting" maxlength="120" placeholder="z. B. Praios zum Gruße, {name}! ☀️"></div>
+          <div class="field"><label class="label" for="impressum">Impressum (auf beiden Anmeldeseiten verlinkt)</label><textarea id="impressum" rows="14"></textarea></div>
+          <p class="small mut">Die eckigen Klammern durch deine Angaben ersetzen.</p>
+        </div>
+        <details class="card tech">
+          <summary><h3 style="display:inline">Technische Detaileinstellungen</h3></summary>
+          <h3>Mailversand (SMTP)</h3>
           <div class="grid2"><div class="field"><label class="label" for="smtpHost">SMTP-Server</label><input type="text" id="smtpHost"></div><div class="field"><label class="label" for="smtpPort">Port</label><input type="number" id="smtpPort"></div></div>
           <div class="grid2"><div class="field"><label class="label" for="smtpUser">SMTP-Benutzer</label><input type="text" id="smtpUser" autocomplete="off"></div><div class="field"><label class="label" for="smtpPass">SMTP-Passwort</label><input type="password" id="smtpPass" autocomplete="new-password"></div></div>
           <div class="field"><label class="label" for="smtpFrom">Absender (leer = SMTP-Benutzer)</label><input type="email" id="smtpFrom"></div>
           <button class="btn sm" type="button" id="testmail" style="justify-self:start">Testmail senden</button>
-          <div class="field"><label class="label" for="steigerLimit">Steigerungen ohne Freigabe</label><input type="number" id="steigerLimit" min="0" max="999"></div>
-          <p class="small mut">Wie oft eine Fertigkeit seit dem letzten Aussenden gesteigert werden darf, bevor du freigeben musst (mit Mail an dich). 0 = keine Grenze.</p>
-        </div>
-        <div class="card">
           <h3>helden.jar</h3>
           <div id="jarinfo" class="small"></div>
           <div class="field"><label class="label" for="updateTime">Tägliche Update-Prüfung (Serverzeit)</label><input type="time" id="updateTime"></div>
           <p class="small mut">Einmal täglich zu dieser Uhrzeit fragt der Server beim Update-Server der Helden-Software nach. Gibt es eine neue Version, wird sie geladen, per MD5 geprüft und ausgetauscht.</p>
           <div class="row"><button class="btn sm" type="button" id="updnow">Jetzt prüfen</button><button class="btn sm" type="button" id="selftest" title="Baut mit der laufenden helden.jar einen Testhelden komplett durch">Selbsttest</button></div>
           <p class="small mut">Vor jedem Austausch baut der Server mit der neuen Version einen Testhelden. Klappt das nicht, bleibt die bisherige Version aktiv und du bekommst eine Mail.</p>
-        </div>
-        <div class="card">
           <h3>Speicherorte im Container</h3>
           <dl class="paths"><dt class="mono">/data/audio/Music/&lt;Szene&gt;</dt><dd>Musik (Village, Travel, Dungeon, Castle, Fight)</dd><dt class="mono">/data/audio/Sounds/&lt;Szene&gt;</dt><dd>Hintergrundgeräusche</dd><dt class="mono">/data/audio/Effects</dt><dd>Effekt-Knöpfe (Schatztruhe.mp3, Kuh.mp3 …)</dd><dt class="mono">/data/audio/…</dt><dd>Upload über „Dateiordner“ im Soundboard oder per FTP</dd><dt class="mono">/data/helden</dt><dd>Helden-XML, per FTP befüllbar</dd><dt class="mono">/data/db/heldenhort.sqlite</dt><dd>Einstellungen, Sessions, Freigaben</dd><dt class="mono">/data/jar/helden.jar</dt><dd>ersetzt sich selbst über ihren Updater</dd></dl>
-        </div>
-        <div class="row" style="grid-column:1/-1"><button class="btn pri" type="submit">Speichern</button></div>
+        </details>
+        <div class="row"><button class="btn pri" type="submit">Speichern</button></div>
       </form>
     </section>
   </main>
@@ -520,7 +526,7 @@ $('#pollList').onclick=async e=>{const b=e.target.closest('button');if(!b)return
 setInterval(()=>{if(location.hash==='#m-termine'&&!$('#pollForm').contains(document.activeElement))loadPolls()},15000);
 
 /* ---------- Konfiguration ---------- */
-const CFG=['steigerLimit','mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];
+const CFG=['steigerLimit','greeting','impressum','mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];
 async function loadCfg(){try{const c=await api('/api/config');CFG.forEach(k=>$('#'+k).value=c[k]??'');loadJar()}catch(e){toast(e.message)}}
 async function loadJar(){try{const j=await api('/api/jar');
   $('#jarinfo').innerHTML=j.present?`<dl class="kv"><dt>Installiert</dt><dd class="mono">${esc(j.version||'?')}</dd>

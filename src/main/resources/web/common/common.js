@@ -59,3 +59,10 @@ function pollMatrix(p,mine,draftAns){
       ${others.map(v=>{const x=vote(o.id,v.id);return `<td class="${x?'v-'+x.answer:'mut'}" title="${x?esc(x.answer):'noch offen'}">${x?SYM[x.answer]:'·'}</td>`}).join('')}
       <td class="mono small">${ja} ✓ · ${vi} ?</td></tr>`}).join('')}</tbody></table></div>`}
 function fmtTermin(v){try{const d=new Date(v);if(isNaN(d))return v;return d.toLocaleString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}catch(e){return v}}
+
+/** Impressum als Dialog (Text vom Server, Meister pflegt ihn in der Konfiguration) */
+async function showImpressum(){let d=document.getElementById('imprDlg');
+  if(!d){d=document.createElement('dialog');d.id='imprDlg';d.className='sheetdlg';d.style.maxWidth='720px';
+    d.innerHTML='<div class="spread"><h2>Impressum</h2><button class="btn sm" type="button" data-x>Schließen</button></div><div class="impr" id="imprTxt">…</div>';
+    document.body.append(d);d.addEventListener('click',e=>{if(e.target===d||e.target.closest('[data-x]'))d.close()})}
+  d.showModal();try{const r=await fetch('/api/public').then(r=>r.json());d.querySelector('#imprTxt').textContent=r.impressum}catch(e){d.querySelector('#imprTxt').textContent='Impressum nicht erreichbar.'}}

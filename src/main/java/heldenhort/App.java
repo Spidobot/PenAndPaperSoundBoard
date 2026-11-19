@@ -39,6 +39,7 @@ public final class App {
         Javalin m = web("/web/meister", 600_000_000L);
         Javalin s = web("/web/spieler", 4_000_000L);
         for (Javalin a : List.of(m, s)) {
+            a.get("/api/public", ctx -> ctx.json(Map.of("impressum", db.get("impressum", "").isBlank() ? IMPRESSUM : db.get("impressum", ""))));
             a.exception(IllegalArgumentException.class, (e, ctx) -> ctx.status(400).json(Map.of("error", e.getMessage())));
             a.exception(IllegalStateException.class, (e, ctx) -> ctx.status(409).json(Map.of("error", e.getMessage())));
             a.get("/audio/<path>", ctx -> {
@@ -53,7 +54,7 @@ public final class App {
         // ---------------- Meister ----------------
         m.before(ctx -> {
             String p = ctx.path();
-            if (p.equals("/login.html") || p.startsWith("/common/") || p.equals("/api/admin/login") || admin(db, adminPw, ctx)) return;
+            if (p.equals("/login.html") || p.startsWith("/common/") || p.equals("/api/admin/login") || p.equals("/api/public") || admin(db, adminPw, ctx)) return;
             if (p.startsWith("/api/") || p.startsWith("/audio/")) throw new UnauthorizedResponse("Bitte anmelden");
             ctx.redirect("/login.html");
             ctx.skipRemainingHandlers();
@@ -91,8 +92,8 @@ public final class App {
 
         m.get("/api/config", ctx -> {
             Map<String, Object> c = new LinkedHashMap<>();
-            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit"))
-                c.put(k, db.get(k, k.equals("updateTime") ? "04:00" : k.equals("smtpPort") ? "587" : k.equals("steigerLimit") ? "0" : ""));
+            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit", "greeting", "impressum"))
+                c.put(k, db.get(k, k.equals("updateTime") ? "04:00" : k.equals("smtpPort") ? "587" : k.equals("steigerLimit") ? "0" : k.equals("greeting") ? GREETING : k.equals("impressum") ? IMPRESSUM : ""));
             ctx.json(c);
         });
         m.put("/api/config", ctx -> {
@@ -102,13 +103,13 @@ public final class App {
             if (!String.valueOf(b.get("smtpPort")).matches("\\d{1,5}")) throw new IllegalArgumentException("SMTP-Port ist keine Zahl");
             if (!String.valueOf(b.get("steigerLimit")).matches("\\d{1,3}")) throw new IllegalArgumentException("Steigerungsgrenze ist keine Zahl (0 = keine Grenze)");
             if (!t.equals(db.get("updateTime", "04:00"))) db.put("jarLastDay", ""); // neue Uhrzeit gilt schon heute
-            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit"))
+            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit", "greeting", "impressum"))
                 db.put(k, String.valueOf(b.get(k) == null ? "" : b.get(k)).trim());
             ctx.json(Map.of("ok", true));
         });
         m.post("/api/config/testmail", ctx -> {
             try { mail.send("Testmail", "Die Mail-Einstellungen von Heldenhort funktionieren."); ctx.json(Map.of("ok", true)); }
-            catch (Exception e) { ctx.status(502).json(Map.of("error", e.getMessage())); }
+            catch (Exception e) { ctx.status(422).json(Map.of("error", cause(e))); }
         });
         m.get("/api/jar", ctx -> ctx.json(jar.status()));
         m.post("/api/jar/update", ctx -> ctx.json(Map.of("result", jar.update())));
@@ -194,7 +195,7 @@ public final class App {
         // ---------------- Spieler ----------------
         s.before(ctx -> {
             String p = ctx.path();
-            if ((p.startsWith("/api/") || p.startsWith("/audio/")) && !p.equals("/api/login") && !p.equals("/api/account/confirm") && accounts.current(ctx) == null)
+            if ((p.startsWith("/api/") || p.startsWith("/audio/")) && !p.equals("/api/login") && !p.equals("/api/account/confirm") && !p.equals("/api/public") && accounts.current(ctx) == null)
                 throw new UnauthorizedResponse("Bitte anmelden");
         });
         s.post("/api/login", ctx -> {
@@ -208,7 +209,9 @@ public final class App {
         s.get("/api/me", ctx -> {
             var a = accounts.current(ctx);
             Map<String, Object> me = new LinkedHashMap<>();
-            me.put("id", a.get("id")); me.put("name", a.get("name")); me.put("email", a.get("email")); me.put("emailPending", a.get("email_pending"));
+            me.put("id", a.get("id")); me.put("name", a.get("name"));
+            String gr = db.get("greeting", "");
+            me.put("greeting", (gr.isBlank() ? GREETING : gr).replace("{name}", String.valueOf(a.get("name")))); me.put("email", a.get("email")); me.put("emailPending", a.get("email_pending"));
             ctx.json(me);
         });
         s.post("/api/account/password", ctx -> {
@@ -361,6 +364,36 @@ public final class App {
             String t = ctx.cookie("hhm");
             return !pw.isBlank() && t != null && MessageDigest.isEqual(t.getBytes(StandardCharsets.UTF_8), adminToken(db, pw).getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) { return false; }
+    }
+
+    static final String GREETING = "Willkommen, {name}";
+    static final String IMPRESSUM = """
+Impressum
+
+Angaben gemäß § 5 E-Commerce-Gesetz und Offenlegung gemäß § 25 Mediengesetz
+
+Medieninhaber und Betreiber:
+[Vorname Nachname]
+[Ort], Österreich
+
+Kontakt: [E-Mail-Adresse]
+
+Blattlinie:
+Private, nicht-kommerzielle Seite einer Pen-&-Paper-Runde (Das Schwarze Auge): Organisation der Spielabende, Verwaltung der Helden und Soundboard für den Spieltisch. Kein öffentliches Angebot.
+
+Hinweise:
+Das Schwarze Auge ist eine eingetragene Marke der Ulisses Spiele GmbH. Die Heldenerstellung nutzt die Helden-Software (helden-software.de). Diese Seite steht in keiner Verbindung zu den Rechteinhabern.
+Icons: Icons8 (icons8.com).""";
+
+    /** Fehlerkette lesbar machen (Mailserver-Fehler stecken oft in der Ursache). */
+    static String cause(Throwable e) {
+        StringBuilder sb = new StringBuilder();
+        for (Throwable x = e; x != null && sb.length() < 600; x = x.getCause()) {
+            String m = x.getMessage();
+            if (sb.length() > 0) sb.append(" → ");
+            sb.append(x.getClass().getSimpleName()).append(m == null ? "" : ": " + m);
+        }
+        return sb.toString();
     }
 
     static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();

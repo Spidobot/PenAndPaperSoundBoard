@@ -12,13 +12,14 @@
 <body>
 <div class="pl"><div class="inner">
   <div class="login">
-    <h1>Heldenhort · Meister</h1>
+    <h1 class="brandlogo"><img src="/common/d20.svg" alt=""> Heldenhort · Meister</h1>
     <form id="f" class="card">
       <div class="field"><label class="label" for="pw">Admin-Passwort</label><input type="password" id="pw" autocomplete="current-password" required autofocus></div>
       <button class="btn pri" type="submit">Anmelden</button>
       <p class="small err" id="err" hidden></p>
     </form>
     <p class="small mut">Das Passwort steht in der Docker-Konfiguration (ADMIN_PASSWORD).</p>
+    <p class="footlinks"><button type="button" onclick="showImpressum()">Impressum</button></p>
   </div>
 </div></div>
 <script src="/common/common.js"></script>

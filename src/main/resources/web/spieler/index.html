@@ -30,7 +30,7 @@ html,body{margin:0}
 
   <!-- Anmeldung -->
   <div id="s-login" class="login" hidden>
-    <h1>Heldenhort</h1>
+    <h1 class="brandlogo"><img src="/common/d20.svg" alt=""> Heldenhort</h1>
     <p class="mut">Zugang für die Spielrunde. Name und Startpasswort bekommst du vom Meister.</p>
     <form id="lform" class="card">
       <div class="field"><label class="label" for="lname">Name</label><input type="text" id="lname" maxlength="40" autocomplete="username" required></div>
@@ -38,16 +38,17 @@ html,body{margin:0}
       <button class="btn pri" type="submit">Anmelden</button>
       <p class="small err" id="lerr" hidden></p>
     </form>
+    <p class="footlinks"><button type="button" onclick="showImpressum()">Impressum</button></p>
   </div>
 
   <!-- Start -->
   <div id="s-home" hidden>
-    <div class="spread" style="margin-bottom:18px"><h1>Willkommen, <span id="who"></span></h1><button class="btn sm" id="logout">Abmelden</button></div>
+    <div class="spread" style="margin-bottom:18px"><div style="display:grid;gap:4px"><span class="smalllogo"><img src="/common/d20.svg" alt=""> Heldenhort</span><h1 id="greet"></h1></div><button class="btn sm" id="logout">Abmelden</button></div>
     <div class="tiles">
       <button class="tile" data-go="s-drafts"><span class="ico">✦</span><h2>Heldenerstellung</h2><span class="mut">Neue Helden bauen, mit Hintergrundgeschichte an den Meister senden.</span></button>
       <button class="tile" data-go="s-mine"><span class="ico">⚔</span><h2>Meine Helden</h2><span class="mut">Deine Helden beim Meister ansehen.</span></button>
       <button class="tile" data-go="s-stream"><span class="ico">♪</span><h2>Soundstream</h2><span class="mut">Musik und Geräusche vom Spieltisch. Du regelst nur deine Lautstärke.</span></button>
-      <button class="tile" data-go="s-termine"><span class="ico">⌛</span><h2>Termine</h2><span class="mut">Abstimmen, wann die nächste Runde stattfindet.</span></button>
+      <button class="tile" data-go="s-termine"><span class="ico">⧗</span><h2>Termine</h2><span class="mut">Abstimmen, wann die nächste Runde stattfindet.</span></button>
       <button class="tile" data-go="s-konto"><span class="ico">⚙</span><h2>Konto</h2><span class="mut">Passwort ändern, Mail-Adresse für Benachrichtigungen.</span></button>
     </div>
   </div>
@@ -127,7 +128,7 @@ function go(v){if(location.hash.slice(1)===v)guard(v);else location.hash=v}
 addEventListener('hashchange',()=>guard(location.hash.slice(1)||'s-home'));
 async function guard(v){
   if(!me&&v!=='s-login'){try{me=await api('/api/me')}catch(e){return show('s-login')}}
-  if(me)$('#who').textContent=me.name;
+  if(me)$('#greet').textContent=me.greeting||('Willkommen, '+me.name);
   if(v.startsWith('d-')){openDraft(+v.slice(2));return}
   show(VIEWS.includes(v)?v:'s-home')}
 addEventListener('hh401',()=>{me=null;show('s-login')});
