@@ -342,6 +342,19 @@ public final class Creation {
             e = edit(l, (String) e.get("draft"), List.of(Map.of("op", "eig", "name", mu.get("name"), "value", mu.get("min"))));
             String xml = (String) finish(l, (String) e.get("draft"), "Selbsttest").get("xml");
             if (!xml.contains("Selbsttest") || !xml.contains("<eigenschaft")) throw new IllegalStateException("Helden-XML unvollständig");
+            // Steigern braucht die SKT-Spalte eines Talents (getSteigernKategorie über die Plugin-Schnittstelle)
+            Path tf = Files.createTempFile("selbsttest", ".xml");
+            try {
+                Files.writeString(tf, xml);
+                Object xp = l.loadClass("helden.framework.held.persistenz.XMLPersistierer").getConstructor().newInstance();
+                Object h = ((List<?>) call(xp, "ladeHelden", tf.toFile())).get(0);
+                Object hw = l.loadClass("helden.plugin.datenplugin.impl.DatenPluginHeldenWerkzeugImpl").getConstructor(l.loadClass("helden.framework.held.H")).newInstance(h);
+                org.w3c.dom.Element t1 = null;
+                for (org.w3c.dom.Element t : Heroes.all(parse(xml).getDocumentElement(), "talent")) if (t.hasAttribute("value")) { t1 = t; break; }
+                if (t1 == null) throw new IllegalStateException("Kein Talent im Testhelden");
+                String col = String.valueOf(call(call(call(hw, "getTalent", t1.getAttribute("name")), "getTalent"), "getSteigernKategorie"));
+                if (!col.matches("[A-H]")) throw new IllegalStateException("Steigerungsspalte nicht lesbar: " + col);
+            } finally { Files.deleteIfExists(tf); }
             return "Selbsttest ok (" + ((Map<?, ?>) r.get("rasse")).get("name") + ", " + ((Map<?, ?>) r.get("profession")).get("name") + ")";
         } finally { Thread.currentThread().setContextClassLoader(old); }
     }

@@ -84,6 +84,18 @@
         <div class="chips" id="quick"></div>
         <div class="tw"><table><thead><tr><th>Held</th><th>Treffer</th><th>Art</th><th>Wert</th><th style="width:18%"></th><th>Details</th></tr></thead><tbody id="rbody"></tbody></table></div>
       </div>
+      <div class="card" id="awardCard">
+        <div class="spread"><h3>Abenteuer abschließen: AP und Spezielle Erfahrungen</h3><span class="small mut">Wird erst beim Aussenden in die Helden geschrieben</span></div>
+        <div class="grid2">
+          <div class="field"><label class="label" for="awAp">AP für alle</label><input type="number" id="awAp" min="0" value="0"></div>
+          <div class="field"><label class="label" for="awSe">SE für alle (Talent, Enter zum Hinzufügen)</label><input type="text" id="awSe" list="qlist" placeholder="z. B. Sinnenschärfe"></div>
+          <div class="field"><label class="label" for="awNote">Anlass</label><input type="text" id="awNote" placeholder="z. B. Phileasson, Kapitel 3"></div>
+        </div>
+        <div class="chips" id="awSeAll"></div>
+        <div class="tw"><table><thead><tr><th>Held</th><th>AP</th><th>Spezielle Erfahrungen</th></tr></thead><tbody id="awRows"></tbody></table></div>
+        <div class="row"><button class="btn pri" id="awAdd">Vormerken</button></div>
+        <div id="awPending"></div>
+      </div>
       <div class="card"><div class="spread"><h3>Schnellblick Eigenschaften</h3><span class="small mut">Bester Wert markiert</span></div><div class="tw"><table id="attrtab"></table></div></div>
     </section>
 
@@ -127,6 +139,8 @@
           <div class="grid2"><div class="field"><label class="label" for="smtpUser">SMTP-Benutzer</label><input type="text" id="smtpUser" autocomplete="off"></div><div class="field"><label class="label" for="smtpPass">SMTP-Passwort</label><input type="password" id="smtpPass" autocomplete="new-password"></div></div>
           <div class="field"><label class="label" for="smtpFrom">Absender (leer = SMTP-Benutzer)</label><input type="email" id="smtpFrom"></div>
           <button class="btn sm" type="button" id="testmail" style="justify-self:start">Testmail senden</button>
+          <div class="field"><label class="label" for="steigerLimit">Steigerungen ohne Freigabe</label><input type="number" id="steigerLimit" min="0" max="999"></div>
+          <p class="small mut">Wie oft eine Fertigkeit seit dem letzten Aussenden gesteigert werden darf, bevor du freigeben musst (mit Mail an dich). 0 = keine Grenze.</p>
         </div>
         <div class="card">
           <h3>helden.jar</h3>
@@ -295,12 +309,12 @@ async function loadSession(){try{[sessions,heroes]=await Promise.all([api('/api/
   if(openSess!=null&&sessions.find(s=>s.id===openSess))cur=openSess;else cur=sessions[0]?.id??null; // immer die neueste, außer explizit geöffnet
   openSess=null;
   $('#sessSel').innerHTML=sessions.map(s=>`<option value="${s.id}"${s.id===cur?' selected':''}>${esc(s.name)}</option>`).join('')||'<option>Keine Session</option>';
-  renderPick();renderSearch();renderAttr()}
+  renderPick();renderSearch();renderAttr();renderAward()}
 const inSess=()=>{const s=sessions.find(x=>x.id===cur);return new Set(s?JSON.parse(s.heroes||'[]'):[])};
 const sessHeroes=()=>{const set=inSess();return heroes.filter(h=>set.has(h.file)&&!h.error)};
 function renderPick(){const set=inSess();
   $('#hpick').innerHTML=cur==null?'<span class="mut small">Erst eine Session anlegen.</span>':heroes.filter(h=>!h.error).map(h=>`<label><input type="checkbox" data-s="${esc(h.file)}"${set.has(h.file)?' checked':''}> ${esc(h.name)} <span class="mut small">${esc(h.player)}</span>${h.status==='neu'?' <span class="pill new">neu</span>':''}</label>`).join('')||'<span class="mut small">Noch keine Helden.</span>'}
-$('#sessSel').onchange=e=>{cur=+e.target.value;renderPick();renderSearch();renderAttr()};
+$('#sessSel').onchange=e=>{cur=+e.target.value;renderPick();renderSearch();renderAttr();renderAward()};
 /* ---------- Sessions verwalten ---------- */
 let confirmDel=null;
 async function loadSessions(){try{[sessions,heroes]=await Promise.all([api('/api/sessions'),api('/api/heroes')])}catch(e){return toast(e.message)}renderSessions()}
@@ -321,7 +335,7 @@ $('#sesstab').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
 $('#sesstab').addEventListener('change',async e=>{const id=e.target.dataset.ren;if(!id)return;
   try{await api('/api/sessions/'+id,{method:'PUT',body:{name:e.target.value}});toast('Umbenannt')}catch(x){toast(x.message);loadSessions()}});
 $('#hpick').onchange=async()=>{const files=$$('#hpick input:checked').map(i=>i.dataset.s);
-  try{await api('/api/sessions/'+cur,{method:'PUT',body:{heroes:files}});sessions.find(s=>s.id===cur).heroes=JSON.stringify(files);renderSearch();renderAttr()}catch(e){toast(e.message)}};
+  try{await api('/api/sessions/'+cur,{method:'PUT',body:{heroes:files}});sessions.find(s=>s.id===cur).heroes=JSON.stringify(files);renderSearch();renderAttr();renderAward()}catch(e){toast(e.message)}};
 const quick=['Sinnenschärfe','Gefahreninstinkt','Selbstbeherrschung','Schwimmen','Menschenkenntnis','Schleichen','IN','MU'];
 $('#quick').innerHTML=quick.map(q=>`<button class="chip" data-q="${q}">${q}</button>`).join('');
 $('#quick').onclick=e=>{const b=e.target.closest('[data-q]');if(b){$('#q').value=b.dataset.q;$('#qcat').value='';renderSearch()}};
@@ -351,6 +365,31 @@ function renderSearch(){fillSuggest();
   $('#rbody').innerHTML=rows.map(r=>r.k===null?`<tr><td>${nm(r.h)}</td><td colspan="5" class="mut">nicht vorhanden</td></tr>`
     :`<tr class="${r.v!==null&&r.v===top&&top>-999?'best':''}"><td>${nm(r.h)}</td><td>${re?esc(r.k).replace(re,'<mark>$1</mark>'):esc(r.k)}</td><td class="small mut">${esc(r.t)}</td>
       <td class="mono">${r.raw===''||r.raw==null?'✓':esc(r.raw)}</td><td>${r.v!==null?`<div class="bar"><i style="width:${Math.max(0,Math.min(100,r.v/r.max*100))}%"></i></div>`:''}</td><td class="small mut">${esc(r.d)}</td></tr>`).join('')}
+/* AP und SE vormerken */
+let awSe=[],awOv={};
+function renderAward(){const hs=sessHeroes();
+  $('#awSeAll').innerHTML=awSe.map((t,i)=>`<span class="chip">${esc(t)} <button class="link" data-awrm="${i}" aria-label="entfernen">✕</button></span>`).join('');
+  $('#awRows').innerHTML=hs.map(h=>{const o=awOv[h.file]||{};const ap=o.ap??$('#awAp').value;const extra=o.se||[];
+    return `<tr><td>${esc(h.name)} <span class="small mut">${esc(h.player||'')}</span></td><td><input type="number" min="0" value="${esc(ap)}" data-awap="${esc(h.file)}" style="width:100px"></td>
+      <td><span class="small mut">${awSe.map(esc).join(', ')||'–'}</span>${extra.map((t,i)=>` <span class="chip">${esc(t)} <button class="link" data-awxr="${esc(h.file)}" data-i="${i}">✕</button></span>`).join('')}
+      <input type="text" list="qlist" placeholder="+ SE nur für diesen Helden" data-awse="${esc(h.file)}" style="width:200px"></td></tr>`}).join('')||'<tr><td colspan="3" class="empty">Keine Helden in dieser Session.</td></tr>';
+  loadPending()}
+async function loadPending(){let ps;try{ps=await api('/api/awards')}catch(e){return}
+  $('#awPending').innerHTML=ps.length?`<h3 style="margin-top:12px">Vorgemerkt</h3><div class="tw"><table><tbody>${ps.map(a=>{const h=heroes.find(x=>x.file===a.file);return `<tr><td>${esc(h?h.name:a.file)}</td><td class="mono">${a.ap} AP</td><td class="small">${JSON.parse(a.se).map(esc).join(', ')}</td><td class="small mut">${esc(a.note||'')}</td><td><button class="btn sm danger" data-awdel="${a.id}">✕</button></td></tr>`}).join('')}</tbody></table></div>
+    <div class="row"><button class="btn pri" id="awSend">Aussenden (${ps.length})</button><span class="small mut">Schreibt AP in die Helden-XML, schreibt SE gut und benachrichtigt die Spieler.</span></div>`:''}
+$('#awSe').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const v=e.target.value.trim();if(v&&!awSe.includes(v))awSe.push(v);e.target.value='';renderAward()}});
+$('#awAp').oninput=()=>{awOv={...Object.fromEntries(Object.entries(awOv).map(([k,v])=>[k,{...v,ap:undefined}]))};renderAward()};
+$('#awardCard').addEventListener('change',e=>{const t=e.target;if(t.dataset.awap){(awOv[t.dataset.awap]=awOv[t.dataset.awap]||{}).ap=t.value}});
+$('#awardCard').addEventListener('keydown',e=>{const t=e.target;if(t.dataset.awse&&e.key==='Enter'){e.preventDefault();const v=t.value.trim();if(!v)return;const o=awOv[t.dataset.awse]=awOv[t.dataset.awse]||{};(o.se=o.se||[]).push(v);renderAward()}});
+$('#awardCard').addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.awrm){awSe.splice(+b.dataset.awrm,1);renderAward()}
+  if(b.dataset.awxr){awOv[b.dataset.awxr].se.splice(+b.dataset.i,1);renderAward()}
+  if(b.dataset.awdel){await api('/api/awards/'+b.dataset.awdel,{method:'DELETE'}).catch(x=>toast(x.message));loadPending()}
+  if(b.id==='awAdd'){const list=sessHeroes().map(h=>{const o=awOv[h.file]||{};return {file:h.file,ap:+(o.ap??$('#awAp').value)||0,se:[...awSe,...(o.se||[])]}});
+    try{await api('/api/awards',{method:'POST',body:{awards:list,note:$('#awNote').value}});awOv={};awSe=[];$('#awAp').value=0;toast('Vorgemerkt. Mit „Aussenden“ geht es an die Helden.');renderAward()}catch(x){toast(x.message)}}
+  if(b.id==='awSend'){if(b.dataset.ask!=='1'){b.dataset.ask='1';b.textContent='Wirklich aussenden?';return}
+    try{const r=await api('/api/awards/send',{method:'POST'});toast('Ausgesendet: '+r.done.join(' · '));renderAward()}catch(x){toast(x.message)}}});
+
 function renderAttr(){const hs=sessHeroes(),ks=['MU','KL','IN','CH','FF','GE','KO','KK'];
   $('#attrtab').innerHTML=hs.length?'<thead><tr><th>Held</th>'+ks.map(k=>`<th class="mono">${k}</th>`).join('')+'</tr></thead><tbody>'+
    hs.map(h=>'<tr><td><button class="link" data-sheet="'+esc(h.file)+'">'+esc(h.name)+'</button></td>'+ks.map(k=>{const best=Math.max(...hs.map(x=>x.E[k]??0));return`<td class="mono${h.E[k]===best?' best':''}">${h.E[k]??''}</td>`}).join('')+'</tr>').join('')+'</tbody>':''}
@@ -439,7 +478,7 @@ $('#pollList').onclick=async e=>{const b=e.target.closest('button');if(!b)return
 setInterval(()=>{if(location.hash==='#m-termine'&&!$('#pollForm').contains(document.activeElement))loadPolls()},15000);
 
 /* ---------- Konfiguration ---------- */
-const CFG=['mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];
+const CFG=['steigerLimit','mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];
 async function loadCfg(){try{const c=await api('/api/config');CFG.forEach(k=>$('#'+k).value=c[k]??'');loadJar()}catch(e){toast(e.message)}}
 async function loadJar(){try{const j=await api('/api/jar');
   $('#jarinfo').innerHTML=j.present?`<dl class="kv"><dt>Installiert</dt><dd class="mono">${esc(j.version||'?')}</dd>

@@ -30,6 +30,7 @@ public final class App {
         jar.selfTest = probe -> { try { return creation.selfTest(probe); } catch (Exception e) { return "FEHLER " + e.getMessage(); } };
         jar.onRejected = msg -> mail.notifyMeister("helden.jar-Update zurückgehalten", msg);
         Heroes heroes = new Heroes(db, data.resolve("helden"));
+        Advance advance = new Advance(db, heroes, jar, accounts, mail);
         Sound sound = new Sound(data.resolve("audio"));
         if (db.get("secret", null) == null) db.put("secret", HexFormat.of().formatHex(SecureRandom.getInstanceStrong().generateSeed(32)));
 
@@ -89,8 +90,8 @@ public final class App {
 
         m.get("/api/config", ctx -> {
             Map<String, Object> c = new LinkedHashMap<>();
-            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime"))
-                c.put(k, db.get(k, k.equals("updateTime") ? "04:00" : k.equals("smtpPort") ? "587" : ""));
+            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit"))
+                c.put(k, db.get(k, k.equals("updateTime") ? "04:00" : k.equals("smtpPort") ? "587" : k.equals("steigerLimit") ? "0" : ""));
             ctx.json(c);
         });
         m.put("/api/config", ctx -> {
@@ -98,8 +99,9 @@ public final class App {
             String t = String.valueOf(b.get("updateTime"));
             if (!t.matches("([01]\\d|2[0-3]):[0-5]\\d")) throw new IllegalArgumentException("Uhrzeit bitte als HH:MM");
             if (!String.valueOf(b.get("smtpPort")).matches("\\d{1,5}")) throw new IllegalArgumentException("SMTP-Port ist keine Zahl");
+            if (!String.valueOf(b.get("steigerLimit")).matches("\\d{1,3}")) throw new IllegalArgumentException("Steigerungsgrenze ist keine Zahl (0 = keine Grenze)");
             if (!t.equals(db.get("updateTime", "04:00"))) db.put("jarLastDay", ""); // neue Uhrzeit gilt schon heute
-            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime"))
+            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit"))
                 db.put(k, String.valueOf(b.get(k) == null ? "" : b.get(k)).trim());
             ctx.json(Map.of("ok", true));
         });
@@ -174,6 +176,12 @@ public final class App {
             String st = String.valueOf(b.get("status")), c = b.get("comment") == null ? "" : String.valueOf(b.get("comment")).trim();
             if (!List.of("freigegeben", "geändert", "abgelehnt").contains(st)) throw new IllegalArgumentException("Status unbekannt");
             if (st.equals("geändert") && c.isEmpty()) throw new IllegalArgumentException("Bei „geändert“ bitte im Kommentar schreiben, was geändert wurde");
+            var kp = db.query("SELECT kind, payload, status FROM approval_item WHERE id=?", ctx.pathParam("id"));
+            if (!kp.isEmpty() && "STEIG".equals(kp.get(0).get("kind"))) {
+                if (!"offen".equals(kp.get(0).get("status"))) throw new IllegalStateException("Über diese Steigerung ist schon entschieden");
+                if (st.equals("geändert")) throw new IllegalArgumentException("Steigerungen bitte freigeben oder ablehnen");
+                if (st.equals("freigegeben")) c = (c.isEmpty() ? "" : c + " · ") + "Steigerung " + advance.approved(str(kp.get(0).get("payload")));
+            }
             db.exec("UPDATE approval_item SET status=?, comment=? WHERE id=?", st, c, ctx.pathParam("id"));
             var it = db.query("SELECT a.hero, a.account, i.text FROM approval_item i JOIN approval a ON a.id=i.approval WHERE i.id=?", ctx.pathParam("id"));
             if (!it.isEmpty() && it.get(0).get("account") != null)
@@ -332,6 +340,7 @@ public final class App {
         });
 
         new Polls(db, mail, accounts).routes(m, s);
+        advance.routes(m, s);
 
         m.start(Integer.parseInt(env("MEISTER_PORT", "8080")));
         s.start(Integer.parseInt(env("SPIELER_PORT", "8081")));

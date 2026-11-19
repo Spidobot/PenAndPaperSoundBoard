@@ -309,9 +309,30 @@ $('#stepbody').addEventListener('click',e=>{const b=e.target.closest('button');i
 let mine=[];
 async function loadMine(){try{mine=await api('/api/myheroes')}catch(e){return toast(e.message)}$('#mineSheet').hidden=true;
   $('#mineList').innerHTML=mine.map(h=>`<div class="item"><div><b>${esc(h.name)}</b> <span class="small mut">${esc(h.rasse)} · ${esc(h.profession)}</span><div class="small mut">beim Meister seit ${esc(h.received)}</div></div>
-    <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button></div></div>`).join('')
+    <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button>${h.status==='neu'?'':`<button class="btn sm pri" data-adv="${esc(h.file)}">Steigern</button>`}</div></div>`).join('')
     ||'<p class="mut">Noch keine Helden beim Meister.</p>'}
-$('#mineList').onclick=e=>{const b=e.target.closest('[data-h]');if(!b)return;const h=mine.find(x=>x.file===b.dataset.h);const s=h.sheet||{basis:{},sections:[]};
+let advFile=null,advQ='';
+async function openAdvance(file){advFile=file;let s;try{s=await api('/api/myheroes/'+encodeURIComponent(file)+'/advance')}catch(e){return toast(e.message)}
+  const lim=s.limit,cnt=s.seitAussenden||{};
+  const left=n=>lim>0?` <span class="small mut">(${Math.max(0,lim-(cnt[n]||0))} frei)</span>`:'';
+  $('#mineSheet').hidden=false;
+  $('#mineSheet').innerHTML=`<div class="spread"><h2>${esc(s.name)} steigern</h2><span class="cost">Freie AP <b class="mono">${s.freieAp}</b> von ${s.ap}</span></div>
+    ${s.se.length?`<p class="small">Spezielle Erfahrungen: ${s.se.map(x=>`<span class="chip">${esc(x.target)}${x.n>1?' ×'+x.n:''}</span>`).join(' ')} <span class="mut">machen eine Steigerung eine Spalte billiger.</span></p>`:''}
+    ${s.offen.length?`<div class="hint MG"><b>Wartet auf Freigabe:</b> ${s.offen.map(o=>esc(o.text)).join('; ')}</div>`:''}
+    ${lim>0?`<p class="small mut">Ohne Freigabe kann jede Fertigkeit ${lim}× seit dem letzten Aussenden gesteigert werden, danach fragt die Steigerung beim Meister an.</p>`:''}
+    <h3>Eigenschaften</h3><div class="tw"><table class="small"><tbody>${s.eigenschaften.map(e=>`<tr><td>${esc(e.name)}</td><td class="mono">${e.value}</td><td class="mut">max ${e.max}</td>
+      <td>${e.cost>0?`<button class="btn sm" data-st="eigenschaft" data-t="${esc(e.name)}"${e.cost>s.freieAp?' disabled':''}>+1 für ${e.cost} AP</button>${left(e.name)}`:'<span class="mut">Maximum</span>'}</td></tr>`).join('')}</tbody></table></div>
+    <div class="spread"><h3>Talente</h3><input type="search" id="advq" placeholder="Talent suchen…" value="${esc(advQ)}" style="width:220px" aria-label="Talent suchen"></div>
+    <div class="tw"><table class="small"><thead><tr><th>Talent</th><th>Probe</th><th>TaW</th><th>Spalte</th><th></th></tr></thead><tbody>${s.talente.map(t=>`<tr data-tn="${esc(t.name.toLowerCase())}"><td>${esc(t.name)}</td><td class="mono">${esc(t.probe)}</td><td class="mono">${t.value}</td><td class="mono">${esc(t.spalte||'')}</td>
+      <td>${t.cost==null?'':t.max!=null&&t.value>=t.max?`<span class="mut">Maximum (${t.max})</span>`:`<button class="btn sm" data-st="talent" data-t="${esc(t.name)}"${t.cost>s.freieAp?' disabled':''}>+1 für ${t.cost} AP</button>${t.costSe!=null?` <button class="btn sm pri" data-st="talent" data-t="${esc(t.name)}" data-se="1"${t.costSe>s.freieAp?' disabled':''}>+1 mit SE für ${t.costSe} AP</button>`:''}${left(t.name)}`}</td></tr>`).join('')}</tbody></table></div>`;
+  filterAdv()}
+function filterAdv(){$$('#mineSheet tr[data-tn]').forEach(r=>r.hidden=advQ&&!r.dataset.tn.includes(advQ.toLowerCase()))}
+$('#mineSheet').addEventListener('input',e=>{if(e.target.id==='advq'){advQ=e.target.value;filterAdv()}});
+$('#mineSheet').addEventListener('click',async e=>{const b=e.target.closest('button[data-st]');if(!b||b.disabled)return;
+  try{const r=await api('/api/myheroes/'+encodeURIComponent(advFile)+'/steigern',{method:'POST',body:{kind:b.dataset.st,target:b.dataset.t,se:!!b.dataset.se}});
+    toast(r.pending?'Braucht eine Freigabe, der Meister ist informiert: '+r.text:b.dataset.t+' gesteigert für '+r.cost+' AP');openAdvance(advFile)}catch(x){toast(x.message)}});
+$('#mineList').onclick=e=>{const a=e.target.closest('[data-adv]');if(a){openAdvance(a.dataset.adv);$('#mineSheet').scrollIntoView({behavior:'smooth'});return}
+  const b=e.target.closest('[data-h]');if(!b)return;const h=mine.find(x=>x.file===b.dataset.h);const s=h.sheet||{basis:{},sections:[]};
   $('#mineSheet').hidden=false;
   $('#mineSheet').innerHTML=`<h2>${esc(h.name)}</h2><dl class="kv">${Object.entries({...s.basis,'Profession':h.profession}).filter(([k,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
     ${s.sections.map(sec=>`<details class="sec"><summary><b>${esc(sec.title)}</b> <span class="mut small">${sec.rows.length}</span></summary><div class="tw"><table class="small"><tbody>${sec.rows.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td class="mono">${esc(r.value)}</td><td class="mut">${esc(r.details)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')}`;
