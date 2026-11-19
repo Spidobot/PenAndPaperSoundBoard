@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119r">
+<link rel="stylesheet" href="/common/app.css?v=20261119s">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -172,7 +172,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119r"></script>
+<script src="/common/common.js?v=20261119s"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -328,28 +328,39 @@ $('#fxDiag').addEventListener('click',e=>{const b=e.target.closest('[data-fxtest
   a.onplaying=()=>toast(b.dataset.fxtest+' spielt ('+a.duration.toFixed(1)+' s)');a.play().catch(x=>toastErr('Abspielen blockiert: '+x.message))});
 pl.onFxError=(file,why)=>toast('Effekt '+file+' konnte hier nicht abgespielt werden: '+why);$('#uplClose').onclick=()=>{$('#upl').hidden=true;fitLists()};
 $('#upl').addEventListener('toggle',()=>fitLists(),true);
-// Dateien einzeln nacheinander hochladen: Cloudflare nimmt höchstens 100 MB pro Anfrage, mehrere große MP3s auf einmal scheitern sonst
-async function upload(files){files=[...files].filter(f=>/\.mp3$/i.test(f.name));if(!files.length)return toastErr('Nur MP3-Dateien');
+// Eine einzige Warteschlange für alle Uploads (Musik, Geräusche, jede Szene/Session): Dateien laufen nacheinander,
+// Anzeige und Balken gelten für alles zusammen. Weitere Dateien während eines Uploads kommen hinten dran.
+// Große Dateien gehen in Teilen zu 50 MB (Cloudflare erlaubt höchstens 100 MB pro Anfrage).
+const UQ={items:[],done:0,bytes:0,sent:0,ok:[],bad:[],running:false,scenes:new Set()};
+const TNAME={Music:'Musik',Sounds:'Geräusche'};
+function upload(files){files=[...files].filter(f=>/\.mp3$/i.test(f.name));if(!files.length)return toastErr('Nur MP3-Dateien');
   if(st.scene==='Session'&&!sid)return toastErr('Erst oben eine Session auswählen (oder unter „Sessions“ anlegen)');
-  const bar=$('#uplProg'),scene=st.scene,target=$('#uplTarget').value,ok=[],bad=[];bar.hidden=false;
-  for(let i=0;i<files.length;i++){const f=files[i];
-    // in Teilen zu 50 MB: so gibt es keine Größengrenze (Cloudflare erlaubt höchstens 100 MB pro Anfrage)
-    const PART=50*1024*1024,parts=Math.max(1,Math.ceil(f.size/PART));let r;
-    for(let k=0;k<parts;k++){
-      const fd=new FormData();fd.append('target',target);fd.append('scene',scene);if(scene==='Session')fd.append('sid',sid);
+  const scene=st.scene,target=$('#uplTarget').value,s=sid;
+  for(const f of files){UQ.items.push({f,scene,target,sid:s});UQ.bytes+=f.size}
+  uplShow();if(!UQ.running)uplRun()}
+function uplShow(cur){const total=UQ.done+UQ.items.length+(cur?1:0);
+  $('#uplProg').hidden=!UQ.running&&!UQ.items.length;
+  $('#uplProg').firstElementChild.style.width=(UQ.bytes?UQ.sent/UQ.bytes*100:0)+'%';
+  $('#uplInfo').textContent=cur?`Datei ${UQ.done+1} von ${total} · ${TNAME[cur.target]}: ${cur.f.name}${cur.parts>1?` (Teil ${cur.k+1}/${cur.parts})`:''} · ${Math.round(UQ.sent/1048576)} von ${Math.round(UQ.bytes/1048576)} MB`:''}
+async function uplRun(){UQ.running=true;
+  while(UQ.items.length){const it=UQ.items.shift(),f=it.f,PART=50*1024*1024,parts=Math.max(1,Math.ceil(f.size/PART));let r,base=UQ.sent;
+    for(let k=0;k<parts;k++){it.k=k;it.parts=parts;uplShow(it);
+      const fd=new FormData();fd.append('target',it.target);fd.append('scene',it.scene);if(it.scene==='Session')fd.append('sid',it.sid);
       fd.append('name',f.name);fd.append('part',k);fd.append('parts',parts);fd.append('files',f.slice(k*PART,(k+1)*PART),f.name);
-      $('#uplInfo').textContent=`Lade ${i+1} von ${files.length}: ${f.name}`+(parts>1?` (Teil ${k+1}/${parts})`:'');
+      const start=base+k*PART;
       r=await new Promise(res=>{const x=new XMLHttpRequest();
-        x.upload.onprogress=e=>{if(e.lengthComputable)bar.firstElementChild.style.width=((i+(k+e.loaded/e.total)/parts)/files.length*100)+'%'};
+        x.upload.onprogress=e=>{if(e.lengthComputable){UQ.sent=start+Math.min(e.loaded,f.size-k*PART);uplShow(it)}};
         x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(_){}res({status:x.status,j})};
         x.onerror=()=>res({status:0,j:{}});x.open('POST','/api/sound/upload');x.send(fd)});
-      if(r.status===401)return dispatchEvent(new Event('hh401'));
+      if(r.status===401){UQ.running=false;return dispatchEvent(new Event('hh401'))}
       if(!(r.status>=200&&r.status<300))break}
-    if(r.status>=200&&r.status<300)ok.push(f.name);else bad.push(f.name+': '+(r.j.error||(r.status===413?'zu groß für den Proxy':r.status?'Fehler '+r.status:'Verbindung abgebrochen')))}
-  bar.hidden=true;$('#uplInfo').textContent='';
-  if(ok.length)toast(ok.length+' Datei(en) hochgeladen'+(scene==='Session'?' und in die Session übernommen':''));
-  if(bad.length)toastErr('Nicht hochgeladen:\n'+bad.join('\n'));
-  delete libs[scene];loadLib()}
+    UQ.sent=base+f.size;UQ.done++;UQ.scenes.add(it.scene);
+    if(r.status>=200&&r.status<300)UQ.ok.push(f.name);else UQ.bad.push(`${f.name} (${TNAME[it.target]}): `+(r.j.error||(r.status===413?'zu groß für den Proxy':r.status?'Fehler '+r.status:'Verbindung abgebrochen')))}
+  UQ.running=false;$('#uplProg').hidden=true;$('#uplInfo').textContent='';
+  if(UQ.ok.length)toast(UQ.ok.length+' Datei(en) hochgeladen');
+  if(UQ.bad.length)toastErr('Nicht hochgeladen:\n'+UQ.bad.join('\n'));
+  for(const sc of UQ.scenes)delete libs[sc];
+  Object.assign(UQ,{done:0,bytes:0,sent:0,ok:[],bad:[],scenes:new Set()});loadLib()}
 $('#upfile').onchange=e=>{upload(e.target.files);e.target.value=''};
 const drop=$('#drop');['dragenter','dragover'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.add('over')}));
 ['dragleave','drop'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.remove('over')}));
