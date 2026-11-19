@@ -174,7 +174,7 @@ public final class Sound {
         } else if (action.equals("fx")) {
             String f = FX.get(String.valueOf(c.get("key")));
             if (f == null) throw new IllegalArgumentException("Effekt unbekannt");
-            return Map.of("type", "fx", "file", fxUrl(f));
+            return fxEvent(fxUrl(f));
         } else {
             Channel k = ch.get(String.valueOf(c.get("ch")));
             if (k == null) throw new IllegalArgumentException("Kanal unbekannt");
@@ -216,7 +216,30 @@ public final class Sound {
         });
         Map<String, Object> s = new LinkedHashMap<>();
         s.put("type", "state"); s.put("scene", scene); s.put("ch", chs); s.put("berthaAt", berthaAt); s.put("fxVolume", fxVolume);
-        s.put("serverNow", System.currentTimeMillis()); s.put("listeners", listeners());
+        s.put("serverNow", System.currentTimeMillis()); s.put("listeners", listeners()); s.put("fxSeq", fxSeq);
+        return s;
+    }
+
+    // ---------------- Effekte mit Nummer: kommen per Live-Verbindung UND per Abfrage, der Browser spielt jede Nummer nur einmal
+
+    private long fxSeq;
+    private final Deque<Map<String, Object>> recentFx = new ArrayDeque<>();
+
+    private synchronized Map<String, Object> fxEvent(String file) {
+        Map<String, Object> e = Map.of("type", "fx", "file", file, "id", ++fxSeq, "at", System.currentTimeMillis());
+        recentFx.addLast(e);
+        while (recentFx.size() > 20) recentFx.removeFirst();
+        return e;
+    }
+
+    /**
+     * Zustand + Effekte der letzten Sekunden zum Abfragen. Das ist der zweite Weg neben der Live-Verbindung:
+     * Proxies (Cloudflare, NPM) können Live-Nachrichten verzögern, eine normale Abfrage kommt immer durch.
+     */
+    public synchronized Map<String, Object> snapshot() {
+        Map<String, Object> s = state();
+        long now = System.currentTimeMillis();
+        s.put("fx", recentFx.stream().filter(e -> now - (Long) e.get("at") < 10_000).toList());
         return s;
     }
 
@@ -344,7 +367,7 @@ public final class Sound {
         if (++ticks % 15 == 0) broadcast(Map.of("type", "ping", "serverNow", System.currentTimeMillis()));
         if (berthaAt > 0 && System.currentTimeMillis() >= berthaAt) {
             berthaAt = System.currentTimeMillis() + 3_600_000;
-            broadcast(Map.of("type", "fx", "file", fxUrl(FX.get("ziege"))));
+            broadcast(fxEvent(fxUrl(FX.get("ziege"))));
             broadcast(state());
         }
     }

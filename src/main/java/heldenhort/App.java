@@ -47,6 +47,7 @@ public final class App {
                 Path p = sound.resolve(ctx.pathParam("path"));
                 Sound.serve(ctx, p);
             });
+            a.get("/api/sound/state", ctx -> { ctx.header("Cache-Control", "no-store"); ctx.json(sound.snapshot()); });
             a.get("/api/sound/library", ctx -> ctx.json(sound.library(ctx.queryParamAsClass("scene", String.class).getOrDefault(sound.scene), ctx.queryParam("sid"))));
         }
 

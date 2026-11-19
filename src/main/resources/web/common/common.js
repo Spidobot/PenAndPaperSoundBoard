@@ -110,16 +110,31 @@ document.addEventListener('click',e=>{const a=e.target.closest('a[data-pdf]');if
   const c=document.getElementById(a.dataset.pdfbg);a.href=a.dataset.pdf+'/pdf'+(c&&c.checked?'?bg=1':'');toast('PDF wird von der helden.jar erzeugt…')});
 
 /**
- * Live-Verbindung zum Soundboard, die sich selbst heilt. Der Server schickt alle 15 s ein Lebenszeichen.
- * Kommt 35 s nichts, oder hat der Browser aufgegeben (z. B. nach einem 5xx vom Proxy), wird neu verbunden.
- * Ohne das blieb die Seite nach einem Verbindungsabbruch stumm, bis man F5 drückte.
+ * Verbindung zum Soundboard auf zwei Wegen:
+ * 1. Live-Verbindung (EventSource): schnell, aber Proxies wie Cloudflare/NPM können sie puffern oder kappen.
+ * 2. Abfrage jede Sekunde (/api/sound/state): kommt durch jeden Proxy, höchstens 1 s Verzögerung.
+ * Was zuerst ankommt, gilt. Ältere Zustände und schon gespielte Effekte (Nummer) werden verworfen.
  */
-function liveEvents(url,onMsg,onStatus=()=>{}){let es=null,last=Date.now(),stopped=false;
-  const open=()=>{if(es)es.close();es=new EventSource(url);last=Date.now();
-    es.addEventListener('msg',ev=>{last=Date.now();onStatus(true);let m;try{m=JSON.parse(ev.data)}catch(_){return}if(m.type==='ping'){try{pl.clock(m.serverNow)}catch(_){}}else onMsg(m)});
-    es.onopen=()=>{last=Date.now();onStatus(true)};
-    es.onerror=()=>{onStatus(false);if(es.readyState===2)setTimeout(()=>{if(!stopped)open()},2000)}};
-  const dog=setInterval(()=>{if(!stopped&&Date.now()-last>35000){onStatus(false);open()}},5000);
-  document.addEventListener('visibilitychange',()=>{if(!stopped&&!document.hidden&&Date.now()-last>20000)open()});
-  open();
-  return {close(){stopped=true;clearInterval(dog);if(es)es.close()}}}
+function liveEvents(url,onMsg,onStatus=()=>{}){let es=null,lastSse=Date.now(),lastPoll=0,stopped=false,seenNow=0,lastFx=null,okShown=null;
+  const status=()=>{const ok=Date.now()-lastPoll<5000||Date.now()-lastSse<20000;if(ok!==okShown){okShown=ok;onStatus(ok)}};
+  const fx=e=>{if(lastFx!==null&&e.id<=lastFx)return;lastFx=e.id;onMsg(e)};
+  const state=m=>{if(lastFx===null)lastFx=m.fxSeq||0; // alte Effekte beim Öffnen nicht nachspielen
+    try{pl.clock(m.serverNow)}catch(_){}
+    if(m.serverNow<=seenNow)return;seenNow=m.serverNow;const s={...m};delete s.fx;onMsg(s)};
+  const handle=m=>{if(m.type==='ping'){try{pl.clock(m.serverNow)}catch(_){}return}if(m.type==='fx')return fx(m);if(m.type==='state')return state(m);onMsg(m)};
+  const open=()=>{if(es)es.close();es=new EventSource(url);lastSse=Date.now();
+    es.addEventListener('msg',ev=>{lastSse=Date.now();status();let m;try{m=JSON.parse(ev.data)}catch(_){return}handle(m)});
+    es.onopen=()=>{lastSse=Date.now();status()};
+    es.onerror=()=>{if(es.readyState===2)setTimeout(()=>{if(!stopped)open()},2000)}};
+  let polling=false;
+  const poll=async()=>{if(stopped||polling)return;polling=true;
+    try{const r=await fetch('/api/sound/state',{cache:'no-store',credentials:'same-origin'});
+      if(r.status===401){dispatchEvent(new Event('hh401'));return}
+      if(r.ok){const m=await r.json();lastPoll=Date.now();
+        if(lastFx!==null)for(const e of (m.fx||[]))if(m.serverNow-e.at<5000)fx(e); // zu alte Effekte nicht mehr abspielen
+        state(m)}}catch(_){}finally{polling=false;status()}};
+  const pt=setInterval(poll,1000);
+  const dog=setInterval(()=>{if(!stopped&&Date.now()-lastSse>35000)open();status()},5000);
+  document.addEventListener('visibilitychange',()=>{if(!stopped&&!document.hidden){poll();if(Date.now()-lastSse>20000)open()}});
+  open();poll();
+  return {close(){stopped=true;clearInterval(dog);clearInterval(pt);if(es)es.close()}}}

@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119o">
+<link rel="stylesheet" href="/common/app.css?v=20261119p">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -172,7 +172,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119o"></script>
+<script src="/common/common.js?v=20261119p"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -296,8 +296,9 @@ $('#m-sound').addEventListener('click',e=>{
   else if(b.dataset.sclear){if(b.dataset.ask!=='1'){b.dataset.ask='1';b.textContent='Wirklich leeren?';return}api('/api/sound/session?sid='+sid,{method:'DELETE'}).catch(x=>toastErr(x.message))}
   else if(b.dataset.act==='toggle'){const k=b.dataset.ch,c=st.ch[k];
     if(c.playing){pl.pauseNow(k);st.ch[k]={...c,playing:false};updateList(k);cmd({action:'pause',ch:k,pos:pl.a[k].currentTime||undefined})} // sofort still, ohne auf den Server zu warten
-    else if(sel[k]&&sel[k]!==c.file)start(k,sel[k]);
-    else if(c.file){starting[k]=c.file;updateList(k);cmd({action:'play',ch:k})}
+    // Play setzt immer den aktuellen Titel fort. Ein anderer Titel startet nur per Doppelklick (oder wenn noch keiner läuft).
+    else if(c.file){st.ch[k]={...c,playing:true};starting[k]=c.file;updateList(k);cmd({action:'play',ch:k})}
+    else if(sel[k])start(k,sel[k]);
     else toast('Erst einen Titel wählen')}
   else if(b.dataset.act==='repeat'){const k=b.dataset.ch,c=st.ch[k],a=pl.a[k];
     const pos=pl.enabled&&!a.paused?a.currentTime:(a.duration&&isFinite(a.duration)?pl.pos(k)%a.duration:undefined);
@@ -368,7 +369,7 @@ function onSound(m){
   if(m.type==='lib'){if(m.scene==='Session'){loadSess();return}delete libs[m.scene];if(st&&st.scene===m.scene)loadLib();return}
   if(st&&m.serverNow<st.serverNow)return; // ältere Nachricht nach einer schnelleren Befehlsantwort
   const sceneChanged=!st||st.scene!==m.scene;st=m;pl.apply(m);if(sceneChanged)loadLib();else renderSound()}
-liveEvents('/api/sound/events',onSound,ok=>{const l=$('#lstn');if(l)l.classList.toggle('warn',!ok);if(!ok&&l)l.textContent='Verbindung weg, verbinde neu…'});
+liveEvents('/api/sound/events',onSound,ok=>{const l=$('#lstn');if(!l)return;l.classList.toggle('warn',!ok);l.textContent=!ok?'Verbindung weg, verbinde neu…':(st?st.listeners+' Zuhörer':'')});
 
 /* ---------- Helden ---------- */
 let heroes=[],selHero=null;
