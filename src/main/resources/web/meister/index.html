@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119t">
+<link rel="stylesheet" href="/common/app.css?v=20261119u">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -28,7 +28,7 @@
 
     <section class="view" id="m-sound">
       <div class="spread">
-        <div class="row"><h1>Soundboard</h1><span class="onair" id="onair" hidden>Live an Spieler</span><span class="pill" id="lstn">0 Zuhörer</span></div>
+        <div class="row"><h1>Soundboard</h1><span class="onair" id="onair" hidden>Live an Spieler</span><span class="lstnw"><button type="button" class="pill" id="lstn" aria-haspopup="true" aria-expanded="false">0 Zuhörer</button><span class="lpop" id="lpop" hidden></span></span></div>
         <div class="row">
           <label class="sw hear" title="Mehrere Meister-Tabs offen? Nur in einem den Ton einschalten."><input type="checkbox" id="hear"> Ton in diesem Tab</label>
           <label class="sw"><input type="checkbox" id="bertha"> Bertha, die Stundenziege</label>
@@ -174,7 +174,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119t"></script>
+<script src="/common/common.js?v=20261119u"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -276,7 +276,7 @@ let lastLib='',lastFile={music:null,bg:null};
 function renderSound(){renderScenes();renderFx();
   for(const id of ['music','bg']){const key=JSON.stringify([st&&st.scene,lib&&lib[CH[id][1]],qs[id]]);
     if(key!==lastFile[id+'k']){lastFile[id+'k']=key;renderList(id)}else updateList(id)}
-  if(st){$('#onair').hidden=!(st.ch.music.playing||st.ch.bg.playing);$('#lstn').textContent=st.listeners+' Zuhörer';$('#lstn').title='Spieler mit eingeschaltetem Ton';$('#bertha').checked=st.berthaAt>0;if(document.activeElement!==$('#fxvol')){$('#fxvol').value=st.fxVolume;$('#fxvolv').textContent=st.fxVolume}}}
+  if(st){$('#onair').hidden=!(st.ch.music.playing||st.ch.bg.playing);$('#lstn').textContent=st.listeners+' Zuhörer';$('#lstn').title='Klicken: wer gerade zuhört';if(!$('#lpop').hidden)lpopFill();$('#bertha').checked=st.berthaAt>0;if(document.activeElement!==$('#fxvol')){$('#fxvol').value=st.fxVolume;$('#fxvolv').textContent=st.fxVolume}}}
 // Listen je Szene im Browser merken: Szenenwechsel zeigt sofort die bekannte Liste, die frische kommt nach
 const libs={};
 async function loadLib(){const sc=st.scene;if(libs[sc]){lib=libs[sc];renderSound()}
@@ -391,6 +391,10 @@ function onSound(m){
   if(m.type==='lib'){if(m.scene==='Session'){loadSess();return}delete libs[m.scene];if(st&&st.scene===m.scene)loadLib();return}
   if(st&&m.serverNow<st.serverNow)return; // ältere Nachricht nach einer schnelleren Befehlsantwort
   const sceneChanged=!st||st.scene!==m.scene;st=m;pl.apply(m);if(sceneChanged)loadLib();else renderSound()}
+// Kleines Fenster mit den Namen der Zuhörer; Klick irgendwo schließt es
+function lpopFill(){const n=(st&&st.listenerNames)||[];$('#lpop').innerHTML=n.length?'<b>Hören gerade zu</b>'+n.map(x=>`<div>${esc(x)}</div>`).join(''):'<span class="mut">Gerade hört niemand zu.</span>'}
+document.addEventListener('click',e=>{const p=$('#lpop'),b=e.target.closest('#lstn');
+  if(b&&p.hidden){lpopFill();p.hidden=false;b.setAttribute('aria-expanded','true')}else if(!p.hidden){p.hidden=true;$('#lstn').setAttribute('aria-expanded','false')}});
 liveEvents('/api/sound/events',onSound,ok=>{const l=$('#lstn');if(!l)return;l.classList.toggle('warn',!ok);l.textContent=!ok?'Verbindung weg, verbinde neu…':(st?st.listeners+' Zuhörer':'')});
 
 /* ---------- Helden ---------- */
