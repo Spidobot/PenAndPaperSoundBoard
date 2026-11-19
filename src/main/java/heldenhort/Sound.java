@@ -282,10 +282,12 @@ public final class Sound {
         } catch (Exception e) { return "nicht lesbar: " + e.getMessage(); }
     }
 
+    static final long CHUNK = 2L << 20; // 2 MB ≈ 1–1,5 min Musik
+
     /**
-     * MP3 ausliefern. Javalins writeSeekableStream schickt pro Anfrage nur 128 KB; über Cloudflare heißt das
-     * hunderte Rundreisen für einen langen Titel. Hier geht der angefragte Bereich (bei "bytes=X-" der ganze Rest)
-     * in einem Stück raus, direkt per FileChannel.transferTo. Abbruch durch den Browser (Spulen, Titelwechsel) ist normal.
+     * MP3 ausliefern, in Stücken von CHUNK. Javalins writeSeekableStream schickt nur 128 KB pro Anfrage (hunderte
+     * Rundreisen über Cloudflare); der ganze Rest am Stück dagegen verstopft den Heim-Upload. 2 MB ist der Mittelweg.
+     * Abbruch durch den Browser (Spulen, Titelwechsel) ist normal.
      */
     static void serve(io.javalin.http.Context ctx, Path p) throws Exception {
         long size = Files.size(p), start = 0, end = size - 1;
@@ -300,6 +302,9 @@ public final class Sound {
                 if (r[0].isEmpty()) start = Math.max(0, size - Long.parseLong(r[1]));   // bytes=-500
                 else { start = Long.parseLong(r[0]); if (!r[1].isEmpty()) end = Math.min(end, Long.parseLong(r[1])); }
             } catch (NumberFormatException e) { start = 0; end = size - 1; }
+            // Höchstens CHUNK pro Antwort: sonst zieht Cloudflare bei jedem Klick den ganzen Titel (80+ MB) über den
+            // Heim-Upload, die Leitung ist dicht und Befehle/Live-Verbindung hängen. Der Browser holt den Rest bei Bedarf nach.
+            end = Math.min(end, start + CHUNK - 1);
             if (start >= size || start > end) {
                 res.setStatus(416); res.setHeader("Content-Range", "bytes */" + size); return;
             }
