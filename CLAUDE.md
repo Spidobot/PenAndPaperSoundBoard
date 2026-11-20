@@ -8,6 +8,7 @@ Push auf `main` baut per GitHub Actions das Image auf ghcr.io.
 - Antworten auf Deutsch, knapp, trocken.
 - „Sammelmodus“ = nur nummerierte Punkte aufnehmen, nichts umsetzen. „umsetzen“ = umsetzen, testen, auf Branch und `main` pushen.
 - Keine urheberrechtlich geschützten Inhalte (Regelwerke, Sounds) ins Repo, es ist öffentlich.
+- JS/CSS-Links in den HTML-Seiten tragen `?v=@build.version@`, Maven setzt beim Build einen Zeitstempel ein (Cloudflare cacht /common/* stundenlang). Nicht von Hand pflegen.
 - Fehler an den Browser als 4xx mit verständlichem deutschem Text (Cloudflare ersetzt 5xx).
 
 ## Regeltexte (ⓘ-Knöpfe, Regelzusammenfassung)
