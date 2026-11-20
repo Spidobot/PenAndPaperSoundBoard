@@ -343,11 +343,12 @@ public final class Heroes {
             b.put("art", attr(first(w, "wesensart"), "value"));
             Map<String, String> regeln = new LinkedHashMap<>();
             for (Element v : all(w, "vorteil")) regeln.putIfAbsent(v.getAttribute("name"), v.getAttribute("value"));
-            for (Element s : all(w, "sonderfertigkeit")) regeln.putIfAbsent(s.getAttribute("name"), "");
+            for (Element s : all(w, "sonderfertigkeit")) regeln.putIfAbsent(s.getAttribute("name"), attr(first(s, "auswahl"), "name"));
             for (Element z : all(w, "zauber")) regeln.putIfAbsent(z.getAttribute("name"), z.getAttribute("value").isBlank() ? "" : "ZfW " + z.getAttribute("value"));
             for (Element t : all(w, "talent")) regeln.putIfAbsent(t.getAttribute("name"), t.getAttribute("value").isBlank() ? "" : "TaW " + t.getAttribute("value"));
             regeln.remove("");
             b.put("regeln", regeln);
+            b.put("werte", wesenWerte(w));
             out.add(b);
         }
         // Beschwörbare Wesen: SF „Wahrer Name: Dämon“ (auch Elementar, Geist, Untoter, Chimäre, Golemiden …)
@@ -372,6 +373,28 @@ public final class Heroes {
     }
 
     static String attr(Element e, String a) { return e == null ? "" : e.getAttribute(a); }
+
+    /** Spielwerte eines Begleiters in einer Zeile: „MU 11 · KL 9 … · LE 8 · AE 6 · AU 40 · RS 1 · INI 9+1W6 · Krallenangriff AT 2 / PA 2, TP 1W6“. */
+    static String wesenWerte(Element w) {
+        Map<String, String> kurz = new LinkedHashMap<>();
+        for (String[] k : new String[][]{{"Mut", "MU"}, {"Klugheit", "KL"}, {"Intuition", "IN"}, {"Charisma", "CH"}, {"Fingerfertigkeit", "FF"}, {"Gewandtheit", "GE"},
+                {"Konstitution", "KO"}, {"Körperkraft", "KK"}, {"Lebensenergie", "LE"}, {"Astralenergie", "AE"}, {"Ausdauer", "AU"}, {"Rüstungsschutz", "RS"},
+                {"Magieresistenz", "MR"}, {"Geschwindigkeit", "GS"}}) kurz.put(k[0], k[1]);
+        List<String> t = new ArrayList<>();
+        Element es = first(w, "eigenschaften");
+        Map<String, String> v = new HashMap<>();
+        if (es != null) for (Element e : all(es, "eigenschaft")) v.put(e.getAttribute("name"), e.getAttribute("value"));
+        kurz.forEach((lang, k) -> { if (v.containsKey(lang) && !v.get(lang).isBlank()) t.add(k + " " + v.get(lang)); });
+        Element ini = first(w, "ini");
+        if (ini != null) t.add("INI " + ini.getAttribute("mul") + (num(ini.getAttribute("w")) > 0 ? "+1W" + ini.getAttribute("w") : "") + (num(ini.getAttribute("sum")) != 0 ? "+" + ini.getAttribute("sum") : ""));
+        for (Element a : all(w, "angriff")) {
+            Element tp = first(a, "tp");
+            String tps = tp == null ? "" : tp.getAttribute("mul") + "W" + tp.getAttribute("w") + (num(tp.getAttribute("sum")) > 0 ? "+" + tp.getAttribute("sum") : num(tp.getAttribute("sum")) < 0 ? tp.getAttribute("sum") : "");
+            t.add(a.getAttribute("name") + " AT " + attr(first(a, "at"), "value") + " / PA " + attr(first(a, "pa"), "value") + (tps.isBlank() ? "" : ", TP " + tps)
+                    + (attr(first(a, "dk"), "value").isBlank() ? "" : ", DK " + attr(first(a, "dk"), "value")));
+        }
+        return String.join(" · ", t);
+    }
 
     static int num(String s) {
         try { return Integer.parseInt(s.trim()); } catch (Exception e) { return 0; }

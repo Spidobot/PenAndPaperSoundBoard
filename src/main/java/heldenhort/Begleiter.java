@@ -32,14 +32,57 @@ public class Begleiter {
     private final Accounts accounts;
     private final Mail mail;
 
-    public Begleiter(Db db, Advance adv, Regeln regeln, Accounts accounts, Mail mail) {
-        this.db = db; this.adv = adv; this.regeln = regeln; this.accounts = accounts; this.mail = mail;
+    private final HeldenJar jar;
+
+    public Begleiter(Db db, Advance adv, Regeln regeln, Accounts accounts, Mail mail, HeldenJar jar) {
+        this.db = db; this.adv = adv; this.regeln = regeln; this.accounts = accounts; this.mail = mail; this.jar = jar;
         db.exec("CREATE TABLE IF NOT EXISTS begleiter(file TEXT, idx INTEGER, name TEXT, ap INTEGER DEFAULT 0, frei INTEGER DEFAULT 0, lo INTEGER, "
                 + "uebertragen INTEGER DEFAULT 0, rk INTEGER, start TEXT, PRIMARY KEY(file, idx))");
         // Vertrautenzauber und vom Meister eingetragene Tricks/Ausbildungen: nicht ins XML (die helden.jar kennt sie nicht und
         // verwirft sonst beim Einlesen den ganzen Begleiter), sondern hier
         db.exec("CREATE TABLE IF NOT EXISTS begleiter_kann(file TEXT, idx INTEGER, name TEXT, art TEXT, ap INTEGER, at TEXT, PRIMARY KEY(file, idx, name))");
         db.exec("CREATE TABLE IF NOT EXISTS begleiter_log(id INTEGER PRIMARY KEY AUTOINCREMENT, file TEXT, idx INTEGER, was TEXT, ap INTEGER, at TEXT, wer TEXT)");
+    }
+
+    // ------------------------------------------------------------------ Tier-Manöver der helden.jar (Setting „Tiere“)
+
+    private volatile List<Map<String, Object>> tierSf;
+
+    /** Sonderfertigkeiten für Tiere laut helden.jar (helden/framework/settings/settingstiere.xml): Name, ob ein Wert/eine Auswahl dazugehört („#*“). */
+    List<Map<String, Object>> tierSf() {
+        if (tierSf != null) return tierSf;
+        List<Map<String, Object>> out = new ArrayList<>();
+        try (var in = jar.loader().getResourceAsStream("helden/framework/settings/settingstiere.xml")) {
+            if (in == null) return List.of();
+            var doc = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(in);
+            var nl = doc.getElementsByTagName("include");
+            for (int i = 0; i < nl.getLength(); i++) {
+                String id = ((Element) nl.item(i)).getAttribute("id");
+                if (!id.startsWith("S")) continue;
+                boolean wahl = id.endsWith("#*");
+                out.add(Map.of("name", id.substring(1).replaceAll("#.*$", ""), "wahl", wahl));
+            }
+        } catch (Exception e) { System.err.println("Tier-Manöver aus der helden.jar nicht lesbar: " + e); return List.of(); }
+        out.sort(Comparator.comparing(m -> String.valueOf(m.get("name")), String.CASE_INSENSITIVE_ORDER));
+        return tierSf = out;
+    }
+
+    /** Für die PDFs: Vertrautenzauber/Fähigkeiten aus der Datenbank und Vertrauten-Daten an die Begleiter aus Heroes.begleiter hängen. */
+    @SuppressWarnings("unchecked")
+    void anreichern(String file, Map<String, Object> h) {
+        try {
+            List<Map<String, Object>> ws = (List<Map<String, Object>>) h.getOrDefault("W", List.of());
+            for (var z : db.query("SELECT * FROM begleiter WHERE file=?", file)) {
+                int idx = ((Number) z.get("idx")).intValue();
+                if (idx >= ws.size()) continue;
+                Map<String, Object> b = ws.get(idx);
+                Map<String, String> regelnB = new LinkedHashMap<>((Map<String, String>) b.getOrDefault("regeln", Map.of()));
+                for (var k : db.query("SELECT name, art FROM begleiter_kann WHERE file=? AND idx=? ORDER BY at", file, idx)) regelnB.putIfAbsent(App.str(k.get("name")), "");
+                b.put("regeln", regelnB);
+                if (z.get("lo") != null)
+                    b.put("info", "Vertrauter: Ritualkenntnis (Vertrautenmagie) " + (z.get("rk") == null ? 3 : z.get("rk")) + ", Loyalität " + z.get("lo") + " von 25, Vertrauten-AP " + z.get("frei") + " frei von " + z.get("ap"));
+            }
+        } catch (Exception e) { System.err.println("Begleiter fürs PDF: " + e); }
     }
 
     // ------------------------------------------------------------------ Lesen
@@ -236,7 +279,10 @@ public class Begleiter {
             }
             b.put("zauber", kann);
             List<String> sf = new ArrayList<>();
-            for (Element s : Heroes.all(w, "sonderfertigkeit")) sf.add(s.getAttribute("name"));
+            for (Element s : Heroes.all(w, "sonderfertigkeit")) {
+                String a = Heroes.attr(Heroes.first(s, "auswahl"), "name");
+                sf.add(s.getAttribute("name") + (a.isBlank() ? "" : " (" + a + ")"));
+            }
             for (var k : db.query("SELECT name FROM begleiter_kann WHERE file=? AND idx=? AND art<>'Vertrautenzauber' ORDER BY at", file, i)) sf.add(App.str(k.get("name")));
             b.put("sf", sf);
             if (vertraut) b.put("zauberAngebot", zauberAngebot(held, w, kann));
@@ -372,7 +418,7 @@ public class Begleiter {
     }
 
     /** Meister: Sonderfertigkeit/Ausbildung/Trick eintragen; bei Vertrauten optional AP abziehen (WdZ: TaP* × 10, Tricks 10–50 AP). */
-    private synchronized String sfEintragen(String file, int idx, String sf, int ap) throws Exception {
+    private synchronized String sfEintragen(String file, int idx, String sf, String wahl, int ap) throws Exception {
         if (sf.isBlank()) throw new IllegalArgumentException("Name der Fähigkeit fehlt.");
         Document d = adv.read(file);
         Element held = held(d);
@@ -383,11 +429,26 @@ public class Begleiter {
         Map<String, Object> z = zeile(file, idx, w, vertraut);
         if (ap > 0 && !vertraut) throw new IllegalArgumentException(name(w) + " ist kein Vertrauter und hat keine AP. Fähigkeit ohne AP eintragen (Abrichten).");
         if (ap > 0 && ap > ((Number) z.get("frei")).intValue()) throw new IllegalArgumentException(name(w) + " hat nur " + z.get("frei") + " freie AP.");
-        if (!db.query("SELECT 1 FROM begleiter_kann WHERE file=? AND idx=? AND name=?", file, idx, sf).isEmpty()) throw new IllegalArgumentException(name(w) + " kann " + sf + " schon.");
-        db.exec("INSERT INTO begleiter_kann(file,idx,name,art,ap,at) VALUES(?,?,?,?,?,?)", file, idx, sf, "Fähigkeit", ap, App.now());
+        Map<String, Object> def = tierSf().stream().filter(x -> String.valueOf(x.get("name")).equalsIgnoreCase(sf)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("„" + sf + "“ kennt die helden.jar nicht als Tier-Fähigkeit. Bitte aus der Liste wählen (Tricks über „Trick“ mit dem Namen des Tricks als Wert)."));
+        String name = String.valueOf(def.get("name"));
+        boolean mitWahl = Boolean.TRUE.equals(def.get("wahl"));
+        if (mitWahl && wahl.isBlank()) throw new IllegalArgumentException(name + " braucht einen Wert, z. B. Hinterhalt 12, Gelände Wald, Trick Schlüssel holen.");
+        for (Element s : Heroes.all(w, "sonderfertigkeit"))
+            if (s.getAttribute("name").equals(name) && (!mitWahl || Heroes.attr(Heroes.first(s, "auswahl"), "name").equalsIgnoreCase(wahl)))
+                throw new IllegalArgumentException(name(w) + " kann " + name + (mitWahl ? " (" + wahl + ")" : "") + " schon.");
+        Element ss = kind(w, "sonderfertigkeiten");
+        if (ss == null) { ss = d.createElement("sonderfertigkeiten"); w.appendChild(ss); }
+        Element ne = d.createElement("sonderfertigkeit");
+        ne.setAttribute("name", name);
+        if (mitWahl) { Element au = d.createElement("auswahl"); au.setAttribute("name", wahl.trim()); ne.appendChild(au); } // so speichert es die helden.jar selbst
+        ss.appendChild(ne);
+        Advance.ereignis(d, held, "Begleiter lernt", name(w) + ": " + name + (mitWahl ? " (" + wahl.trim() + ")" : ""), 0, 0, ap > 0 ? ap + " AP (Vertrauten-AP)" : "vom Meister eingetragen");
+        adv.write(file, d);
         if (ap > 0) db.exec("UPDATE begleiter SET frei=frei-? WHERE file=? AND idx=?", ap, file, idx);
-        db.exec("INSERT INTO begleiter_log(file,idx,was,ap,at,wer) VALUES(?,?,?,?,?,?)", file, idx, sf + " eingetragen (Meister)", ap, App.now(), "Meister");
-        return name(w) + " kann jetzt " + sf + (ap > 0 ? " (" + ap + " AP)" : "");
+        String was = name + (mitWahl ? " (" + wahl.trim() + ")" : "");
+        db.exec("INSERT INTO begleiter_log(file,idx,was,ap,at,wer) VALUES(?,?,?,?,?,?)", file, idx, was + " eingetragen (Meister)", ap, App.now(), "Meister");
+        return name(w) + " kann jetzt " + was + (ap > 0 ? " (" + ap + " AP)" : "");
     }
 
     // ------------------------------------------------------------------ Routen
@@ -415,6 +476,7 @@ public class Begleiter {
         });
         // Meister
         m.get("/api/heroes/{file}/begleiter", ctx -> ctx.json(zustand(ctx.pathParam("file"))));
+        m.get("/api/tier-manoever", ctx -> ctx.json(tierSf()));
         m.post("/api/heroes/{file}/begleiter/{idx}/wert", ctx -> {
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
             if (!(b.get("wert") instanceof Number n)) throw new IllegalArgumentException("Wert als Zahl angeben.");
@@ -422,7 +484,7 @@ public class Begleiter {
         });
         m.post("/api/heroes/{file}/begleiter/{idx}/sf", ctx -> {
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
-            ctx.json(Map.of("text", sfEintragen(ctx.pathParam("file"), Integer.parseInt(ctx.pathParam("idx")), App.str(b.get("name")), b.get("ap") instanceof Number n ? n.intValue() : 0)));
+            ctx.json(Map.of("text", sfEintragen(ctx.pathParam("file"), Integer.parseInt(ctx.pathParam("idx")), App.str(b.get("name")), App.str(b.get("wahl")), b.get("ap") instanceof Number n ? n.intValue() : 0)));
         });
         m.post("/api/heroes/{file}/begleiter/{idx}/ap", ctx -> { // Sonder-AP für einen Vertrauten
             String file = ctx.pathParam("file");

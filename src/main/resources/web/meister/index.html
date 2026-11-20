@@ -640,7 +640,10 @@ function openSheet(file){const h=heroes.find(x=>x.file===file);if(!h)return;cons
   $('#sheetbody').innerHTML=sheetHtml(h,true)+'<div id="mBgl"></div>';fillSheet($('#sheetbody'),h);if(!d.open)d.showModal();$('#sheetbody .sq').focus();mBglLaden(file)}
 /* Begleiter im Bogen bearbeiten: Werte setzen (z. B. nach Abrichten, ZBA), Fähigkeiten eintragen, Sonder-AP für Vertraute */
 let MBGL={file:null,list:[]};
-async function mBglLaden(file){MBGL.file=file;try{MBGL.list=await api('/api/heroes/'+encodeURIComponent(file)+'/begleiter')}catch(e){MBGL.list=[]}const el=$('#mBgl');if(el)el.innerHTML=mBglHtml()}
+let TIERSF=null; // Tier-Fähigkeiten laut helden.jar (Setting „Tiere“), wahl = braucht einen Wert
+async function mBglLaden(file){MBGL.file=file;try{MBGL.list=await api('/api/heroes/'+encodeURIComponent(file)+'/begleiter')}catch(e){MBGL.list=[]}
+  if(!TIERSF&&MBGL.list.length){try{TIERSF=await api('/api/tier-manoever')}catch(e){TIERSF=[]}vorladenRegeln((TIERSF||[]).map(x=>x.name))}
+  const el=$('#mBgl');if(el)el.innerHTML=mBglHtml()}
 function mBglHtml(){if(!MBGL.list.length)return '';
   return '<h2 style="margin-top:18px">Begleiter bearbeiten</h2>'+MBGL.list.map(b=>`<div class="card" style="margin:8px 0" data-mb="${b.idx}">
     <div class="spread"><b>${esc(b.name)}</b><span class="small mut">${esc(b.art)}</span></div><p class="small mut">${esc(b.hinweis)}</p>
@@ -650,15 +653,22 @@ function mBglHtml(){if(!MBGL.list.length)return '';
     <div class="tw"><table class="small zebra"><thead><tr><th>Wert</th><th>Start</th><th>setzen</th></tr></thead><tbody>${b.werte.map(w=>`<tr><td>${esc(w.label)}</td><td class="mono mut">${w.start??''}</td>
       <td><input type="number" data-nostep value="${w.wert}" data-mbw="${esc(w.key)}" style="width:80px" aria-label="${esc(w.label)} setzen"></td></tr>`).join('')}</tbody></table></div>
     <p class="small"><b>Kann:</b> ${[...b.sf,...b.zauber].map(esc).join(', ')||'–'}</p>
-    <div class="row" style="align-items:center"><input type="text" class="mbsf" placeholder="Fähigkeit, Ausbildung oder Trick (z. B. Apport, Wache)" style="width:280px" aria-label="Fähigkeit für ${esc(b.name)}">
+    <div class="row" style="align-items:center"><select class="mbsf" aria-label="Manöver, Ausbildung oder Trick für ${esc(b.name)}"><option value="">Manöver, Ausbildung oder Trick wählen …</option>
+        ${(TIERSF||[]).map(x=>`<option value="${esc(x.name)}" data-wahl="${x.wahl?1:''}">${esc(x.name)}${x.wahl?' (mit Wert)':''}</option>`).join('')}</select>
+      <input type="text" class="mbwahl" placeholder="Wert, z. B. 12 / Wald / Pfötchen" style="width:200px" hidden aria-label="Wert">
+      <button type="button" class="ib info" data-mbri aria-label="Was bedeutet das?" title="Was bedeutet das?" hidden>ⓘ</button>
       ${b.vertraut?'<input type="number" min="0" data-nostep class="mbsfap" placeholder="AP" style="width:80px" aria-label="AP-Kosten">':''}<button class="btn sm" data-mbsf>Eintragen</button>
-      <span class="small mut">${b.vertraut?'Vertraute zahlen AP: Ausbildung = TaP* aus ZBA S. 20 × 10, Tricks 10–50 AP (WdZ S. 123).':'Ohne AP (Abrichten, ZBA S. 20).'}</span></div>
+      <span class="small mut">Liste aus der helden.jar (Setting „Tiere“), landet im Helden-XML. ${b.vertraut?'Vertraute zahlen AP: Ausbildung = TaP* aus ZBA S. 20 × 10, Tricks 10–50 AP (WdZ S. 123).':'Ohne AP (Abrichten, ZBA S. 20).'}</span></div>
   </div>`).join('')}
+document.addEventListener('change',e=>{const s=e.target.closest('#mBgl select.mbsf');if(!s)return;const card=s.closest('[data-mb]'),o=s.selectedOptions[0];
+  card.querySelector('.mbwahl').hidden=!(o&&o.dataset.wahl);const ri=card.querySelector('[data-mbri]');ri.hidden=!s.value;ri.dataset.ri=s.value;ri.dataset.riArt='Tierfähigkeit'});
 document.addEventListener('change',async e=>{const i=e.target.closest('#mBgl [data-mbw]');if(!i)return;const idx=i.closest('[data-mb]').dataset.mb;
   try{const r=await api('/api/heroes/'+encodeURIComponent(MBGL.file)+'/begleiter/'+idx+'/wert',{method:'POST',body:{key:i.dataset.mbw,wert:+i.value}});toast(r.text)}catch(x){toastErr(x.message)}mBglLaden(MBGL.file)});
+document.addEventListener('click',e=>{const r=e.target.closest('#mBgl [data-mbri]');if(r&&r.dataset.ri)regelInfo(r.dataset.ri,'',true,'Tierfähigkeit')});
 document.addEventListener('click',async e=>{const b=e.target.closest('#mBgl [data-mbsf], #mBgl [data-mbap]');if(!b)return;const card=b.closest('[data-mb]'),idx=card.dataset.mb,base='/api/heroes/'+encodeURIComponent(MBGL.file)+'/begleiter/'+idx+'/';
-  try{let r;if(b.dataset.mbsf!==undefined){const n=card.querySelector('.mbsf').value.trim();if(!n)return toast('Erst eintragen, was der Begleiter lernt');const ap=card.querySelector('.mbsfap');
-      r=await api(base+'sf',{method:'POST',body:{name:n,ap:ap?+ap.value||0:0}})}
+  try{let r;if(b.dataset.mbsf!==undefined){const s=card.querySelector('.mbsf'),n=s.value;if(!n)return toast('Erst auswählen, was der Begleiter lernt');const ap=card.querySelector('.mbsfap'),wahl=card.querySelector('.mbwahl').value.trim();
+      if(s.selectedOptions[0].dataset.wahl&&!wahl)return toast(n+' braucht einen Wert, z. B. Hinterhalt 12, Gelände Wald, Trick Pfötchen');
+      r=await api(base+'sf',{method:'POST',body:{name:n,wahl,ap:ap?+ap.value||0:0}})}
     else{const n=+card.querySelector('.mbap').value;if(!(n>0))return toast('Erst eintragen, wie viele AP');r=await api(base+'ap',{method:'POST',body:{ap:n}})}
     toast(r.text)}catch(x){toastErr(x.message)}mBglLaden(MBGL.file)});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-sheet]');if(b)openSheet(b.dataset.sheet);

@@ -443,6 +443,7 @@ function bglHtml(){if(!BGL||!BGL.length)return '';
 let bglUe={};
 $('#mineSheet').addEventListener('input',e=>{const m=e.target.id&&e.target.id.match(/^bglUe(\d+)$/);if(m)bglUe[m[1]]=e.target.value});
 $('#mineSheet').addEventListener('click',async e=>{
+  const ri=e.target.closest('#bglBox [data-ri]');if(ri){regelInfo(ri.dataset.ri,'',false,ri.dataset.riArt);return}
   if(e.target.closest('[data-bgl-nein]')){bglFrage=null;$('#bglBox').innerHTML=bglHtml();return}
   const b=e.target.closest('[data-bgl]');if(!b)return;const id=b.dataset.bgl;
   if(!b.dataset.ok){bglFrage=id;$('#bglBox').innerHTML=bglHtml();return}

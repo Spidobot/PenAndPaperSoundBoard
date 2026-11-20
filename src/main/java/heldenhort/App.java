@@ -38,7 +38,8 @@ public final class App {
             if (n > 0) mail.notifyMeister("Freigabe nötig: " + h.get("name"), "Im per FTP abgelegten Helden „" + h.get("name") + "“ (" + file + ") sind " + n + " Punkt(e) mit Meistergenehmigung vermerkt. Siehe „Freigaben“.");
         };
         Advance advance = new Advance(db, heroes, jar, accounts, mail);
-        Begleiter begleiter = new Begleiter(db, advance, regeln, accounts, mail);
+        Begleiter begleiter = new Begleiter(db, advance, regeln, accounts, mail, jar);
+        BEGLEITER = begleiter;
         advance.begleiter = begleiter;
         Sound sound = new Sound(data.resolve("audio"));
         sound.db = db;
@@ -946,6 +947,7 @@ Icons: Icons8 (icons8.com).""";
         Map<String, Map<String, String>> spieler = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         Map<String, Map<String, String>> tiere = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         Map<String, String> wasIst = new TreeMap<>(String.CASE_INSENSITIVE_ORDER); // Begleiter → „Nebelkrähe (Krähe), Tier“
+        Map<String, String> werteVon = new TreeMap<>(String.CASE_INSENSITIVE_ORDER), infoVon = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         helden.forEach((name, h) -> {
             spieler.put(name, regelNamen(h));
             for (Map<String, Object> b : (List<Map<String, Object>>) h.getOrDefault("W", List.of())) {
@@ -957,6 +959,8 @@ Icons: Icons8 (icons8.com).""";
                 r.putAll((Map<String, String>) b.get("regeln"));
                 tiere.put(wer, r);
                 wasIst.put(wer, String.join(", ", java.util.stream.Stream.of(familie.isBlank() ? gattung : familie + (gattung.isBlank() ? "" : " (" + gattung + ")"), art).filter(x -> !x.isBlank()).toList()));
+                if (!str(b.get("werte")).isBlank()) werteVon.put(wer, str(b.get("werte")));
+                if (!str(b.get("info")).isBlank()) infoVon.put(wer, str(b.get("info")));
             }
         });
         List<String> tierArten = List.of("Tierfähigkeit", "Tier", "Wesen");
@@ -965,7 +969,9 @@ Icons: Icons8 (icons8.com).""";
         StringBuilder sb = new StringBuilder(html);
         sb.append("<hr><h1>Begleiter und beschwörbare Wesen</h1><p><i>Tiere, Vertraute und Wesen, deren wahren Namen ein Held kennt (Dämonen, Elementare, Geister …). Das hier gilt für das Wesen, nicht für den Helden.</i></p>");
         sb.append("<ul>");
-        wasIst.forEach((wer, was) -> sb.append("<li><b>").append(esc(wer)).append("</b>").append(was.isEmpty() ? "" : " – " + esc(was)).append("</li>"));
+        wasIst.forEach((wer, was) -> sb.append("<li><b>").append(esc(wer)).append("</b>").append(was.isEmpty() ? "" : " – " + esc(was))
+                .append(werteVon.containsKey(wer) ? "<br>Werte: " + esc(werteVon.get(wer)) : "")
+                .append(infoVon.containsKey(wer) ? "<br><i>" + esc(infoVon.get(wer)) + "</i>" : "").append("</li>"));
         sb.append("</ul>");
         sb.append(regeln.zusammenfassung(tiere, true, n -> n.startsWith(TIERART) ? regeln.tierart(n.substring(TIERART.length()).split(" / "))
                 : n.startsWith(WESEN) ? regeln.tierart(n.substring(WESEN.length()).split(" / "))
@@ -985,6 +991,7 @@ Icons: Icons8 (icons8.com).""";
             Path p;
             try { p = heroes.file(str(f)); } catch (Exception gone) { continue; } // Held inzwischen gelöscht
             Map<String, Object> h = Heroes.parse(Files.readAllBytes(p));
+            if (BEGLEITER != null) BEGLEITER.anreichern(str(f), h); // Vertrautenzauber, AP, Loyalität aus der Datenbank
             helden.put(str(h.get("name")), h);
         }
         return Map.entry(str(r.get(0).get("name")), regelHtml(regeln, helden, true));
@@ -1003,6 +1010,7 @@ Icons: Icons8 (icons8.com).""";
     static PdfDatei pdfErzeugen(Context ctx, HeldenJar jar, Heroes heroes, Db db, Regeln regeln, String file) throws Exception {
         Path p = heroes.file(file);
         Map<String, Object> parsed = Heroes.parse(Files.readAllBytes(p));
+        if (BEGLEITER != null) BEGLEITER.anreichern(file, parsed);
         String name = str(parsed.get("name")), basis = p.getFileName().toString().replaceAll("\\.xml$", "");
         boolean mit = "1".equals(ctx.queryParam("bg"));
         String regelHtml = "1".equals(ctx.queryParam("regeln")) ? regelHtml(regeln, Map.of(name, parsed), false) : null;
@@ -1028,6 +1036,8 @@ Icons: Icons8 (icons8.com).""";
     }
 
     static String str(Object o) { return o == null ? "" : o.toString().trim(); }
+
+    static Begleiter BEGLEITER; // für die PDFs: Daten der Begleiter aus der Datenbank (Vertrautenzauber, AP, Loyalität)
 
     /**
      * Kosten aus dem Regelwerk, wo die helden.jar 0 rechnet (z. B. waffenlose Manöver): Summe je Kostenart. Wird das Budget dadurch

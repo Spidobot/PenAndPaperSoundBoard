@@ -25,6 +25,8 @@ Push auf `main` baut per GitHub Actions das Image auf ghcr.io.
 - Nur Vertraute (Held hat SF Vertrautenbindung, Begleiter wesensart Tier) haben eigene AP (WdZ S. 124): beim Aussenden automatisch ein Viertel der Helden-AP, Hexe kann AP übertragen (je 50 → Loyalität +1, max. 25). Steigern nach SKT-Spalte F, LE/AE/MR als Zukauf, max. 1,5 × Startwert (außer AE, Ritualkenntnis).
 - Werte stehen im Helden-XML (<Wesen>), Startwerte/AP/LO/RK in der DB. Vertrautenzauber und Meister-Tricks NUR in der DB (begleiter_kann): die helden.jar kennt sie nicht und verwirft sonst beim Einlesen den ganzen Begleiter.
 - Normale Tiere: keine AP, Meister setzt Werte im Heldenbogen (Abrichten, ZBA).
+- Tier-Manöver/Tricks/Ausbildungen: Auswahl aus dem Setting „Tiere“ der helden.jar (settingstiere.xml), ins XML als <sonderfertigkeit name><auswahl name="Wert"/> (so speichert es die jar). Unbekannte Namen verwerfen beim Einlesen den ganzen Begleiter, darum nur Namen aus der Liste.
+- PDFs (Helden-PDF, Session-Regelzusammenfassung): App.BEGLEITER.anreichern hängt Werte, Vertrauten-Daten und DB-Vertrautenzauber an.
 
 ## Mails und Freigaben
 - Freigaben: eine Mail je Held, erst wenn alle Punkte entschieden sind (30 s Pause für Korrekturen), mit Begründungen.
