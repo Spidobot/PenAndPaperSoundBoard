@@ -77,8 +77,29 @@ public final class Heroes {
     public void trash(String file) throws Exception {
         Path p = file(file), bin = dir.resolve(".papierkorb");
         Files.createDirectories(bin);
-        Files.move(p, bin.resolve(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + "_" + file));
+        String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+        Files.move(p, bin.resolve(stamp + "_" + file));
+        if (Files.exists(bild(file))) Files.move(bild(file), bin.resolve(stamp + "_" + bild(file).getFileName()));
         db.exec("DELETE FROM hero WHERE file=?", file);
+    }
+
+    /** Heldenbild: liegt neben den Helden in .bilder/<datei>.jpg (die helden.jar speichert nur einen Pfad). */
+    public Path bild(String file) { return dir.resolve(".bilder").resolve(file.replaceAll("\\.xml$", "") + ".jpg"); }
+
+    /** Bild speichern: auf höchstens 800 px Kantenlänge verkleinert, als JPEG. Wirft verständlich bei Unlesbarem. */
+    public void saveBild(String file, byte[] data) throws Exception {
+        file(file);
+        java.awt.image.BufferedImage in = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(data));
+        if (in == null) throw new IllegalArgumentException("Das Bild konnte nicht gelesen werden. Bitte JPG, PNG, GIF oder BMP verwenden (kein WEBP/HEIC).");
+        double f = Math.min(1.0, 800.0 / Math.max(in.getWidth(), in.getHeight()));
+        int w = Math.max(1, (int) Math.round(in.getWidth() * f)), h = Math.max(1, (int) Math.round(in.getHeight() * f));
+        java.awt.image.BufferedImage out = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = out.createGraphics();
+        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.setColor(java.awt.Color.WHITE); g.fillRect(0, 0, w, h); // Transparenz -> weiß (Druck)
+        g.drawImage(in, 0, 0, w, h, null); g.dispose();
+        Files.createDirectories(bild(file).getParent());
+        javax.imageio.ImageIO.write(out, "jpg", bild(file).toFile());
     }
 
     public Path file(String file) {

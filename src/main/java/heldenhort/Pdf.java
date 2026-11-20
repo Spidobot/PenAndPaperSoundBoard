@@ -28,6 +28,19 @@ public final class Pdf {
     public static byte[] heldenbogen(HeldenJar jar, Path heroXml, String title, String backgroundHtml) throws Exception { return heldenbogen(jar, heroXml, title, backgroundHtml, null); }
 
     public static byte[] heldenbogen(HeldenJar jar, Path heroXml, String title, String backgroundHtml, String extraHtml) throws Exception {
+        return heldenbogen(jar, heroXml, title, backgroundHtml, extraHtml, null);
+    }
+
+    /** bild = Heldenbild; wird nur für den Druck in eine Kopie der XML eingetragen (<portraet value="Pfad"/>), so druckt die Jar es mit. */
+    public static byte[] heldenbogen(HeldenJar jar, Path heroXml, String title, String backgroundHtml, String extraHtml, Path bild) throws Exception {
+        if (bild != null && java.nio.file.Files.exists(bild)) {
+            String xml = java.nio.file.Files.readString(heroXml, java.nio.charset.StandardCharsets.UTF_8);
+            String tag = "<portraet value=\"" + bild.toAbsolutePath().toString().replace("&", "&amp;").replace("\"", "&quot;") + "\"/>";
+            xml = xml.matches("(?s).*<portraet[^>]*/>.*") ? xml.replaceFirst("<portraet[^>]*/>", java.util.regex.Matcher.quoteReplacement(tag)) : xml.replaceFirst("(<held[^>]*>)", "$1" + java.util.regex.Matcher.quoteReplacement(tag));
+            Path tmp = java.nio.file.Files.createTempFile("druck", ".xml");
+            try { java.nio.file.Files.writeString(tmp, xml, java.nio.charset.StandardCharsets.UTF_8); return heldenbogen(jar, tmp, title, backgroundHtml, extraHtml, null); }
+            finally { java.nio.file.Files.deleteIfExists(tmp); }
+        }
         synchronized (jar) {
             ClassLoader l = jar.loader();
             ClassLoader old = Thread.currentThread().getContextClassLoader();

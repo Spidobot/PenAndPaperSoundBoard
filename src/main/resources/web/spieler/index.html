@@ -6,7 +6,7 @@
 <title>Heldenhort</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261120h">
+<link rel="stylesheet" href="/common/app.css?v=20261120j">
 <style>
 html,body{margin:0}
 .pl .inner{width:min(1200px,100%)}
@@ -122,7 +122,7 @@ html,body{margin:0}
 </div></div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261120h"></script>
+<script src="/common/common.js?v=20261120j"></script>
 <script>
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const VIEWS=['s-login','s-home','s-drafts','s-create','s-mine','s-konto','s-stream','s-termine'];
@@ -368,7 +368,7 @@ $('#stepbody').addEventListener('click',e=>{const b=e.target.closest('button');i
 let mine=[];
 async function loadMine(){try{[mine,me]=await Promise.all([api('/api/myheroes'),api('/api/me')])}catch(e){return toastErr(e.message)}$('#mineSheet').hidden=true;$('#upForm').hidden=!me.canUpload;
   $('#mineList').innerHTML=mine.map(h=>`<div class="item"><div><b>${esc(h.name)}</b> <span class="small mut">${esc(h.rasse)} · ${esc(h.profession)}</span><div class="small mut">beim Meister seit ${esc(h.received)}</div></div>
-    <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button><button class="btn sm" data-bg="${esc(h.file)}">Backgroundstory</button><button class="btn sm" data-ex="${esc(h.file)}">Zusatzinfos</button><a class="btn sm" href="/api/myheroes/${encodeURIComponent(h.file)}/xml">XML</a>${pdfLink('/api/myheroes/'+encodeURIComponent(h.file),'pdfbg-'+esc(h.file).replace(/\W/g,'_'))}${h.status==='neu'?'':`<button class="btn sm pri" data-adv="${esc(h.file)}">Steigern</button>`}${h.delAnfrage?`<span class="pill warn">Löschen angefragt</span><button class="btn sm" data-delzurueck="${h.delAnfrage}" data-file="${esc(h.file)}">Anfrage zurückziehen</button>`:`<button class="btn sm danger" data-hdel="${esc(h.file)}">${h.status==='neu'?'Zurückziehen':'Löschen anfragen'}</button>`}</div></div>`).join('')
+    <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button><button class="btn sm" data-bg="${esc(h.file)}">Backgroundstory</button><button class="btn sm" data-ex="${esc(h.file)}">Zusatzinfos</button><button class="btn sm" data-bild="${esc(h.file)}">Bild</button><a class="btn sm" href="/api/myheroes/${encodeURIComponent(h.file)}/xml">XML</a>${pdfLink('/api/myheroes/'+encodeURIComponent(h.file),'pdfbg-'+esc(h.file).replace(/\W/g,'_'))}${h.status==='neu'?'':`<button class="btn sm pri" data-adv="${esc(h.file)}">Steigern</button>`}${h.delAnfrage?`<span class="pill warn">Löschen angefragt</span><button class="btn sm" data-delzurueck="${h.delAnfrage}" data-file="${esc(h.file)}">Anfrage zurückziehen</button>`:`<button class="btn sm danger" data-hdel="${esc(h.file)}">${h.status==='neu'?'Zurückziehen':'Löschen anfragen'}</button>`}</div></div>`).join('')
     ||'<p class="mut">Noch keine Helden beim Meister.</p>'}
 let advFile=null,advQ='';
 /* Live-Aktualisierung: alle 6 s den Stand holen; Änderungen melden und offene Ansichten auffrischen (ohne Tippen zu stören) */
@@ -386,46 +386,73 @@ async function pollStand(){if(!me||document.hidden)return;let n;try{n=await api(
       if(!busy&&D&&D.haupt&&step===5)renderCheck()}}
   stand=n}
 setInterval(pollStand,6000);
-async function openAdvance(file){advFile=file;let s;try{s=await api('/api/myheroes/'+encodeURIComponent(file)+'/advance')}catch(e){if(e.status===404)return heroGone();return toastErr(e.message)}
-  const lim=s.limit,cnt=s.seitAussenden||{},frei=s.freieAp;
-  const left=n=>lim>0?` <span class="small mut">(${Math.max(0,lim-(cnt[n]||0))}× ohne Freigabe)</span>`:'';
-  // Knopf + klarer Grund, warum es nicht geht
-  const why=c=>c>frei?`<span class="small mut">dir fehlen ${c-frei} AP</span>`:'';
-  const btn=(kind,name,c,se)=>`<button class="btn sm${se?' pri':''}" data-st="${kind}" data-t="${esc(name)}"${se?' data-se="1"':''}${c>frei?' disabled':''}>+1${se?' mit SE':''} für ${c} AP</button>`;
-  const RB=n=>s.rueck&&s.rueck[n]!=null?`<button class="step minus" data-rueck="${esc(n)}" title="Letzte Steigerung zurücknehmen (+${s.rueck[n]} AP zurück)" aria-label="${esc(n)} zurücknehmen">−</button>`:'';
-  const eigCell=e=>RB(e.name)+e.cost>0?`${btn('eigenschaft',e.name,e.cost)} ${why(e.cost)}${left(e.name)}`:'<span class="mut">Maximum erreicht</span>';
-  const talCell=t=>RB(t.name)+(t.ende?'<span class="mut">Ende der Steigerungstabelle</span>':t.cost==null?'<span class="mut">nicht steigerbar</span>':t.max!=null&&t.value>=t.max?`<span class="mut">Maximum erreicht (${t.max})</span>`
-    :`${btn('talent',t.name,t.cost)}${t.costSe!=null?' '+btn('talent',t.name,t.costSe,true):''} ${why(Math.min(t.cost,t.costSe??t.cost))}${left(t.name)}`);
-  const canE=e=>e.cost>0&&e.cost<=frei,canT=t=>!t.ende&&t.cost!=null&&!(t.max!=null&&t.value>=t.max)&&Math.min(t.cost,t.costSe??t.cost)<=frei;
-  const any=s.eigenschaften.some(canE)||s.talente.some(canT);
-  $('#mineSheet').hidden=false;
-  // Ansicht neu zeichnen, ohne dass sie springt: Scrollpositionen und Suche bleiben erhalten
+/* Steigern: erst vormerken (− Zahl +), dann alles in einer Zusammenfassung bestätigen. Ein Fehlklick kostet nichts.
+   Preise rechnet der Browser mit derselben Steigerungstabelle wie der Server (kommt vom Server mit). */
+let ADV=null,cart={};
+async function openAdvance(file){if(advFile!==file)cart={};advFile=file;let s;
+  try{s=await api('/api/myheroes/'+encodeURIComponent(file)+'/advance')}catch(e){if(e.status===404)return heroGone();return toastErr(e.message)}
+  ADV=s;renderAdvance()}
+function sktCost(col,to,se){let c=ADV.cols.indexOf(col);if(c<0)return null;if(se)c=Math.max(0,c-1);const row=ADV.skt[c];if(to<1)return row[1];if(to>=row.length)return null;return row[to]}
+/* Plan für eine Fertigkeit: Schritte, Kosten je Schritt, ob ein Schritt eine Freigabe braucht */
+function plan(kind,name){const s=ADV,n=cart[name]||0,steps=[];
+  const lim=s.limit,schon=(s.seitAussenden||{})[name]||0,offen=s.offen.some(o=>o.text.startsWith(name+' von '));
+  let seLeft=kind==='talent'?((s.se.find(x=>x.target===name)||{}).n||0):0;
+  const it=kind==='talent'?s.talente.find(x=>x.name===name):s.eigenschaften.find(x=>x.name===name);
+  const col=kind==='talent'?it.spalte:'H',base=kind==='talent'?it.value:it.base;
+  for(let i=1;i<=n+1;i++){const se=seLeft>0;const c=col?sktCost(col,base+i,se):null;steps.push({to:base+i,cost:c,se,frei:!(lim>0&&schon+i>lim)});if(se)seLeft--}
+  return {it,col,base,n,steps,offen,lim,schon}}
+function cartSumme(){let sum=0;for(const[name,n]of Object.entries(cart)){if(!n)continue;const kind=ADV.talente.some(x=>x.name===name)?'talent':'eigenschaft';
+  const p=plan(kind,name);for(let i=0;i<n;i++)if(p.steps[i].frei)sum+=p.steps[i].cost||0}return sum}
+/* Darf noch ein Schritt dazu? Grund, wenn nicht */
+function plusGrund(kind,name){const p=plan(kind,name),nx=p.steps[p.n],it=p.it;
+  const val=(kind==='talent'?it.value:it.value)+p.n,max=it.max;
+  if(kind==='talent'&&(it.cost==null&&!it.ende))return 'nicht steigerbar';
+  if(it.ende||nx.cost==null)return 'Ende der Steigerungstabelle';
+  if(max!=null&&val>=max)return 'Maximum erreicht';
+  if(!nx.frei&&(p.offen||p.steps.slice(0,p.n).some(x=>!x.frei)))return p.offen?'wartet schon auf Freigabe':'weitere erst nach Freigabe';
+  const rest=ADV.freieAp-cartSumme();if(nx.cost>rest)return `dir fehlen ${nx.cost-rest} AP`;
+  return ''}
+function renderAdvance(){const s=ADV,frei=s.freieAp,sum=cartSumme(),rest=frei-sum;
   const keepY=scrollY,keepT=$('#mineSheet .tscroll')?$('#mineSheet .tscroll').scrollTop:0,focusQ=document.activeElement&&document.activeElement.id==='advq';
-  $('#mineSheet').innerHTML=`<div class="budget sticky-ap"><h2 style="margin:0">${esc(s.name)} steigern</h2><span class="cost"><b>Freie AP ${frei}</b> von ${s.ap}${lim>0?` · je Fertigkeit ${lim}× ohne Freigabe`:''}</span></div>
-    ${any?'':`<div class="hint MG">Mit deinen ${frei} freien AP kannst du gerade nichts steigern. Neue AP gibt der Meister nach dem Abenteuer.</div>`}
-    ${s.se.length?`<p class="small">Spezielle Erfahrungen: ${s.se.map(x=>`<span class="chip">${esc(x.target)}${x.n>1?' ×'+x.n:''}</span>`).join(' ')} <span class="mut">machen eine Steigerung eine Spalte billiger.</span></p>`:''}
+  const zeile=(kind,it)=>{const name=it.name,p=plan(kind,name),grund=plusGrund(kind,name),nx=p.steps[p.n];
+    const shown=(kind==='talent'?it.value:it.value)+p.n,ok=!grund||p.n>0;
+    const minus=p.n>0?`<button class="step minus" data-cart="-1" data-k="${kind}" data-t="${esc(name)}" aria-label="${esc(name)} einen Schritt weniger">−</button>`:'<span class="stepgap"></span>';
+    const plus=!grund?`<button class="step plus" data-cart="1" data-k="${kind}" data-t="${esc(name)}" aria-label="${esc(name)} vormerken: +1 für ${nx.cost} AP">+</button>`:'<span class="stepgap"></span>';
+    const info=grund?`<span class="small mut">${esc(grund)}</span>`:`<span class="small">+1 kostet <b>${nx.cost} AP</b>${nx.se?' (mit SE)':''}${nx.frei?'':' · braucht Freigabe'}</span>`;
+    return `<tr data-tn="${esc(name.toLowerCase())}" data-ok="${ok?1:0}"${p.n?' class="geplant"':''}><td>${esc(name)}</td>
+      <td class="nowrap">${minus}<b class="mono valbox${p.n?' up':''}">${shown}</b>${plus}</td><td>${info}${p.n?` <span class="pill ok">+${p.n} vorgemerkt</span>`:''}</td>
+      ${kind==='talent'?`<td class="mono mut">${esc(it.probe)}</td><td class="mono mut">${esc(it.spalte||'')}</td>`:`<td class="mono mut">${it.max}</td>`}</tr>`};
+  const any=s.eigenschaften.some(e=>!plusGrund('eigenschaft',e.name))||s.talente.some(t=>!plusGrund('talent',t.name));
+  const items=Object.entries(cart).filter(([,n])=>n>0);
+  $('#mineSheet').hidden=false;
+  $('#mineSheet').innerHTML=`<div class="budget sticky-ap"><h2 style="margin:0">${esc(s.name)} steigern</h2><span class="cost"><b>Freie AP ${frei}</b>${sum?` · vorgemerkt ${sum} · <b>danach noch ${rest}</b>`:''} von ${s.ap}</span></div>
+    ${any||items.length?'':`<div class="hint MG">Mit deinen ${frei} freien AP kannst du gerade nichts steigern. Neue AP gibt der Meister nach dem Abenteuer.</div>`}
+    <p class="small mut">Mit <b>+</b> und <b>−</b> merkst du Steigerungen nur vor. Erst mit „Bestätigen“ unten werden sie ausgeführt.${s.limit>0?` Ohne Freigabe geht jede Fertigkeit ${s.limit}× seit dem letzten Aussenden, ein weiterer Schritt wird als Anfrage an den Meister geschickt.`:''}</p>
+    ${s.se.length?`<p class="small">Spezielle Erfahrungen: ${s.se.map(x=>`<span class="chip">${esc(x.target)}${x.n>1?' ×'+x.n:''}</span>`).join(' ')} <span class="mut">machen einen Schritt eine Spalte billiger, werden automatisch genutzt.</span></p>`:''}
     ${s.offen.length?`<div class="hint MG"><b>Wartet auf Freigabe beim Meister:</b>${s.offen.map(o=>`<div class="spread" style="margin-top:4px"><span>${esc(o.text)}</span><button class="btn sm" data-zurueck="${o.id}">Anfrage zurückziehen</button></div>`).join('')}</div>`:''}
-    ${lim>0?`<p class="small mut">Ohne Freigabe kann jede Fertigkeit ${lim}× seit dem letzten Aussenden gesteigert werden, danach fragt die Steigerung beim Meister an.</p>`:''}
-    <label class="small" style="display:inline-flex;gap:6px;align-items:center;margin:6px 0"><input type="checkbox" id="advAfford"${advAfford?' checked':''}> Nur zeigen, was ich mir leisten kann</label>
-    <h3>Eigenschaften</h3><div class="tw"><table class="small zebra"><thead><tr><th>Eigenschaft</th><th>Wert</th><th>Höchstwert</th><th></th></tr></thead><tbody>${s.eigenschaften.map(e=>`<tr data-ok="${canE(e)||(s.rueck&&s.rueck[e.name]!=null)?1:0}"><td>${esc(e.name)}</td><td class="mono">${e.value}</td><td class="mono mut">${e.max}</td>
-      <td>${eigCell(e)}</td></tr>`).join('')}</tbody></table></div>
+    <label class="small" style="display:inline-flex;gap:6px;align-items:center;margin:6px 0"><input type="checkbox" id="advAfford"${advAfford?' checked':''}> Nur zeigen, was ich mir leisten kann (Vorgemerktes bleibt sichtbar)</label>
+    <h3>Eigenschaften</h3><div class="tw"><table class="small zebra"><thead><tr><th>Eigenschaft</th><th>Wert</th><th></th><th>Höchstwert</th></tr></thead><tbody>${s.eigenschaften.map(e=>zeile('eigenschaft',e)).join('')}</tbody></table></div>
     <div class="spread"><h3>Talente</h3><input type="search" id="advq" placeholder="Talent suchen…" value="${esc(advQ)}" style="width:220px" aria-label="Talent suchen"></div>
-    <div class="tw tscroll"><table class="small zebra"><thead><tr><th>Talent</th><th>TaW</th><th></th><th>Probe</th><th>Spalte</th></tr></thead><tbody>${s.talente.map(t=>`<tr data-tn="${esc(t.name.toLowerCase())}" data-ok="${canT(t)||(s.rueck&&s.rueck[t.name]!=null)?1:0}"><td>${esc(t.name)}</td><td class="mono">${t.value}</td>
-      <td>${talCell(t)}</td><td class="mono mut">${esc(t.probe)}</td><td class="mono mut">${esc(t.spalte||'')}</td></tr>`).join('')}</tbody></table></div>
-    <p class="small mut" id="advNone" hidden>Nichts, was du dir gerade leisten kannst.</p>`;
-  filterAdv();window.scrollTo(0,keepY);const ts=$('#mineSheet .tscroll');if(ts)ts.scrollTop=keepT;if(focusQ){const q=$('#advq');q.focus();q.setSelectionRange(q.value.length,q.value.length)}
-  if(advFlash){const r=$(`#mineSheet tr[data-tn="${CSS.escape(advFlash.toLowerCase())}"]`)||[...$$('#mineSheet tr')].find(x=>x.firstElementChild&&x.firstElementChild.textContent===advFlash);if(r){r.classList.add('flash');setTimeout(()=>r.classList.remove('flash'),1500)}advFlash=null}}
-let advFlash=null;
+    <div class="tw tscroll"><table class="small zebra"><thead><tr><th>Talent</th><th>TaW</th><th></th><th>Probe</th><th>Spalte</th></tr></thead><tbody>${s.talente.map(t=>zeile('talent',t)).join('')}</tbody></table></div>
+    <p class="small mut" id="advNone" hidden>Nichts, was du dir gerade leisten kannst.</p>
+    <div class="cartbar"${items.length?'':' hidden'}><div><b>Zusammenfassung</b><ul class="small">${items.map(([name,n])=>{const kind=s.talente.some(x=>x.name===name)?'talent':'eigenschaft',p=plan(kind,name);
+        const st=p.steps.slice(0,n);return `<li>${esc(name)} ${p.base+(kind==='eigenschaft'?(p.it.value-p.it.base):0)} → ${p.base+n+(kind==='eigenschaft'?(p.it.value-p.it.base):0)}: ${st.map(x=>x.frei?x.cost+' AP'+(x.se?' (SE)':''):'Anfrage an den Meister').join(' + ')}</li>`}).join('')}</ul>
+      <div>Summe <b>${sum} AP</b>, danach frei: <b>${rest} AP</b></div></div>
+      <div class="row"><button class="btn" id="cartClear">Verwerfen</button><button class="btn pri" id="cartOk">Bestätigen</button></div></div>`;
+  filterAdv();window.scrollTo(0,keepY);const ts=$('#mineSheet .tscroll');if(ts)ts.scrollTop=keepT;if(focusQ){const q=$('#advq');q.focus();q.setSelectionRange(q.value.length,q.value.length)}}
 let advAfford=LS.get('hh-afford',false);
 function filterAdv(){let shown=0;$$('#mineSheet tr[data-ok]').forEach(r=>{const h=(advAfford&&r.dataset.ok!=='1')||(r.dataset.tn&&advQ&&!r.dataset.tn.includes(advQ.toLowerCase()));r.hidden=h;if(!h)shown++});
   const n=$('#advNone');if(n)n.hidden=!(advAfford&&!shown)}
 $('#mineSheet').addEventListener('change',e=>{if(e.target.id==='advAfford'){advAfford=e.target.checked;LS.set('hh-afford',advAfford);filterAdv()}});
-$('#mineSheet').addEventListener('input',e=>{if(e.target.id==='advq'){advQ=e.target.value;filterAdv()}});
-$('#mineSheet').addEventListener('click',async e=>{const b=e.target.closest('button[data-st]');if(!b||b.disabled)return;
-  try{const r=await api('/api/myheroes/'+encodeURIComponent(advFile)+'/steigern',{method:'POST',body:{kind:b.dataset.st,target:b.dataset.t,se:!!b.dataset.se}});
-    toast(r.pending?'Braucht eine Freigabe, der Meister ist informiert: '+r.text:b.dataset.t+' gesteigert für '+r.cost+' AP');advFlash=b.dataset.t;b.blur();openAdvance(advFile)}catch(x){toastErr(x.message);if(/gelöscht/.test(x.message))heroGone()}});
-$('#mineSheet').addEventListener('click',async e=>{const u=e.target.closest('[data-rueck]');if(!u)return;
-  try{const r=await api('/api/myheroes/'+encodeURIComponent(advFile)+'/rueckgaengig',{method:'POST',body:{target:u.dataset.rueck}});toast(u.dataset.rueck+' zurückgenommen, '+r.cost+' AP sind wieder frei.');advFlash=u.dataset.rueck;openAdvance(advFile)}catch(x){toastErr(x.message)}});
+$('#mineSheet').addEventListener('click',async e=>{const c=e.target.closest('[data-cart]');
+  if(c){const n=(cart[c.dataset.t]||0)+(+c.dataset.cart);cart[c.dataset.t]=Math.max(0,n);renderAdvance();return}
+  if(e.target.id==='cartClear'){cart={};renderAdvance();return}
+  if(e.target.id==='cartOk'){const b=e.target;b.disabled=true;b.textContent='…';
+    const schritte=Object.entries(cart).filter(([,n])=>n>0).map(([target,n])=>({target,n,kind:ADV.talente.some(x=>x.name===target)?'talent':'eigenschaft'}));
+    try{const r=await api('/api/myheroes/'+encodeURIComponent(advFile)+'/steigern-paket',{method:'POST',body:{schritte}});cart={};
+      const msg=[];if(r.ok.length)msg.push(`${r.ok.length} Steigerung(en) ausgeführt, ${r.ap} AP ausgegeben`);if(r.anfragen.length)msg.push(`an den Meister geschickt: ${r.anfragen.join('; ')}`);
+      if(msg.length)toast(msg.join(' · '));if(r.fehler.length)toastErr('Nicht ausgeführt:\n'+r.fehler.join('\n'));openAdvance(advFile)}
+    catch(x){toastErr(x.message);b.disabled=false;b.textContent='Bestätigen';if(x.status===404)heroGone()}}});
 $('#mineSheet').addEventListener('click',async e=>{const b=e.target.closest('[data-zurueck]');if(!b)return;
   try{await api('/api/myheroes/'+encodeURIComponent(advFile)+'/anfrage/'+b.dataset.zurueck+'/zurueck',{method:'POST'});toast('Anfrage zurückgezogen.');openAdvance(advFile)}catch(x){toastErr(x.message)}});
 /* Held wurde gelöscht, während er offen war: Ansicht schließen und klar sagen, was los ist */
@@ -442,6 +469,10 @@ $('#mineList').addEventListener('click',async e=>{const z=e.target.closest('[dat
   try{const r=await api('/api/myheroes/'+encodeURIComponent(h.file)+'/delete',{method:'POST'});
     toast(r.done==='zurückgezogen'?h.name+' ist zurückgezogen.':'Löschen ist beim Meister angefragt. Du bekommst eine Mail, wenn er entschieden hat.');loadMine()}catch(x){toastErr(x.message)}},true);
 $('#mineList').onclick=e=>{if(e.target.closest('[data-hdel]'))return;const a=e.target.closest('[data-adv]');if(a){openAdvance(a.dataset.adv);$('#mineSheet').scrollIntoView({behavior:'smooth'});return}
+  const bi=e.target.closest('[data-bild]');
+  if(bi){const h=mine.find(y=>y.file===bi.dataset.bild);$('#mineSheet').hidden=false;
+    $('#mineSheet').innerHTML=`<h2>${esc(h.name)}: Bild</h2><div id="mineBild"></div>`;
+    bildEditor($('#mineBild'),'/api/myheroes/'+encodeURIComponent(h.file));$('#mineSheet').scrollIntoView({behavior:'smooth'});return}
   const x=e.target.closest('[data-ex]');
   if(x){const h=mine.find(y=>y.file===x.dataset.ex);$('#mineSheet').hidden=false;
     $('#mineSheet').innerHTML=`<h2>${esc(h.name)}: Zusatzinfos</h2><p class="small mut">Was nicht in die Backgroundstory passt: Prinzipientreue, Geiz, Eitelkeit und Co. genauer beschrieben, Eigenheiten, Wünsche an den Meister …</p><div id="mineEx"></div>`;

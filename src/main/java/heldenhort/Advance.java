@@ -135,6 +135,8 @@ public final class Advance {
         List<Map<String, Object>> se = new ArrayList<>();
         for (var r : db.query("SELECT target, COUNT(*) n FROM se WHERE file=? AND used IS NULL GROUP BY target ORDER BY target", file)) se.add(r);
         s.put("se", se);
+        // für die Vormerk-Liste im Browser: Steigerungstabelle und Spalten, damit jeder weitere Schritt sofort einen Preis hat
+        s.put("skt", SKT); s.put("cols", COLS);
         s.put("limit", Integer.parseInt(db.get("steigerLimit", "0")));
         s.put("seitAussenden", counts(file));
         s.put("rueck", zuruecknehmbar(file));
@@ -398,6 +400,31 @@ public final class Advance {
         s.post("/api/myheroes/{file}/rueckgaengig", ctx -> {
             String file = own(ctx.pathParam("file"), ctx);
             ctx.json(rueckgaengig(file, App.str(ctx.bodyAsClass(Map.class).get("target"))));
+        });
+        // Vorgemerkte Steigerungen gesammelt ausführen (erst nach Bestätigung durch den Spieler)
+        s.post("/api/myheroes/{file}/steigern-paket", ctx -> {
+            String file = own(ctx.pathParam("file"), ctx);
+            if (!"übernommen".equals(db.query("SELECT status FROM hero WHERE file=?", file).get(0).get("status")))
+                throw new IllegalStateException("Steigern geht erst, wenn der Meister den Helden übernommen hat.");
+            List<?> schritte = ctx.bodyAsClass(Map.class).get("schritte") instanceof List<?> l ? l : List.of();
+            List<String> ok = new ArrayList<>(), anfragen = new ArrayList<>(), fehler = new ArrayList<>();
+            int ap = 0;
+            for (Object o : schritte) {
+                Map<?, ?> sp = (Map<?, ?>) o;
+                String kind = App.str(sp.get("kind")), target = App.str(sp.get("target"));
+                int n = sp.get("n") instanceof Number x ? Math.min(x.intValue(), 30) : 0;
+                if (!List.of("talent", "eigenschaft").contains(kind)) continue;
+                for (int i = 0; i < n; i++) {
+                    boolean se = kind.equals("talent") && !db.query("SELECT 1 FROM se WHERE file=? AND target=? AND used IS NULL", file, target).isEmpty();
+                    try {
+                        Map<String, Object> res = steigern(file, kind, target, se, false, accounts.current(ctx).get("id"));
+                        if (Boolean.TRUE.equals(res.get("pending"))) { anfragen.add(App.str(res.get("text"))); break; }
+                        ap += ((Number) res.get("cost")).intValue();
+                        ok.add(target + (se ? " (mit SE)" : ""));
+                    } catch (Exception e) { fehler.add(target + ": " + e.getMessage()); break; }
+                }
+            }
+            ctx.json(Map.of("ok", ok, "anfragen", anfragen, "fehler", fehler, "ap", ap));
         });
         s.post("/api/myheroes/{file}/steigern", ctx -> {
             String file = own(ctx.pathParam("file"), ctx);

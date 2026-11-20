@@ -588,6 +588,14 @@ public final class App {
             ctx.json(Map.of("ok", true));
         });
 
+        // Heldenbild: Hochladen (bis 10 MB, wird verkleinert), Anzeigen, Löschen
+        m.get("/api/heroes/{file}/bild", ctx -> bildZeigen(ctx, heroes, ctx.pathParam("file")));
+        m.post("/api/heroes/{file}/bild", ctx -> bildHoch(ctx, heroes, ctx.pathParam("file")));
+        m.delete("/api/heroes/{file}/bild", ctx -> { heroes.file(ctx.pathParam("file")); Files.deleteIfExists(heroes.bild(ctx.pathParam("file"))); ctx.json(Map.of("ok", true)); });
+        s.get("/api/myheroes/{file}/bild", ctx -> bildZeigen(ctx, heroes, advance.own(ctx.pathParam("file"), ctx)));
+        s.post("/api/myheroes/{file}/bild", ctx -> bildHoch(ctx, heroes, advance.own(ctx.pathParam("file"), ctx)));
+        s.delete("/api/myheroes/{file}/bild", ctx -> { String f = advance.own(ctx.pathParam("file"), ctx); Files.deleteIfExists(heroes.bild(f)); ctx.json(Map.of("ok", true)); });
+
         new Polls(db, mail, accounts).routes(m, s);
         advance.routes(m, s);
 
@@ -660,6 +668,22 @@ Icons: Icons8 (icons8.com).""";
     /** Helden automatisch übernehmen, sobald nichts mehr zu genehmigen ist (Konfiguration, Standard: an). */
     static boolean autoUebernehmen(Db db) { return !"0".equals(db.get("autoUebernehmen", "1")); }
 
+    static void bildZeigen(Context ctx, Heroes heroes, String file) throws Exception {
+        heroes.file(file);
+        Path b = heroes.bild(file);
+        if (!Files.exists(b)) throw new NotFoundResponse("Für diesen Helden ist noch kein Bild hochgeladen.");
+        ctx.header("Cache-Control", "no-cache");
+        ctx.contentType("image/jpeg").result(Files.readAllBytes(b));
+    }
+
+    static void bildHoch(Context ctx, Heroes heroes, String file) throws Exception {
+        var f = ctx.uploadedFile("bild");
+        if (f == null) throw new IllegalArgumentException("Es wurde kein Bild mitgeschickt.");
+        if (f.size() > 10L * 1024 * 1024) throw new IllegalArgumentException("Das Bild ist größer als 10 MB. Bitte ein kleineres nehmen.");
+        heroes.saveBild(file, f.content().readAllBytes());
+        ctx.json(Map.of("ok", true));
+    }
+
     static String extra(Db db, String file) {
         var r = db.query("SELECT extra FROM hero WHERE file=?", file);
         return r.isEmpty() ? "" : str(r.get(0).get("extra"));
@@ -676,7 +700,7 @@ Icons: Icons8 (icons8.com).""";
         String name = str(Heroes.parse(Files.readAllBytes(p)).get("name"));
         byte[] pdf;
         boolean mit = "1".equals(ctx.queryParam("bg"));
-        try { pdf = Pdf.heldenbogen(jar, p, name, mit ? background(db, file) : null, mit ? extra(db, file) : null); }
+        try { pdf = Pdf.heldenbogen(jar, p, name, mit ? background(db, file) : null, mit ? extra(db, file) : null, heroes.bild(file)); }
         catch (Exception e) { // 4xx statt 5xx: Cloudflare ersetzt 5xx durch eine eigene Seite
             Throwable c = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null ? e.getCause() : e;
             throw new IllegalStateException("PDF nicht möglich: " + cause(c));

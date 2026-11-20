@@ -156,6 +156,24 @@ function stepperize(root){(root||document).querySelectorAll('input[type=number]:
     b.onclick=()=>{if(inp.disabled)return;const st=+inp.step||1,min=inp.min!==''?+inp.min:-Infinity,max=inp.max!==''?+inp.max:Infinity;
       const v=Math.min(max,Math.max(min,(+inp.value||0)+d*st));if(v===+inp.value)return;inp.value=v;
       inp.dispatchEvent(new Event('input',{bubbles:true}));inp.dispatchEvent(new Event('change',{bubbles:true}))};return b};
-  w.append(mk('minus','−',-1),inp,mk('plus','+',1))})}
+  const mi=mk('minus','−',-1),pl=mk('plus','+',1);w.append(mi,inp,pl);
+  // nur zeigen, was geht: kein − am Minimum, kein + am Maximum (Platz bleibt, damit nichts springt)
+  const vis=()=>{mi.style.visibility=inp.min!==''&&+inp.value<=+inp.min||inp.disabled?'hidden':'';pl.style.visibility=inp.max!==''&&+inp.value>=+inp.max||inp.disabled?'hidden':''};
+  inp.addEventListener('input',vis);inp.addEventListener('change',vis);vis()})}
 new MutationObserver(()=>stepperize()).observe(document.documentElement,{childList:true,subtree:true});
 addEventListener('DOMContentLoaded',()=>stepperize());
+
+/* Heldenbild: Vorschau, Hochladen (bis 10 MB, Server verkleinert), Entfernen. base = .../heroes/<datei> bzw. .../myheroes/<datei> */
+function bildEditor(root,base){
+  const load=()=>{root.innerHTML=`<div class="bildbox"><img alt="Heldenbild" hidden><span class="small mut nob">Noch kein Bild.</span>
+    <div class="row"><label class="btn sm">Bild wählen<input type="file" accept="image/jpeg,image/png,image/gif,image/bmp" hidden></label><button class="btn sm danger" data-bdel hidden>Bild entfernen</button></div>
+    <p class="small mut">JPG, PNG, GIF oder BMP, höchstens 10 MB. Wird verkleinert und oben rechts auf den Heldenbogen gedruckt.</p></div>`;
+    const img=root.querySelector('img');img.onload=()=>{img.hidden=false;root.querySelector('.nob').hidden=true;root.querySelector('[data-bdel]').hidden=false};
+    img.src=base+'/bild?t='+Date.now();
+    root.querySelector('input').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+      if(f.size>10*1024*1024)return toastErr('Das Bild ist größer als 10 MB. Bitte ein kleineres nehmen.');
+      const fd=new FormData();fd.append('bild',f);
+      try{const r=await fetch(base+'/bild',{method:'POST',body:fd,credentials:'same-origin'});const d=await r.json().catch(()=>({}));
+        if(!r.ok)throw new Error(d.error||d.title||'Hochladen hat nicht geklappt ('+r.status+').');toast('Bild gespeichert.');load()}catch(x){toastErr(x.message)}};
+    root.querySelector('[data-bdel]').onclick=async()=>{try{await api(base+'/bild',{method:'DELETE'});toast('Bild entfernt.');load()}catch(x){toastErr(x.message)}}};
+  load()}

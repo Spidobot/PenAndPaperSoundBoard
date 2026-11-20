@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261120h">
+<link rel="stylesheet" href="/common/app.css?v=20261120j">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -175,7 +175,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261120h"></script>
+<script src="/common/common.js?v=20261120j"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -547,6 +547,7 @@ function sheetHtml(h,dialog){const s=h.sheet||{basis:{},sections:[],notizen:[]};
       <select id="owner-${esc(h.file)}" class="owner" data-file="${esc(h.file)}" style="width:auto"><option value="">– niemandem (FTP) –</option>${accts.map(a=>`<option value="${a.id}"${String(a.id)===String(h.account)?' selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
     <div class="row small"><label class="label" for="sap-${esc(h.file)}">Sonder-AP</label><input type="number" min="1" id="sap-${esc(h.file)}" class="sapv" style="width:110px" aria-label="Sonder-AP">
       <input type="text" class="sapn" placeholder="Grund (z. B. nachgebauter Held)" style="width:280px" aria-label="Grund"><button class="btn sm" data-sap>Sofort gutschreiben</button></div>
+    <details class="small"><summary>Bild für den Heldenbogen</summary><div class="hbild" data-base="/api/heroes/${encodeURIComponent(h.file)}"></div></details>
     <dl class="kv">${Object.entries(basis).filter(([k,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
     <div class="attr">${ATTR.map(k=>`<div class="a"><span class="label">${k}</span><b>${h.E&&h.E[k]!=null?h.E[k]:'–'}</b></div>`).join('')}</div>
     ${h.meistergenehmigung&&h.meistergenehmigung.length?`<div class="note"><b>Meistergenehmigung laut XML:</b><ul class="small">${h.meistergenehmigung.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
@@ -555,7 +556,7 @@ function sheetHtml(h,dialog){const s=h.sheet||{basis:{},sections:[],notizen:[]};
     ${s.notizen&&s.notizen.length?`<details open class="sec"><summary><b>Notizen</b></summary><ul class="small">${s.notizen.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></details>`:''}
     <details open class="sec"><summary><b>Backgroundstory</b></summary><div class="bgview"></div></details>
     <details open class="sec"><summary><b>Zusatzinfos</b> <span class="mut small">Prinzipientreue, Geiz, Eitelkeit … genauer beschrieben</span></summary><div class="exview"></div></details>`}
-function fillSheet(root,h){
+function fillSheet(root,h){root.querySelectorAll(".hbild").forEach(b=>bildEditor(b,b.dataset.base));
   // Backgroundstory ist serverseitig bereinigt (jsoup Safelist)
   bgEditor(root.querySelector('.bgview'),h.background,async html=>{await api('/api/heroes/'+encodeURIComponent(h.file)+'/bg',{method:'PUT',body:{bg:html}});h.background=html});
   bgEditor(root.querySelector('.exview'),h.extra,async html=>{await api('/api/heroes/'+encodeURIComponent(h.file)+'/extra',{method:'PUT',body:{extra:html}});h.extra=html},'Zusatzinfos');
