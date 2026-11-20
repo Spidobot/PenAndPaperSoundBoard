@@ -53,6 +53,12 @@ public final class Mail {
 
     public void send(String to, String subject, String text) throws MessagingException { send(to, subject, text, null); }
 
+    /** Absenderadresse (wie beim Versand), für ORGANIZER in Kalendereinladungen; leer, wenn keine bekannt. */
+    public String absender() {
+        String from = db.get("smtpFrom", ""), user = db.get("smtpUser", "");
+        return !from.isBlank() ? from : user.contains("@") ? user : "";
+    }
+
     /** Einladung mit Kalenderdatei; landet in Outlook/Google/Apple als Termin-Einladung. */
     public void notifyIcs(String to, String subject, String text, String ics) {
         if (to == null || to.isBlank()) return;

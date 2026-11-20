@@ -644,7 +644,8 @@ $('#pollList').onclick=async e=>{const b=e.target.closest('button');if(!b)return
   if(b.dataset.pask){pollDel=+b.dataset.pask;loadPolls()}
   if(b.dataset.pdel){try{await api('/api/polls/'+b.dataset.pdel,{method:'DELETE'});pollDel=null;loadPolls()}catch(x){toastErr(x.message)}}
   if(b.dataset.pfix){const id=b.dataset.pfix;try{const r=await api('/api/polls/'+id+'/fix',{method:'POST',body:{option:+$('#fx-'+id).value,hours:+$('#fh-'+id).value}});
-    toast(r.sent.length?'Einladung an '+r.sent.join(', ')+' und dich verschickt':'Fixiert. Kein Spieler hat eine bestätigte Mail-Adresse, Einladung nur an dich.');loadPolls()}catch(x){toastErr(x.message)}}
+    toast((r.sent.length?'Kalendereinladung an '+r.sent.join(', ')+(r.meister?' und dich':'')+' verschickt.':'Fixiert. Kein Spieler hat eine bestätigte Mail-Adresse'+(r.meister?', Einladung nur an dich.':' und für dich ist unter Einstellungen keine Meister-Adresse eingetragen.'))
+      +(r.ohne&&r.ohne.length&&r.sent.length?' Ohne bestätigte Mail-Adresse (bekommen nichts): '+r.ohne.join(', ')+'.':''));loadPolls()}catch(x){toastErr(x.message)}}
   if(b.dataset.pclose){try{await api('/api/polls/'+b.dataset.pclose+'/close',{method:'POST',body:{closed:b.dataset.c==='1'}});loadPolls()}catch(x){toastErr(x.message)}}};
 setInterval(()=>{if(location.hash==='#m-termine'&&!$('#pollForm').contains(document.activeElement))loadPolls()},15000);
 

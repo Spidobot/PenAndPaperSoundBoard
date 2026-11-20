@@ -163,6 +163,70 @@ public final class Creation {
      */
     private static List<Map<String, Object>> vorteilInfos(ClassLoader l, Iterable<?> list) throws Exception { return vorteilInfos(l, list, null); }
 
+    // --- Settings der helden.jar (helden/framework/settings/*.xml): welches Element gehört zu welchem Setting
+
+    private record Setting(String name, String beschreibung, boolean haupt, List<String> support, Set<String> ids) {}
+    private static final List<String> SETTING_DATEIEN = List.of("settings.xml", "settingsMyranor.xml", "settingsTharun.xml", "settingsddz.xml",
+            "settingstiere.xml", "settingSpielhilfenDSA.xml", "settingSpielhilfenDDZ.xml", "settingSpielhilfenMyranor.xml", "settingescheundkork.xml",
+            "settingsbote.xml", "settingsudw.xml", "settingswda.xml", "settingswesenAventurien.xml", "settingswesenMyranor.xml");
+    private static volatile List<Setting> settings;
+
+    private static List<Setting> settings(ClassLoader l) {
+        if (settings != null) return settings;
+        List<Setting> out = new ArrayList<>();
+        for (String f : SETTING_DATEIEN) {
+            try (var in = l.getResourceAsStream("helden/framework/settings/" + f)) {
+                if (in == null) continue;
+                var dbf = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+                var doc = dbf.newDocumentBuilder().parse(in);
+                var nl = doc.getElementsByTagName("setting");
+                for (int i = 0; i < nl.getLength(); i++) {
+                    org.w3c.dom.Element st = (org.w3c.dom.Element) nl.item(i);
+                    List<String> sup = new ArrayList<>();
+                    Set<String> ids = new HashSet<>();
+                    var su = st.getElementsByTagName("support");
+                    for (int k = 0; k < su.getLength(); k++) sup.add(((org.w3c.dom.Element) su.item(k)).getAttribute("name"));
+                    var inc = st.getElementsByTagName("include");
+                    for (int k = 0; k < inc.getLength(); k++) ids.add(settingId(((org.w3c.dom.Element) inc.item(k)).getAttribute("id")));
+                    var be = st.getElementsByTagName("beschreibung");
+                    String b = be.getLength() == 0 ? "" : be.item(0).getTextContent().replaceAll("\\s+", " ").trim();
+                    out.add(new Setting(st.getAttribute("name"), b, "true".equals(st.getAttribute("hauptsetting")), sup, ids));
+                }
+            } catch (Exception e) { System.err.println("Setting " + f + " nicht lesbar: " + e); }
+        }
+        return settings = out;
+    }
+
+    /** „SGelände#*“ → „SGelände“; „Gelände ()“ → „Gelände“: Auswahl-Platzhalter weg, damit beide Schreibweisen zusammenpassen. */
+    private static String settingId(String id) { return id.replaceAll("#.*$", "").replaceAll("\\s*\\(\\)\\s*$", "").trim(); }
+
+    /**
+     * Was die helden.jar laut ihren Setting-Dateien nur in anderen Settings führt (Tiere, Myranor, Tharun, Die Dunklen Zeiten …), ist für
+     * diesen Helden gesperrt, mit Grund. Erlaubt sind das Hauptsetting des Helden und die Settings, die es unterstützt (support).
+     */
+    private static void nachSetting(ClassLoader l, String haupt, String praefix, List<Map<String, Object>> liste) {
+        List<Setting> alle = settings(l);
+        Set<String> erlaubt = new HashSet<>(List.of(haupt));
+        for (Setting st : alle) if (st.name().equals(haupt)) erlaubt.addAll(st.support());
+        if (alle.stream().noneMatch(st -> st.name().equals(haupt))) return; // unbekanntes Setting: nichts sperren
+        for (Map<String, Object> m : liste) {
+            String id = settingId(praefix + m.get("name"));
+            List<Setting> in = alle.stream().filter(st -> st.ids().contains(id)).toList();
+            if (in.isEmpty() || in.stream().anyMatch(st -> erlaubt.contains(st.name()))) continue;
+            String wo = String.join(", ", in.stream().map(st -> {
+                String b = st.beschreibung().replaceAll("<[^>]+>", " ").replaceAll("\s+", " ").trim();
+                boolean kurz = !b.isEmpty() && b.length() < 90 && !b.contains("http") && !b.startsWith(st.name());
+                return "„" + st.name() + "“" + (kurz ? " (" + b + ")" : "");
+            }).toList());
+            List<String> fehlt = new ArrayList<>();
+            fehlt.add("Gehört laut helden.jar nur zum Setting " + wo + ", nicht zu „" + haupt + "“. Für diesen Helden darum nicht wählbar.");
+            if (m.get("fehlt") instanceof List<?> alt) for (Object o : alt) fehlt.add(String.valueOf(o));
+            m.put("fehlt", fehlt);
+            m.remove("ungeprueft");
+            m.put("fremdesSetting", true);
+        }
+    }
+
     private static List<Map<String, Object>> vorteilInfos(ClassLoader l, Iterable<?> list, Object tester) throws Exception {
         List<Object> items = new ArrayList<>();
         for (Object v : list) items.add(v);
@@ -331,12 +395,20 @@ public final class Creation {
     public Map<String, Object> talentCosts(String draft, Set<String> only) throws Exception {
         Map<String, Integer> base = baseCosts(draft);
         Map<String, Object> out = new LinkedHashMap<>();
+        Set<String> aktiv = new HashSet<>();
         for (org.w3c.dom.Element t : Heroes.all(parse(draft).getDocumentElement(), "talent")) {
             if (!t.hasAttribute("value")) continue;
             String n = t.getAttribute("name");
+            aktiv.add(n);
             if (only != null && !only.contains(n)) continue;
             // je Talent einzeln sperren, damit andere Spieler zwischendurch weiterarbeiten können
             try { out.put(n, costOne(draft, n, Heroes.num(t.getAttribute("value")) + 1, base)); }
+            catch (Exception e) { out.put(n, Map.of("nicht", String.valueOf(e.getMessage()))); }
+        }
+        // noch nicht aktivierte Talente: Aktivierungskosten (Talent probehalber auf 0 setzen, rechnet die helden.jar)
+        if (only != null) for (String n : only) {
+            if (aktiv.contains(n)) continue;
+            try { out.put(n, costOne(draft, n, 0, base)); }
             catch (Exception e) { out.put(n, Map.of("nicht", String.valueOf(e.getMessage()))); }
         }
         return out;
@@ -491,16 +563,30 @@ public final class Creation {
         s.put("vorteile", vt);
         Object hv = call(hew, "getHswVorteile");
         Object kat = call(hv, "getMoegliche");
-        s.put("vorteileMoeglich", vorteilInfos(l, (Iterable<?>) call(kat, "getListe"), bedingungsTester(l, hew)));
+        String setting = "DSA4.1"; // Hauptsetting des Helden (<settings name="…"/> im XML)
+        org.w3c.dom.Element se = Heroes.first(held, "settings");
+        if (se != null && !se.getAttribute("name").isBlank()) setting = se.getAttribute("name");
+        List<Map<String, Object>> vtm = vorteilInfos(l, (Iterable<?>) call(kat, "getListe"), bedingungsTester(l, hew));
+        nachSetting(l, setting, "V", vtm);
+        s.put("vorteileMoeglich", vtm);
 
         Object sfw = call(hew, "getSf");
         Set<String> userSf = new TreeSet<>();
-        for (Object x : ((Map<?, ?>) call(sfw, "getKostenArtFuerSf")).keySet()) userSf.add(x.toString());
+        Map<String, Object[]> userKosten = new HashMap<>(); // selbst gewählte SF: Kosten laut Jar und gewählte Kostenart (GP/AP)
+        for (Map.Entry<?, ?> en : ((Map<?, ?>) call(sfw, "getKostenArtFuerSf")).entrySet()) {
+            userSf.add(en.getKey().toString());
+            Object ap = null;
+            try { ap = call(en.getKey(), "getKosten"); } catch (Exception ignored) { }
+            userKosten.put(en.getKey().toString(), new Object[]{ap, String.valueOf(en.getValue())});
+        }
         List<Map<String, Object>> sf = new ArrayList<>();
         for (org.w3c.dom.Element e : Heroes.all(held, "sonderfertigkeit")) {
             if (e.getParentNode() == null || "kostensf".equals(e.getParentNode().getNodeName()) || "usersf".equals(e.getParentNode().getNodeName())) continue;
             String n = e.getAttribute("name");
-            sf.add(Map.of("name", n, "eigene", userSf.contains(n), "details", Heroes.details(e)));
+            Map<String, Object> m = new LinkedHashMap<>(Map.of("name", n, "eigene", userSf.contains(n), "details", Heroes.details(e)));
+            Object[] uk = userKosten.get(n);
+            if (uk != null) { if (uk[0] != null) m.put("ap", uk[0]); m.put("kostenart", uk[1]); }
+            sf.add(m);
         }
         s.put("sf", sf);
         List<Map<String, Object>> sfm = new ArrayList<>();
@@ -513,6 +599,7 @@ public final class Creation {
             if (fehlt == null) m.put("ungeprueft", true); else if (!fehlt.isEmpty()) m.put("fehlt", fehlt);
             sfm.add(m);
         }
+        nachSetting(l, setting, "S", sfm);
         s.put("sfMoeglich", sfm);
 
         Object tal = call(hew, "getTalente");

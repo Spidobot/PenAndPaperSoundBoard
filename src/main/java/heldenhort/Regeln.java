@@ -18,7 +18,7 @@ import java.util.stream.Stream;
  * Neu eingelesen wird automatisch, sobald sich eine Datei ändert.
  */
 final class Regeln {
-    record Eintrag(String name, List<String> namen, String art, String zusatz, String quelle, String text, String buchkosten) {}
+    record Eintrag(String name, List<String> namen, String art, String zusatz, String quelle, String text, String buchkosten, List<String> manoever) {}
 
     private final Path dir;
     // Aktueller Suchbereich (je Aufruf mit nimm(...) gesetzt; alle Zugriffe laufen synchronisiert)
@@ -99,7 +99,7 @@ final class Regeln {
             }
             if (quellen.size() == 1) { out.add(a); continue; }
             String text = a.text() + (abweichung ? "<p><i>Der Wortlaut in den genannten Quellen weicht minimal voneinander ab (z. B. Errata).</i></p>" : "");
-            out.add(new Eintrag(a.name(), a.namen(), a.art(), a.zusatz(), String.join(" · ", quellen), text, a.buchkosten()));
+            out.add(new Eintrag(a.name(), a.namen(), a.art(), a.zusatz(), String.join(" · ", quellen), text, a.buchkosten(), a.manoever()));
         }
         return out;
     }
@@ -120,6 +120,101 @@ final class Regeln {
             else { i++; j++; }
         }
         return diff + (a.length - i) + (b.length - j);
+    }
+
+    // ------------------------------------------------------------------ Kosten: helden.jar zuerst, sonst Regelwerk
+
+    private static final java.util.regex.Pattern AP_ZAHL = java.util.regex.Pattern.compile("(\\d+)\\s*AP");
+
+    /** Buchkosten in AP (erste Zahl vor „AP“), oder -1. */
+    static int buchAp(Eintrag e) {
+        var m = AP_ZAHL.matcher(e.buchkosten());
+        return m.find() ? Integer.parseInt(m.group(1)) : -1;
+    }
+
+    /** Regeleintrag mit Buchkosten zu einer SF der helden.jar, nur bei sicherem Namensgleichstand (kein unscharfer Treffer). */
+    private Eintrag buchEintrag(String jarName) {
+        String n = norm(ohneKlammern(jarName));
+        if (n.isEmpty()) return null;
+        for (Eintrag e : exakt.getOrDefault(n, List.of()))
+            if (buchAp(e) > 0 && e.namen().stream().anyMatch(a -> norm(ohneKlammern(a)).equals(n))) return e;
+        return null;
+    }
+
+    /**
+     * Wo die helden.jar 0 AP führt, das Regelwerk aber Kosten nennt (z. B. waffenlose Manöver: WdS S. 91 „können aber auch ohne Kenntnis
+     * der Waffenlosen Technik zu den genannten Kosten erlernt werden“), gelten die Kosten aus dem Regelwerk – außer das Manöver ist im Preis
+     * eines waffenlosen Kampfstils enthalten, den der Held schon hat. Setzt bei sfMoeglich ap/apInfo/hinweis und rechnet bei schon gewählten
+     * SF die Kosten zum Budget (die Jar zieht sie nicht ab). Ergebnis zusätzlich in zustand.buchkostenZusatz.
+     */
+    @SuppressWarnings("unchecked")
+    private void buchkosten(Map<String, Object> zustand) {
+        nimm(List.of("Sonderfertigkeit"));
+        Map<String, Eintrag> stile = new LinkedHashMap<>(); // Kampfstil -> Eintrag mit Manöverliste (WdS S. 90–91)
+        for (Eintrag e : alle) if (!e.manoever().isEmpty()) stile.put(norm(ohneKlammern(e.name())), e);
+        List<String> eigeneStile = new ArrayList<>();
+        for (Object o : (List<?>) zustand.getOrDefault("sf", List.of()))
+            if (o instanceof Map<?, ?> m) {
+                String n = String.valueOf(m.get("name"));
+                if (n.startsWith("Waffenloser Kampfstil:")) eigeneStile.add(n.substring("Waffenloser Kampfstil:".length()).trim());
+            }
+        Map<String, Integer> zusatz = new LinkedHashMap<>();
+        List<String> posten = new ArrayList<>();
+        for (String liste : List.of("sfMoeglich", "sf")) {
+            for (Object o : (List<?>) zustand.getOrDefault(liste, List.of())) {
+                if (!(o instanceof Map<?, ?> raw)) continue;
+                Map<String, Object> m = (Map<String, Object>) raw;
+                if (!"0".equals(String.valueOf(m.get("ap")))) continue;               // die Jar nennt Kosten: die gelten
+                if (liste.equals("sf") && !Boolean.TRUE.equals(m.get("eigene"))) continue; // von Rasse/Kultur/Profession: kostenlos
+                if (Boolean.TRUE.equals(m.get("fremdesSetting"))) continue;
+                if (m.get("fehlt") instanceof List<?> f && !f.isEmpty() && String.valueOf(f.get(0)).startsWith("Tier-Fähigkeit")) continue;
+                String name = String.valueOf(m.get("name"));
+                Eintrag e = buchEintrag(name);
+                if (e == null) continue;
+                int ap = buchAp(e);
+                String kurz = norm(ohneKlammern(name));
+                List<String> inStilen = new ArrayList<>();
+                for (Eintrag st : stile.values()) if (st.manoever().stream().anyMatch(x -> norm(x).equals(kurz))) inStilen.add(st.name());
+                String gedeckt = null; List<String> unbekannt = new ArrayList<>();
+                for (String s : eigeneStile) {
+                    Eintrag st = stile.get(norm(ohneKlammern(s)));
+                    if (st == null) unbekannt.add(s);
+                    else if (st.manoever().stream().anyMatch(x -> norm(x).equals(kurz))) { gedeckt = s; break; }
+                }
+                String hinweis;
+                boolean rechnen = false;
+                if (gedeckt != null)
+                    hinweis = "Im Preis deines Kampfstils " + gedeckt + " enthalten (" + stile.get(norm(ohneKlammern(gedeckt))).quelle() + "), darum 0 AP. Einzeln gelernt kostet es laut " + e.quelle() + " " + e.buchkosten() + ".";
+                else if (!inStilen.isEmpty() && !unbekannt.isEmpty())
+                    hinweis = "Kosten laut " + e.quelle() + ": " + e.buchkosten() + ". Ob es in deinem Kampfstil " + String.join(", ", unbekannt)
+                            + " enthalten ist, steht in keinem der vorhandenen Regelwerke. Darum rechnet Heldenhort hier nichts dazu; der Meister muss das prüfen.";
+                else {
+                    rechnen = true;
+                    hinweis = "Kosten laut " + e.quelle() + ": " + e.buchkosten() + " (die helden.jar nennt keine). "
+                            + (inStilen.isEmpty() ? "" : "Waffenlose Manöver lassen sich laut WdS S. 91 auch ohne Kampfstil einzeln zu diesen Kosten lernen; im Preis enthalten sind sie bei: "
+                            + String.join(", ", inStilen) + ". ") + "Heldenhort rechnet die Kosten selbst dazu.";
+                }
+                m.put("hinweis", hinweis);
+                if (!rechnen) continue;
+                m.put("ap", ap);
+                m.put("apInfo", ap + " AP laut " + e.quelle());
+                if (liste.equals("sf")) {
+                    String ka = String.valueOf(m.getOrDefault("kostenart", "AP"));
+                    int betrag = ka.equals("GP") ? (ap + 49) / 50 : ap; // bei der Erstellung: 1 GP je angefangene 50 AP (WdH, z. B. 75 AP = 2 GP)
+                    zusatz.merge(ka, betrag, Integer::sum);
+                    posten.add(name + ": " + betrag + " " + ka + " (laut " + e.quelle() + ", die helden.jar rechnet 0)");
+                }
+            }
+        }
+        if (zusatz.isEmpty()) return;
+        Map<String, Object> kosten = new LinkedHashMap<>((Map<String, Object>) zustand.getOrDefault("kosten", Map.of()));
+        zusatz.forEach((ka, b) -> {
+            List<?> alt = (List<?>) kosten.get(ka);
+            int used = alt == null ? 0 : ((Number) alt.get(0)).intValue(), avail = alt == null ? -1 : ((Number) alt.get(1)).intValue();
+            kosten.put(ka, List.of(used + b, avail));
+        });
+        zustand.put("kosten", kosten);
+        zustand.put("buchkostenZusatz", Map.of("summe", zusatz, "posten", posten));
     }
 
     // ------------------------------------------------------------------ Voraussetzungen aus dem Regelwerk (Ersatz für die Jar)
@@ -144,18 +239,11 @@ final class Regeln {
             for (Object o : (List<?>) zustand.getOrDefault("sf", List.of())) if (o instanceof Map<?, ?> m) hat.add(norm(String.valueOf(m.get("name"))));
             for (Object o : (List<?>) zustand.getOrDefault("vorteile", List.of())) if (o instanceof Map<?, ?> m) hat.add(norm(String.valueOf(m.get("name"))));
             nichtAngeboten(zustand, eig, hat);
-            // 0 AP laut helden.jar, im Buch aber mit Kosten (z. B. waffenlose Manöver „Block (30 AP)“): beides zeigen
-            for (Object o : (List<?>) zustand.getOrDefault("sfMoeglich", List.of())) {
-                if (!(o instanceof Map<?, ?> raw) || !"0".equals(String.valueOf(raw.get("ap")))) continue;
-                @SuppressWarnings("unchecked") Map<String, Object> m = (Map<String, Object>) raw;
-                nimm(List.of("Sonderfertigkeit"));
-                for (Eintrag e : sucheKern(String.valueOf(m.get("name"))))
-                    if (!e.buchkosten().isBlank()) { m.put("hinweis", "Die helden.jar führt das mit 0 AP; laut " + e.quelle() + " kostet es " + e.buchkosten() + "."); break; }
-            }
             // Tier-Abrichtung/-Fähigkeiten (Zoo-Botanica) bietet die helden.jar mit 0 AP auch Helden an: die gelten nur für Tiere/Begleiter
             for (Object o : (List<?>) zustand.getOrDefault("sfMoeglich", List.of())) {
                 if (!(o instanceof Map<?, ?> raw)) continue;
                 @SuppressWarnings("unchecked") Map<String, Object> m = (Map<String, Object>) raw;
+                if (Boolean.TRUE.equals(m.get("fremdesSetting"))) continue; // die helden.jar hat schon gesagt, zu welchem Setting es gehört
                 String name = String.valueOf(m.get("name"));
                 nimm(List.of("Sonderfertigkeit"));
                 boolean heldenSf = !sucheKern(name).isEmpty() && !name.contains("(Tier)");
@@ -167,6 +255,7 @@ final class Regeln {
                         + ": gilt nur für Tiere und Begleiter, nicht für den Helden selbst. Darum kostet sie hier auch 0 AP."));
                 m.remove("ungeprueft");
             }
+            buchkosten(zustand); // nach der Tier-Markierung: Tier-Fähigkeiten bleiben außen vor
             for (String liste : List.of("sfMoeglich", "vorteileMoeglich"))
                 for (Object o : (List<?>) zustand.getOrDefault(liste, List.of())) {
                     if (!(o instanceof Map<?, ?> raw) || !Boolean.TRUE.equals(raw.get("ungeprueft"))) continue;
@@ -453,8 +542,10 @@ final class Regeln {
             if (name.isEmpty()) continue;
             List<String> namen = new ArrayList<>(List.of(name));
             for (JsonNode a : e.path("namen")) if (!a.asText("").isBlank()) namen.add(a.asText());
+            List<String> man = new ArrayList<>();
+            for (JsonNode a : e.path("manoever")) if (!a.asText("").isBlank()) man.add(a.asText());
             neu.add(new Eintrag(name, namen, e.path("art").asText(""), e.path("zusatz").asText(""), e.path("quelle").asText(p.getFileName().toString()),
-                    Jsoup.clean(e.path("text").asText(""), Safelist.basic().addTags("h3", "h4", "table", "tr", "td", "th", "tbody", "thead")), e.path("buchkosten").asText("")));
+                    Jsoup.clean(e.path("text").asText(""), Safelist.basic().addTags("h3", "h4", "table", "tr", "td", "th", "tbody", "thead")), e.path("buchkosten").asText(""), List.copyOf(man)));
         }
         dateiCache.put(p, new Datei(st, neu));
         System.out.println("Regeltexte: " + p.getFileName() + " gelesen (" + neu.size() + " Einträge)");

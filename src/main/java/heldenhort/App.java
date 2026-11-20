@@ -463,7 +463,11 @@ public final class App {
         s.get("/api/drafts/{id}/check", ctx -> { // Prüfung wie beim Senden (inkl. Punkte, die erst beim Abschließen entstehen)
             var d = draft(db, accounts, ctx);
             if (d.get("xml") == null) throw new IllegalStateException("Der Held ist noch nicht so weit: erst Herkunft und Profession festlegen.");
-            ctx.json(Map.of("hinweise", creation.finish((String) d.get("xml"), str(d.get("name"))).get("hinweise")));
+            List<Object> hw = new ArrayList<>((List<?>) creation.finish((String) d.get("xml"), str(d.get("name"))).get("hinweise"));
+            List<String> zuViel = new ArrayList<>();
+            buchZusatz(creation, regeln, (String) d.get("xml"), zuViel);
+            for (String t : zuViel) hw.add(Map.of("art", "F", "text", t));
+            ctx.json(Map.of("hinweise", hw));
         });
         s.post("/api/drafts/{id}/approval", ctx -> {
             var d = draft(db, accounts, ctx);
@@ -492,6 +496,7 @@ public final class App {
             var f = creation.finish((String) d.get("xml"), str(d.get("name")));
             List<String> fehler = new ArrayList<>(), mg = new ArrayList<>();
             for (Object o : (List<?>) f.get("hinweise")) { Map<?, ?> h = (Map<?, ?>) o; if ("F".equals(h.get("art"))) fehler.add(str(h.get("text"))); if ("MG".equals(h.get("art"))) mg.add(str(h.get("text"))); }
+            Map<String, Integer> buchZusatz = buchZusatz(creation, regeln, (String) d.get("xml"), fehler);
             if (!fehler.isEmpty()) throw new IllegalStateException("Die Regelprüfung meldet Fehler: " + String.join("; ", fehler));
             if (!mg.isEmpty()) { // jeder aktuelle Punkt muss freigegeben oder geändert sein
                 Set<String> ok = new HashSet<>();
@@ -499,7 +504,13 @@ public final class App {
                     for (var it : db.query("SELECT text FROM approval_item WHERE approval=? AND status IN ('freigegeben','geändert')", d.get("approval"))) ok.add(str(it.get("text")));
                 for (String t : mg) if (!ok.contains(t)) throw new IllegalStateException("Noch nicht freigegeben: " + t);
             }
-            String file = heroes.save(str(d.get("name")), str(a.get("name")), ((Number) a.get("id")).longValue(), ((String) f.get("xml")).getBytes(StandardCharsets.UTF_8), bg);
+            String fertig = (String) f.get("xml");
+            int apZusatz = buchZusatz.getOrDefault("AP", 0);
+            if (apZusatz > 0) { // in AP bezahlte Buchkosten kennt die helden.jar nicht: von den freien AP abziehen
+                var mt = java.util.regex.Pattern.compile("(<freieabenteuerpunkte\\s+value=\")(-?\\d+)(\")").matcher(fertig);
+                if (mt.find()) fertig = fertig.substring(0, mt.start()) + mt.group(1) + (Integer.parseInt(mt.group(2)) - apZusatz) + mt.group(3) + fertig.substring(mt.end());
+            }
+            String file = heroes.save(str(d.get("name")), str(a.get("name")), ((Number) a.get("id")).longValue(), fertig.getBytes(StandardCharsets.UTF_8), bg);
             db.exec("UPDATE hero SET extra=? WHERE file=?", str(d.get("extra")), file);
             if (d.get("approval") != null) db.exec("UPDATE approval SET file=? WHERE id=?", file, d.get("approval"));
             if (autoUebernehmen(db)) db.exec("UPDATE hero SET status='übernommen' WHERE file=?", file); // alle Punkte sind schon genehmigt
@@ -1005,6 +1016,29 @@ Icons: Icons8 (icons8.com).""";
     }
 
     static String str(Object o) { return o == null ? "" : o.toString().trim(); }
+
+    /**
+     * Kosten aus dem Regelwerk, wo die helden.jar 0 rechnet (z. B. waffenlose Manöver): Summe je Kostenart. Wird das Budget dadurch
+     * überschritten, kommt ein konkreter Fehlertext in fehler (die Jar selbst merkt das nicht).
+     */
+    @SuppressWarnings("unchecked")
+    static Map<String, Integer> buchZusatz(Creation creation, Regeln regeln, String xml, List<String> fehler) throws Exception {
+        Map<String, Object> r = creation.edit(xml, List.of());
+        r.remove("draft");
+        regeln.voraussetzungen(r);
+        Map<String, Integer> out = new LinkedHashMap<>();
+        if (!(r.get("buchkostenZusatz") instanceof Map<?, ?> bz)) return out;
+        ((Map<?, ?>) bz.get("summe")).forEach((k, v) -> out.put(str(k), ((Number) v).intValue()));
+        Map<?, ?> kosten = (Map<?, ?>) r.get("kosten");
+        for (var en : out.entrySet()) {
+            if (!(kosten.get(en.getKey()) instanceof List<?> k)) continue;
+            int u = ((Number) k.get(0)).intValue(), av = ((Number) k.get(1)).intValue();
+            if (av >= 0 && u > av)
+                fehler.add(en.getKey() + ": " + u + " von " + av + " ausgegeben, also " + (u - av) + " zu viel. Darin stecken Kosten aus dem Regelwerk, die die helden.jar nicht kennt: "
+                        + String.join("; ", (List<String>) bz.get("posten")));
+        }
+        return out;
+    }
 
     static String now() { return java.time.LocalDateTime.now().format(Heroes.TS); }
 

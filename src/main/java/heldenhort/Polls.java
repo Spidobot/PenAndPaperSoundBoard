@@ -87,17 +87,23 @@ public final class Polls {
             db.exec("UPDATE poll SET fixed=?, fixed_hours=?, closed=1 WHERE id=?", opt.get(0).get("id"), hours, p.get(0).get("id"));
             var f = full(db.query("SELECT * FROM poll WHERE id=?", p.get(0).get("id")).get(0));
             String title = String.valueOf(p.get(0).get("title")), note = App.str(p.get(0).get("note"));
-            String ics = ics("heldenhort-poll-" + p.get(0).get("id"), title, note, start, hours);
+            String uid = "heldenhort-poll-" + p.get(0).get("id");
             String when = start.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, dd.MM.yyyy 'um' HH:mm", java.util.Locale.GERMAN));
             String text = "Der Termin für „" + title + "“ steht fest: " + when + " (" + (hours % 1 == 0 ? String.valueOf((int) hours) : String.valueOf(hours)) + " Stunden)."
-                    + (note.isEmpty() ? "" : "\n" + note) + "\n\nDie Einladung hängt als Kalenderdatei an.";
-            List<String> sent = new ArrayList<>();
+                    + (note.isEmpty() ? "" : "\n" + note)
+                    + "\n\nDie Einladung hängt als Kalenderdatei (termin.ics) an: im Mailprogramm öffnen oder „Zum Kalender hinzufügen“ wählen, dann steht der Termin samt Erinnerung einen Tag vorher in deinem Kalender.";
+            List<String> sent = new ArrayList<>(), ohne = new ArrayList<>();
+            String org = mail.absender();
             for (Object v : (List<?>) f.get("voters")) {
-                String to = accounts.email(((Map<?, ?>) v).get("id"));
-                if (to != null) { mail.notifyIcs(to, "Termin: " + title, text, ics); sent.add(String.valueOf(((Map<?, ?>) v).get("name"))); }
+                Map<?, ?> vm = (Map<?, ?>) v;
+                String to = accounts.email(vm.get("id")), name = String.valueOf(vm.get("name"));
+                if (to == null || to.isBlank()) { ohne.add(name); continue; }
+                mail.notifyIcs(to, "Termin: " + title, text, ics(uid, title, note, start, hours, org, name, to));
+                sent.add(name);
             }
-            mail.notifyIcs(db.get("mailTo", ""), "Termin: " + title, text, ics);
-            ctx.json(Map.of("sent", sent));
+            String meisterMail = db.get("mailTo", "");
+            if (!meisterMail.isBlank()) mail.notifyIcs(meisterMail, "Termin: " + title, text, ics(uid, title, note, start, hours, org, "Meister", meisterMail));
+            ctx.json(Map.of("sent", sent, "ohne", ohne, "meister", !meisterMail.isBlank()));
         });
         meister.delete("/api/polls/{id}", ctx -> {
             String id = ctx.pathParam("id");
@@ -105,6 +111,20 @@ public final class Polls {
             db.exec("DELETE FROM poll_option WHERE poll=?", id);
             db.exec("DELETE FROM poll WHERE id=?", id);
             ctx.json(Map.of("ok", true));
+        });
+
+        // --- Kalenderdatei zum fixierten Termin, jederzeit nachladbar (falls die Mail fehlt oder gelöscht wurde)
+        for (var app : List.of(meister, spieler)) app.get("/api/polls/{id}/ics", ctx -> {
+            var p = db.query("SELECT * FROM poll WHERE id=?", ctx.pathParam("id"));
+            if (p.isEmpty()) throw new NotFoundResponse("Diese Terminabstimmung gibt es nicht mehr.");
+            if (p.get(0).get("fixed") == null) throw new IllegalArgumentException("Für diese Abstimmung steht noch kein Termin fest.");
+            var opt = db.query("SELECT label FROM poll_option WHERE id=?", p.get(0).get("fixed"));
+            if (opt.isEmpty()) throw new IllegalArgumentException("Der fixierte Termin ist nicht mehr in der Abstimmung.");
+            double hours = p.get(0).get("fixed_hours") instanceof Number n ? n.doubleValue() : 4;
+            String ics = ics("heldenhort-poll-" + p.get(0).get("id"), String.valueOf(p.get(0).get("title")), App.str(p.get(0).get("note")),
+                    java.time.LocalDateTime.parse(String.valueOf(opt.get(0).get("label"))), hours, null, null, null);
+            ctx.header("Content-Disposition", "attachment; filename=\"termin.ics\"");
+            ctx.contentType("text/calendar; charset=UTF-8").result(ics);
         });
 
         // --- Spieler: offene Abstimmungen, bei denen das Konto abstimmen soll
@@ -152,16 +172,44 @@ public final class Polls {
     }
 
     /** Kalendereinladung (RFC 5545); Zeit in der Zeitzone des Servers (TZ), als UTC geschrieben. */
-    static String ics(String uid, String title, String note, java.time.LocalDateTime start, double hours) {
-        var z = java.time.ZoneId.systemDefault();
+    /**
+     * Kalendereinladung (RFC 5545). Mit ORGANIZER und ATTENDEE erkennen Gmail, Outlook und Apple Mail sie als Einladung mit
+     * „Zum Kalender hinzufügen“; ohne Absender (organizer leer) wird es eine schlichte Kalenderdatei (METHOD:PUBLISH).
+     * Erinnerung einen Tag und zwei Stunden vorher.
+     */
+    static String ics(String uid, String title, String note, java.time.LocalDateTime start, double hours, String organizer, String name, String attendee) {
+        var z = java.time.ZoneId.of(System.getenv().getOrDefault("TZ", "Europe/Vienna").isBlank() ? "Europe/Vienna" : System.getenv().getOrDefault("TZ", "Europe/Vienna"));
         var f = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
         var s = start.atZone(z).withZoneSameInstant(java.time.ZoneOffset.UTC);
         var e = s.plusMinutes(Math.round(hours * 60));
         var now = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC);
-        return String.join("\r\n",
-                "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Heldenhort//DE", "METHOD:REQUEST", "BEGIN:VEVENT",
-                "UID:" + uid + "@heldenhort", "DTSTAMP:" + now.format(f), "DTSTART:" + s.format(f), "DTEND:" + e.format(f),
-                "SUMMARY:" + escIcs(title), "DESCRIPTION:" + escIcs(note), "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR", "");
+        boolean einladung = organizer != null && !organizer.isBlank() && attendee != null && !attendee.isBlank();
+        List<String> l = new ArrayList<>(List.of("BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Heldenhort//DE", "CALSCALE:GREGORIAN",
+                "METHOD:" + (einladung ? "REQUEST" : "PUBLISH"), "BEGIN:VEVENT",
+                "UID:" + uid + "@heldenhort", "SEQUENCE:0", "DTSTAMP:" + now.format(f), "DTSTART:" + s.format(f), "DTEND:" + e.format(f),
+                "SUMMARY:" + escIcs(title), "DESCRIPTION:" + escIcs(note.isEmpty() ? "Spielrunde (Heldenhort)" : note), "STATUS:CONFIRMED", "TRANSP:OPAQUE"));
+        if (einladung) {
+            l.add("ORGANIZER;CN=Heldenhort:mailto:" + organizer);
+            l.add("ATTENDEE;CN=" + escIcs(name == null ? attendee : name).replace(":", "") + ";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=FALSE:mailto:" + attendee);
+        }
+        for (String vorher : List.of("-P1D", "-PT2H"))
+            l.addAll(List.of("BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + escIcs(title), "TRIGGER:" + vorher, "END:VALARM"));
+        l.addAll(List.of("END:VEVENT", "END:VCALENDAR", ""));
+        StringBuilder out = new StringBuilder();
+        for (String z1 : l) out.append(falte(z1)).append("\r\n");
+        return out.toString().replaceAll("(\r\n)+$", "\r\n");
+    }
+
+    /** Zeilen über 75 Byte falten (RFC 5545 3.1). */
+    static String falte(String z) {
+        StringBuilder sb = new StringBuilder();
+        int bytes = 0;
+        for (int i = 0; i < z.length(); ) {
+            int cp = z.codePointAt(i), n = new String(Character.toChars(cp)).getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            if (bytes + n > 74) { sb.append("\r\n "); bytes = 1; }
+            sb.appendCodePoint(cp); bytes += n; i += Character.charCount(cp);
+        }
+        return sb.toString();
     }
 
     static String escIcs(String s) { return s.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n"); }

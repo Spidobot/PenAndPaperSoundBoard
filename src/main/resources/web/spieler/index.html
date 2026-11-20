@@ -251,18 +251,27 @@ async function edit(ops,label){const before=S&&S.kosten?JSON.parse(JSON.stringif
     if(d.length)toast((label?label+': ':'')+d.join(' · '))}
   // Talent geändert: nur dessen Preis neu holen; andere Änderungen (z. B. Vorteile wie Begabung) können alle Preise ändern
   if((ops||[]).every(o=>o.op==='talent'))for(const o of ops)delete TK[o.name];else if((ops||[]).length)TK={};
+  TKA={}; // Aktivierungskosten können sich nach jeder Änderung verschieben (z. B. Zahl der erlaubten Aktivierungen)
   renderCosts();renderStep();return true}
 /* Budget immer sichtbar: ausgegeben, verfügbar, frei */
 function renderCosts(){const k=S.kosten,parts=[];
   const chip=(n,u,a)=>{const frei=a-u;return `<span class="cost${a>=0&&u>a?' over':''}"><b>${esc(n)}</b> ${u}${a>=0?` von ${a} · <b>${frei>=0?'noch '+frei+' frei':(-frei)+' zu viel'}</b>`:' ausgegeben'}</span>`};
   for(const[n,[u,a]]of Object.entries(k))parts.push(chip(n,u,a));
   parts.push(chip('Eigenschafts-GP',S.eigenschaftenGP[0],S.eigenschaftenGP[1]));
-  $('#costs').innerHTML=parts.join('')}
+  const bz=S.buchkostenZusatz;
+  $('#costs').innerHTML=parts.join('')+(bz&&bz.posten.length?`<div class="small mut" style="flex-basis:100%">Enthalten, weil die helden.jar dafür 0 rechnet: ${bz.posten.map(esc).join(' · ')}</div>`:'')}
 let TK={}; // Talentname -> Kosten für +1 (von der helden.jar gerechnet)
 async function loadTK(names){if(!D||!D.haupt)return;const q=names?'?nur='+encodeURIComponent(names.join('|')):'';
   try{const r=await api('/api/drafts/'+D.id+'/talentkosten'+q);Object.assign(TK,r);if(step===3)fillTK()}catch(e){}}
 function tkText(t){if(t.max!=null&&t.value>=t.max)return '<span class="mut">Höchstwert</span>';const c=TK[t.name];if(!c)return '<span class="mut">…</span>';
   if(c.nicht)return `<span class="mut" title="${esc(c.nicht)}">geht nicht</span>`;const e=Object.entries(c);return e.length?e.map(([k,v])=>`${v} ${esc(k)}`).join(', '):'kostenlos'}
+let TKA={}; // noch nicht aktivierte Talente -> Kosten der Aktivierung
+async function loadTKA(names){if(!D||!D.haupt)return;
+  try{const r=await api('/api/drafts/'+D.id+'/talentkosten?nur='+encodeURIComponent(names.join('|')));Object.assign(TKA,r);if(step===3)fillTKA()}catch(e){}}
+function tkaText(n){const c=TKA[n];if(!c)return '…';if(c.nicht)return 'geht nicht: '+c.nicht;const e=Object.entries(c);
+  return e.length?'Aktivieren kostet '+e.map(([k,v])=>`${v} ${k}`).join(', '):'Aktivieren kostenlos'}
+function fillTKA(){const miss=[];for(const n of S.talenteMoeglich||[]){const el=document.querySelector(`[data-tka="${CSS.escape(n)}"]`);if(el)el.textContent=tkaText(n);if(!TKA[n])miss.push(n)}
+  if(miss.length&&!fillTKA.busy){fillTKA.busy=true;loadTKA(miss).finally(()=>fillTKA.busy=false)}}
 function fillTK(){for(const t of S.talente){const el=document.querySelector(`[data-tk="${CSS.escape(t.name)}"]`);if(el)el.innerHTML=tkText(t)}
   const miss=S.talente.filter(t=>!TK[t.name]&&!(t.max!=null&&t.value>=t.max)).map(t=>t.name);if(miss.length&&!fillTK.busy){fillTK.busy=true;loadTK(miss).finally(()=>fillTK.busy=false)}}
 /* Meldungen der Regelprüfung (Fehler) in jedem Schritt oben anzeigen */
@@ -271,7 +280,7 @@ function ruleBox(){const F=(S.hinweise||[]).filter(h=>h.art==='F');return F.leng
 /* Auswahlliste zum Durchsehen und Anklicken. Gesperrte Einträge (Voraussetzungen fehlen) stehen ausgegraut darunter, mit Grund in Rot. */
 function pickList(id,items,label,open){const ok=items.filter(i=>!i.fehlt),zu=items.filter(i=>i.fehlt);
   const row=i=>`<div class="pickrow${i.fehlt?' gesperrt':''}"><button type="button" data-pick-to="${i.to}" data-pv="${esc(i.name)}"${i.fehlt?' disabled aria-disabled="true"':''}>
-      <span>${esc(i.name.replace(/\s*\(\)\s*$/,''))}${i.fehlt?`<span class="fehlt">Fehlt: ${i.fehlt.map(esc).join(' · ')}${i.quelle?` <span class="mut">(laut ${esc(i.quelle)})</span>`:''}</span>`:''}${i.hinweis?`<span class="hinw">${esc(i.hinweis)}</span>`:''}</span>${i.info?`<span class="mut small">${esc(i.info)}</span>`:''}</button>${i.ri?`<button type="button" class="ib info" data-ri="${esc(i.name)}" data-ri-art="${esc(i.art||'')}" data-ri-info="${esc(i.info||'')}" aria-label="Was bedeutet ${esc(i.name)}?" title="Was bedeutet das?">ⓘ</button>`:''}</div>`;
+      <span>${esc(i.name.replace(/\s*\(\)\s*$/,''))}${i.fehlt?`<span class="fehlt">Fehlt: ${i.fehlt.map(esc).join(' · ')}${i.quelle?` <span class="mut">(laut ${esc(i.quelle)})</span>`:''}</span>`:''}${i.hinweis?`<span class="hinw">${esc(i.hinweis)}</span>`:''}</span>${i.info||i.tka?`<span class="mut small"${i.tka?` data-tka="${esc(i.name)}"`:''}>${esc(i.info||'…')}</span>`:''}</button>${i.ri?`<button type="button" class="ib info" data-ri="${esc(i.name)}" data-ri-art="${esc(i.art||'')}" data-ri-info="${esc(i.info||'')}" aria-label="Was bedeutet ${esc(i.name)}?" title="Was bedeutet das?">ⓘ</button>`:''}</div>`;
   return `<details class="pick" open><summary>${label} (${ok.length} wählbar${zu.length?`, ${zu.length} noch gesperrt`:''})</summary>
   <input type="search" class="pickq" data-pl="${id}" placeholder="Liste filtern…" aria-label="${label} filtern">
   <div class="picklist" id="${id}">${ok.map(row).join('')}${zu.length?`<div class="pickhead">Noch gesperrt (bei jedem Eintrag steht in Rot, was genau fehlt)</div>${zu.map(row).join('')}`:''}</div></details>`}
@@ -301,7 +310,7 @@ function renderStep(){LS.set('hh-step-'+D.id,step);setTimeout(vorladenSchritt,0)
     <div class="tw"><table><tbody>${own.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td><button class="btn sm danger" data-sdel="${esc(x.name)}">Entfernen</button></td></tr>`).join('')||'<tr><td class="empty">Noch keine eigenen gewählt.</td></tr>'}</tbody></table></div>
     <div class="row" style="flex-wrap:nowrap"><input type="text" id="sname" list="slist" placeholder="Sonderfertigkeit (${S.sfMoeglich.filter(x=>!x.fehlt).length} wählbar)" aria-label="Sonderfertigkeit"><select id="skart" style="width:auto" aria-label="Bezahlen mit"><option value="">Bezahlen mit…</option><option>GP</option><option>AP</option></select><button class="btn pri" id="sadd">Hinzufügen</button></div>
     <datalist id="slist">${S.sfMoeglich.map(x=>`<option value="${esc(x.name)}">${x.ap} AP</option>`).join('')}</datalist>
-    ${pickList('spl',[...S.sfMoeglich,...(S.sfGesperrt||[])].map(x=>({hinweis:x.hinweis,name:x.name,info:x.ap!=null?x.ap+' AP':'',to:'sname',ri:1,art:'Sonderfertigkeit,Ritual,Liturgie,Tierfähigkeit',fehlt:x.fehlt,quelle:x.quelle})),'Wählbare Sonderfertigkeiten')}
+    ${pickList('spl',[...S.sfMoeglich,...(S.sfGesperrt||[])].map(x=>({hinweis:x.hinweis,name:x.name,info:x.apInfo||(x.ap!=null?x.ap+' AP':''),to:'sname',ri:1,art:'Sonderfertigkeit,Ritual,Liturgie,Tierfähigkeit',fehlt:x.fehlt,quelle:x.quelle})),'Wählbare Sonderfertigkeiten')}
     <details class="sec" open><summary class="small mut">Aus Rasse, Kultur und Profession (${fix.length})</summary><p class="small">${fix.map(x=>esc(x.name)).join(', ')}</p></details>`}
   if(step===3){b.innerHTML=`<div class="spread"><h2>Talente</h2><input type="search" id="tq" placeholder="Talent suchen…" style="width:220px" aria-label="Talent suchen"></div>
     ${ruleBox()}
@@ -310,8 +319,8 @@ function renderStep(){LS.set('hh-step-'+D.id,step);setTimeout(vorladenSchritt,0)
     <h3 style="margin-top:14px">Talent aktivieren <span class="small mut">(${S.talenteAktivierbar[0]} von ${S.talenteAktivierbar[1]} aktiviert)</span></h3>
     <div class="row" style="flex-wrap:nowrap"><input type="text" id="tname" list="tlist" placeholder="Talent" aria-label="Talent aktivieren"><button class="btn pri" id="tadd">Aktivieren</button></div>
     <datalist id="tlist">${S.talenteMoeglich.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
-    ${pickList('tpl',S.talenteMoeglich.map(n=>({name:n,to:'tname'})),'Aktivierbare Talente')}`;
-    fillTK()}
+    ${pickList('tpl',S.talenteMoeglich.map(n=>({name:n,to:'tname',tka:1})),'Aktivierbare Talente (Kosten für die Aktivierung rechnet die helden.jar)')}`;
+    fillTK();fillTKA()}
   if(step===4){b.innerHTML=`${ruleBox()}<div class="spread"><h2>Backgroundstory</h2><span class="pill" id="bgst"></span></div>
     <div><div class="tb" id="tb">
       <button data-cmd="bold" title="Fett"><b>F</b></button><button data-cmd="italic" title="Kursiv"><i>K</i></button><button data-cmd="underline" title="Unterstrichen"><u>U</u></button>
@@ -505,7 +514,7 @@ let polls=[],pdraft={};
 async function loadPolls(){try{polls=await api('/api/polls')}catch(e){return toastErr(e.message)}renderPolls()}
 function renderPolls(){const myId=me&&me.id;
   $('#pollList').innerHTML=polls.map(p=>`<div class="card" data-poll="${p.id}"><h3>${esc(p.title)}</h3>${p.note?`<p class="small mut">${esc(p.note)}</p>`:''}
-    ${p.fixed?`<p><span class="pill ok">Termin steht</span> <b>${esc(fmtTermin((p.options.find(o=>o.id===p.fixed)||{}).label||''))}</b>, ${p.fixed_hours} Stunden. Die Einladung kommt per Mail, falls du eine bestätigte Adresse hast.</p>`
+    ${p.fixed?`<p><span class="pill ok">Termin steht</span> <b>${esc(fmtTermin((p.options.find(o=>o.id===p.fixed)||{}).label||''))}</b>, ${p.fixed_hours} Stunden. Die Einladung kommt per Mail, falls du eine bestätigte Adresse hast. <a class="btn" href="/api/polls/${p.id}/ics" download="termin.ics">📅 In meinen Kalender</a></p>`
       :`${pollMatrix({...p,options:p.options.map(o=>({...o,label:fmtTermin(o.label)}))},myId,pdraft[p.id])}
     <div class="row"><button class="btn pri" data-save="${p.id}">Stimme speichern</button><span class="small mut">Du kannst deine Stimme jederzeit ändern.</span></div>`}</div>`).join('')
     ||'<p class="mut">Gerade keine offene Abstimmung für dich.</p>'}
