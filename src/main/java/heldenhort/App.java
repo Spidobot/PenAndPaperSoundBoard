@@ -29,6 +29,11 @@ public final class App {
         jar.selfTest = probe -> { try { return creation.selfTest(probe); } catch (Exception e) { return "FEHLER " + e.getMessage(); } };
         jar.onRejected = msg -> mail.notifyMeister("helden.jar-Update zurückgehalten", msg);
         Heroes heroes = new Heroes(db, data.resolve("helden"));
+        // per FTP abgelegte Helden: vermerkte Meistergenehmigungen landen ebenfalls unter „Freigaben“
+        heroes.onFtp = (file, h) -> {
+            int n = approvalFromXml(db, mail, str(h.get("name")), "FTP", null, h);
+            if (n > 0) mail.notifyMeister("Freigabe nötig: " + h.get("name"), "Im per FTP abgelegten Helden „" + h.get("name") + "“ (" + file + ") sind " + n + " Punkt(e) mit Meistergenehmigung vermerkt. Siehe „Freigaben“.");
+        };
         Advance advance = new Advance(db, heroes, jar, accounts, mail);
         Sound sound = new Sound(data.resolve("audio"));
         sound.db = db;
@@ -482,7 +487,9 @@ public final class App {
             catch (Exception e) { throw new IllegalArgumentException("Die helden.jar kann diesen Helden nicht laden: " + e.getMessage()); }
             finally { Files.deleteIfExists(tmp); }
             String file = heroes.save(name, str(a.get("name")), ((Number) a.get("id")).longValue(), xml, "");
-            mail.notifyMeister("Held hochgeladen: " + name, a.get("name") + " hat den Helden „" + name + "“ als XML hochgeladen.\nDatei: " + heroes.dir().resolve(file));
+            int mgs = approvalFromXml(db, mail, name, str(a.get("name")), a.get("id"), h);
+            mail.notifyMeister("Held hochgeladen: " + name, a.get("name") + " hat den Helden „" + name + "“ als XML hochgeladen.\nDatei: " + heroes.dir().resolve(file)
+                    + (mgs > 0 ? "\n\n" + mgs + " Punkt(e) brauchen deine Meistergenehmigung, siehe „Freigaben“." : ""));
             ctx.json(Map.of("file", file));
         });
 
@@ -542,6 +549,18 @@ Icons: Icons8 (icons8.com).""";
     static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
 
     static String cleanBg(Object o) { return Jsoup.clean(str(o), Safelist.basic().addTags("h3")); }
+
+    /**
+     * Legt für eine hochgeladene/abgelegte XML eine Freigabe-Anfrage an: ein Punkt je in der XML vermerkter Meistergenehmigung.
+     * Liefert die Anzahl der Punkte (0 = nichts zu genehmigen, dann wird auch nichts angelegt).
+     */
+    static int approvalFromXml(Db db, Mail mail, String hero, String player, Object account, Map<String, Object> parsed) {
+        List<?> mg = parsed.get("meistergenehmigung") instanceof List<?> l ? l : List.of();
+        if (mg.isEmpty()) return 0;
+        long id = db.exec("INSERT INTO approval(hero,player,created,account) VALUES(?,?,?,?)", hero, player, now(), account);
+        for (Object t : mg) db.exec("INSERT INTO approval_item(approval,kind,text,status,comment) VALUES(?,?,?,?,?)", id, "MG", str(t), "offen", "");
+        return mg.size();
+    }
 
     static String extra(Db db, String file) {
         var r = db.query("SELECT extra FROM hero WHERE file=?", file);

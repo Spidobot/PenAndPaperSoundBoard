@@ -29,6 +29,9 @@ public final class Heroes {
 
     public Path dir() { return dir; }
 
+    /** Wird für Helden aufgerufen, die neu per FTP im Ordner auftauchen (Dateiname, gelesene Werte). */
+    public java.util.function.BiConsumer<String, Map<String, Object>> onFtp;
+
     public List<Map<String, Object>> list() throws Exception {
         List<Map<String, Object>> out = new ArrayList<>();
         try (var s = Files.list(dir)) {
@@ -44,6 +47,7 @@ public final class Heroes {
                     String ts = LocalDateTime.ofInstant(Files.getLastModifiedTime(p).toInstant(), ZoneId.systemDefault()).format(TS);
                     db.exec("INSERT INTO hero(file,player,received,status,background) VALUES(?,?,?,?,?)", file, "FTP", ts, "neu", "");
                     meta = db.query("SELECT * FROM hero WHERE file=?", file);
+                    if (onFtp != null && !h.containsKey("error")) try { onFtp.accept(file, h); } catch (Exception e) { System.err.println("Freigabe für " + file + ": " + e); }
                 }
                 h.putAll(meta.get(0));
                 out.add(h);
