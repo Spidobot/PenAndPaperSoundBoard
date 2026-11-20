@@ -222,6 +222,15 @@ public final class App {
             db.exec("UPDATE account SET can_upload=? WHERE id=?", Boolean.TRUE.equals(ctx.bodyAsClass(Map.class).get("on")) ? 1 : 0, Long.parseLong(ctx.pathParam("id")));
             ctx.json(Map.of("ok", true));
         });
+        m.delete("/api/heroes/{file}", ctx -> {
+            String file = ctx.pathParam("file");
+            var r = db.query("SELECT account FROM hero WHERE file=?", file);
+            String name = str(Heroes.parse(Files.readAllBytes(heroes.file(file))).get("name"));
+            heroes.trash(file);
+            if (!r.isEmpty() && r.get(0).get("account") != null)
+                mail.notify(accounts.email(r.get(0).get("account")), "Held gelöscht: " + name, "Der Meister hat den Helden „" + name + "“ gelöscht.");
+            ctx.json(Map.of("ok", true));
+        });
         m.post("/api/heroes/{file}/accept", ctx -> {
             heroes.file(ctx.pathParam("file"));
             db.exec("UPDATE hero SET status='übernommen' WHERE file=?", ctx.pathParam("file"));
@@ -278,6 +287,15 @@ public final class App {
             var kp = db.query("SELECT kind, payload, status, comment FROM approval_item WHERE id=?", ctx.pathParam("id"));
             if (!kp.isEmpty() && st.equals(kp.get(0).get("status")) && c.equals(str(kp.get(0).get("comment") == null ? "" : kp.get(0).get("comment"))))
                 throw new IllegalStateException("Ist schon „" + st + "“"); // kein zweites Mal, keine doppelte Mail
+            if (!kp.isEmpty() && "DEL".equals(kp.get(0).get("kind"))) {
+                if (!"offen".equals(kp.get(0).get("status"))) throw new IllegalStateException("Über diese Löschung ist schon entschieden");
+                if (st.equals("geändert")) throw new IllegalArgumentException("Löschen bitte freigeben oder ablehnen");
+                if (st.equals("freigegeben")) {
+                    String f = str(kp.get(0).get("payload"));
+                    try { heroes.trash(f); c = (c.isEmpty() ? "" : c + " · ") + "gelöscht (Papierkorb)"; }
+                    catch (IllegalArgumentException gone) { c = (c.isEmpty() ? "" : c + " · ") + "war schon weg"; }
+                }
+            }
             if (!kp.isEmpty() && "STEIG".equals(kp.get(0).get("kind"))) {
                 if (!"offen".equals(kp.get(0).get("status"))) throw new IllegalStateException("Über diese Steigerung ist schon entschieden");
                 if (st.equals("geändert")) throw new IllegalArgumentException("Steigerungen bitte freigeben oder ablehnen");
@@ -342,7 +360,7 @@ public final class App {
         s.get("/api/sound/events", ctx -> ctx.status(410).result("abgeschaltet"));
 
         // --- Entwürfe (Heldenerstellung), gehören dem Konto
-        s.get("/api/drafts", ctx -> ctx.json(db.query("SELECT id,name,status,updated, xml IS NOT NULL AS haupt FROM draft WHERE account=? ORDER BY updated DESC", me(accounts, ctx))));
+        s.get("/api/drafts", ctx -> ctx.json(db.query("SELECT id,name,status,updated, xml IS NOT NULL AS haupt FROM draft WHERE account=? AND status<>'gesendet' ORDER BY updated DESC", me(accounts, ctx))));
         s.post("/api/drafts", ctx -> ctx.json(Map.of("id", db.exec("INSERT INTO draft(account,name,input,updated) VALUES(?,?,?,?)", me(accounts, ctx), "Neuer Held", "{}", now()))));
         s.get("/api/drafts/{id}", ctx -> {
             var d = draft(db, accounts, ctx);
@@ -447,6 +465,15 @@ public final class App {
         });
 
         // --- Meine Helden (fertige, beim Meister liegende)
+        // kleiner Stand für die Live-Aktualisierung: Status der Helden und Entscheidungen des Meisters
+        s.get("/api/mystand", ctx -> {
+            Object id = accounts.current(ctx).get("id");
+            Map<String, Object> o = new LinkedHashMap<>();
+            o.put("heroes", db.query("SELECT file,status FROM hero WHERE account=? ORDER BY file", id));
+            o.put("items", db.query("SELECT i.id,i.text,i.status,i.comment,a.hero FROM approval_item i JOIN approval a ON a.id=i.approval WHERE a.account=? ORDER BY i.id", id));
+            o.put("awards", db.query("SELECT COUNT(*) AS n FROM award WHERE sent IS NOT NULL AND file IN (SELECT file FROM hero WHERE account=?)", id).get(0).get("n"));
+            ctx.json(o);
+        });
         s.get("/api/myheroes", ctx -> {
             Object id = accounts.current(ctx).get("id");
             List<Map<String, Object>> out = new ArrayList<>();
@@ -477,6 +504,25 @@ public final class App {
             if (first && !ex.isBlank())
                 mail.notifyMeister("Zusatzinfos nachgetragen: " + file, accounts.current(ctx).get("name") + " hat Zusatzinfos zu " + file + " nachgetragen.");
             ctx.json(Map.of("ok", true));
+        });
+        // Spieler löscht: noch nicht übernommen -> sofort zurückziehen; übernommen -> Löschanfrage an den Meister
+        s.post("/api/myheroes/{file}/delete", ctx -> {
+            String file = advance.own(ctx.pathParam("file"), ctx);
+            var a = accounts.current(ctx);
+            var h = db.query("SELECT status FROM hero WHERE file=?", file).get(0);
+            String name = str(Heroes.parse(Files.readAllBytes(heroes.file(file))).get("name"));
+            if (!"übernommen".equals(h.get("status"))) {
+                heroes.trash(file);
+                mail.notifyMeister("Held zurückgezogen: " + name, a.get("name") + " hat den Helden „" + name + "“ zurückgezogen (liegt im Papierkorb).");
+                ctx.json(Map.of("done", "zurückgezogen"));
+                return;
+            }
+            if (!db.query("SELECT 1 FROM approval_item WHERE kind='DEL' AND payload=? AND status='offen'", file).isEmpty())
+                throw new IllegalStateException("Löschen ist schon beim Meister angefragt");
+            long id = db.exec("INSERT INTO approval(hero,player,created,account) VALUES(?,?,?,?)", name, a.get("name"), now(), a.get("id"));
+            db.exec("INSERT INTO approval_item(approval,kind,text,status,comment,payload) VALUES(?,?,?,?,?,?)", id, "DEL", "Held „" + name + "“ löschen", "offen", "", file);
+            mail.notifyMeister("Löschanfrage: " + name, a.get("name") + " möchte den Helden „" + name + "“ löschen. Freigeben oder ablehnen unter „Freigaben“.");
+            ctx.json(Map.of("done", "angefragt"));
         });
         s.post("/api/myheroes/upload", ctx -> { // nur mit Erlaubnis vom Meister
             var a = accounts.current(ctx);

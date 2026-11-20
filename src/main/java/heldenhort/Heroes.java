@@ -73,6 +73,14 @@ public final class Heroes {
         return file;
     }
 
+    /** Löschen = in den Papierkorb (Unterordner .papierkorb, mit Zeitstempel). Nichts geht endgültig verloren. */
+    public void trash(String file) throws Exception {
+        Path p = file(file), bin = dir.resolve(".papierkorb");
+        Files.createDirectories(bin);
+        Files.move(p, bin.resolve(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + "_" + file));
+        db.exec("DELETE FROM hero WHERE file=?", file);
+    }
+
     public Path file(String file) {
         Path p = dir.resolve(file).normalize();
         if (!p.getParent().equals(dir.normalize()) || !Files.isRegularFile(p)) throw new IllegalArgumentException("Datei unbekannt");

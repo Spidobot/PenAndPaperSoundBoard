@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261120e">
+<link rel="stylesheet" href="/common/app.css?v=20261120f">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -174,7 +174,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261120e"></script>
+<script src="/common/common.js?v=20261120f"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -420,12 +420,12 @@ function renderFg(){
   // Offene Anfragen oben, entschiedene eingeklappt unter „Erledigt“
   const isOpen=r=>r.items.some(i=>i.status==='offen');
   const card=r=>`<div class="card"><div class="spread"><h3>${esc(r.hero)}</h3><span class="small mut">${esc(r.player)} · ${esc(r.created)}</span></div>
-   ${r.items.map(i=>{const fix=i.kind==='STEIG'&&i.status!=='offen'; // ausgeführte Steigerungen lassen sich nicht mehr ändern
+   ${r.items.map(i=>{const fix=['STEIG','DEL'].includes(i.kind)&&i.status!=='offen'; // ausgeführte Steigerungen lassen sich nicht mehr ändern
      const btn=(s,l,c)=>i.status===s?'':`<button class="btn sm ${c}" data-fg="${i.id}" data-s="${s}">${l}</button>`;
      return `<div style="display:grid;gap:8px;border-top:1px solid var(--line);padding-top:10px">
      <div class="spread"><span>${esc(i.text)}</span><span class="pill ${ST[i.status]}">${esc(i.status)}</span></div>
      ${fix?(i.comment?`<div class="small mut">${esc(i.comment)}</div>`:''):`<div class="row" style="flex-wrap:nowrap"><input type="text" placeholder="Kommentar an den Spieler (bei Ändern Pflicht)" value="${esc(i.comment)}" data-fgc="${i.id}">
-       ${btn('freigegeben','Freigeben','pri')}${i.kind==='STEIG'?'':btn('geändert','Ändern','')}${btn('abgelehnt','Ablehnen','danger')}</div>`}
+       ${btn('freigegeben','Freigeben','pri')}${['STEIG','DEL'].includes(i.kind)?'':btn('geändert','Ändern','')}${btn('abgelehnt','Ablehnen','danger')}</div>`}
    </div>`}).join('')}</div>`;
   const o=fg.filter(isOpen),d=fg.filter(r=>!isOpen(r)),was=$('#fgdone')&&$('#fgdone').open;
   $('#fglist').innerHTML=(o.map(card).join('')||'<p class="mut">Keine offenen Anfragen.</p>')+
@@ -538,6 +538,7 @@ function sheetHtml(h,dialog){const s=h.sheet||{basis:{},sections:[],notizen:[]};
       <a class="btn sm" href="/api/heroes/${encodeURIComponent(h.file)}/zip" title="XML, Backgroundstory und Zusatzinfos als ZIP">XML + Texte</a>
       ${pdfLink('/api/heroes/'+encodeURIComponent(h.file),'pdfbg-m'+(dialog?'d':'')) }
       ${h.status==='neu'?'<button class="btn sm pri" data-take>Übernehmen</button>':''}
+      <button class="btn sm danger" data-hdel>Löschen</button>
       ${dialog?'<button class="btn sm xclose" data-close aria-label="Schließen" title="Schließen (Esc)">✕</button>':''}</div></div>
     <div class="row small"><label for="owner-${esc(h.file)}" class="label">Gehört</label>
       <select id="owner-${esc(h.file)}" class="owner" data-file="${esc(h.file)}" style="width:auto"><option value="">– niemandem (FTP) –</option>${accts.map(a=>`<option value="${a.id}"${String(a.id)===String(h.account)?' selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
@@ -559,6 +560,9 @@ function fillSheet(root,h){
     root.querySelectorAll('details.sec').forEach(d=>{let any=false;d.querySelectorAll('tr[data-txt]').forEach(tr=>{const ok=!q||(tr.dataset.txt.includes(q)||fuzzy(q,tr.dataset.txt));tr.hidden=!ok;any=any||ok});
       if(d.querySelector('tr[data-txt]'))d.hidden=!any;if(q&&any)d.open=true})};
   root.onclick=async e=>{if(e.target.closest('[data-close]'))$('#sheet').close();
+    const del=e.target.closest('[data-hdel]');
+    if(del){if(del.dataset.ask!=='1'){del.dataset.ask='1';del.textContent='Wirklich löschen? (Papierkorb)';return}
+      try{await api('/api/heroes/'+encodeURIComponent(h.file),{method:'DELETE'});toast(h.name+' liegt im Papierkorb ('+'/data/helden/.papierkorb)');if($('#sheet').open)$('#sheet').close();selHero=null;loadHeroes()}catch(x){toastErr(x.message)}}
     const sap=e.target.closest('[data-sap]');
     if(sap){const v=+root.querySelector('.sapv').value;if(!(v>0))return toast('AP eintragen');
       if(sap.dataset.ask!=='1'){sap.dataset.ask='1';sap.textContent=v+' AP wirklich gutschreiben?';return}

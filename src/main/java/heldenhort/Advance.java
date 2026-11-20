@@ -81,7 +81,9 @@ public final class Advance {
         int c = COLS.indexOf(col);
         if (c < 0) throw new IllegalArgumentException("Unbekannte Spalte " + col);
         if (se) c = Math.max(0, c - 1);
-        if (to < 1 || to >= SKT[c].length) throw new IllegalArgumentException("Wert außerhalb der Tabelle");
+        // DSA 4.1: Steigerungen im negativen Bereich (bis 0) kosten jeweils so viel wie von 0 auf 1
+        if (to < 1) return SKT[c][1];
+        if (to >= SKT[c].length) throw new IllegalArgumentException("Höher als " + (SKT[c].length - 1) + " geht nach der Steigerungstabelle nicht");
         return SKT[c][to];
     }
 
@@ -123,7 +125,8 @@ public final class Advance {
         for (Map<String, Object> t : tal) {
             String c = cols.get(t.get("name"));
             int v = (Integer) t.get("value");
-            if (c == null || v + 1 >= SKT[0].length) continue;
+            if (c == null) continue;
+            if (v + 1 >= SKT[0].length) { t.put("spalte", c); t.put("ende", true); continue; } // Ende der Steigerungstabelle
             t.put("spalte", c);
             t.put("cost", cost(c, v + 1, false));
             if (seTargets.contains(t.get("name"))) t.put("costSe", cost(c, v + 1, true));
