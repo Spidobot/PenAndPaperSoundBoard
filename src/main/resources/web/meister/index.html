@@ -209,7 +209,6 @@ const cmd=b=>api('/api/sound/cmd',{method:'POST',body:b}).then(s=>{if(s&&s.type=
 try{$('#hear').checked=localStorage.getItem('hh-hear')!=='0'}catch(e){$('#hear').checked=true}
 pl.enabled=$('#hear').checked;
 document.addEventListener('pointerdown',()=>pl.unlock(),{once:true}); // Effekt-Spieler beim ersten Klick freischalten
-pl.onEnded=k=>cmd({action:'ended',ch:k});
 pl.onStatus=k=>updateStatus(k);
 $('#hear').onchange=e=>{pl.enabled=e.target.checked;try{localStorage.setItem('hh-hear',e.target.checked?'1':'0')}catch(_){};if(st)pl.apply(st)};
 
@@ -263,7 +262,7 @@ function updateList(id){if(!st)return;const c=st.ch[id],el=$(`.plist[data-ch="${
   const vol=el.querySelector('[data-chvol]');if(document.activeElement!==vol){vol.value=c.volume;el.querySelector('[data-volv]').textContent=c.volume}
   updateStatus(id)}
 function updateStatus(id){const c=st&&st.ch[id],a=pl.a[id],l=$(`[data-load="${id}"]`);if(!l||!c)return;
-  const loading=c.playing&&pl.enabled&&(a.readyState<3||a.seeking);l.hidden=!(loading||starting[id]);
+  const loading=c.playing&&pl.enabled&&a.readyState<3;l.hidden=!(loading||starting[id]);
   if(starting[id]&&c.file===starting[id]&&(!pl.enabled||(!a.paused&&a.readyState>=3))){starting[id]=null;updateList(id)}}
 /** Listen bis zum unteren Fensterrand strecken */
 /** Listen so hoch, dass die Seite selbst nie scrollt: erst Probehöhe setzen, dann um den Überstand kürzen bzw. den Platz auffüllen */
@@ -302,23 +301,22 @@ $('#m-sound').addEventListener('click',e=>{
   else if(b.dataset.sdel!==undefined){api('/api/sound/session',{method:'POST',body:{sid,file:b.dataset.sdel,add:false}}).catch(x=>toastErr(x.message))}
   else if(b.dataset.sclear){if(b.dataset.ask!=='1'){b.dataset.ask='1';b.textContent='Wirklich leeren?';return}api('/api/sound/session?sid='+sid,{method:'DELETE'}).catch(x=>toastErr(x.message))}
   else if(b.dataset.act==='toggle'){const k=b.dataset.ch,c=st.ch[k];
-    if(c.playing){pl.pauseNow(k);st.ch[k]={...c,playing:false};updateList(k);cmd({action:'pause',ch:k,pos:pl.a[k].currentTime||undefined})} // sofort still, ohne auf den Server zu warten
+    if(c.playing){pl.pauseNow(k);st.ch[k]={...c,playing:false};updateList(k);cmd({action:'pause',ch:k})} // sofort still, ohne auf den Server zu warten
     // Play setzt immer den aktuellen Titel fort. Ein anderer Titel startet nur per Doppelklick (oder wenn noch keiner läuft).
     else if(c.file){st.ch[k]={...c,playing:true};starting[k]=c.file;updateList(k);cmd({action:'play',ch:k})}
     else if(sel[k])start(k,sel[k]);
     else toast('Erst einen Titel wählen')}
-  else if(b.dataset.act==='repeat'){const k=b.dataset.ch,c=st.ch[k],a=pl.a[k];
-    const pos=pl.enabled&&!a.paused?a.currentTime:(a.duration&&isFinite(a.duration)?pl.pos(k)%a.duration:undefined);
-    c.repeat=!c.repeat;updateList(k);cmd({action:'repeat',ch:k,value:c.repeat,pos})}
+  else if(b.dataset.act==='repeat'){const k=b.dataset.ch,c=st.ch[k];
+    c.repeat=!c.repeat;updateList(k);cmd({action:'repeat',ch:k,value:c.repeat})}
 });
 $('#m-sound').addEventListener('input',e=>{const t=e.target;
   if(t.dataset.ls){qs[t.dataset.ls]=t.value;renderList(t.dataset.ls)}
   if(t.dataset.chvol){const id=t.dataset.chvol;$(`[data-volv="${id}"]`).textContent=t.value;pl.setVolumeNow(id,+t.value); // sofort hörbar
     clearTimeout(volT[id]);volT[id]=setTimeout(()=>cmd({action:'volume',ch:id,value:+t.value}),120)}
-  if(t.dataset.seek){seeking[t.dataset.seek]=true;$(`[data-pos="${t.dataset.seek}"]`).textContent=mmss(+t.value)+' / '+mmss(pl.a[t.dataset.seek].duration)}});
+  if(t.dataset.seek){seeking[t.dataset.seek]=true;$(`[data-pos="${t.dataset.seek}"]`).textContent=mmss(+t.value)+' / '+mmss(st&&st.ch[t.dataset.seek].dur||NaN)}});
 const volT={},seeking={};
 $('#m-sound').addEventListener('change',e=>{const t=e.target;if(!t.dataset.seek)return;const id=t.dataset.seek;seeking[id]=false;
-  const a=pl.a[id];if(pl.enabled){try{a.currentTime=+t.value}catch(_){}}cmd({action:'seek',ch:id,pos:+t.value})});
+  cmd({action:'seek',ch:id,pos:+t.value})});
 /* Upload */
 function showUpl(){setTimeout(fxDiag,0);$('#upl').hidden=false;setTimeout(fitLists,0);const sc=SCENES.find(s=>s[0]===st.scene);$('#uplScene').textContent=sc?sc[1]:st.scene;
   renderScenes()}
@@ -383,7 +381,7 @@ let fxT;$('#fxvol').oninput=e=>{$('#fxvolv').textContent=e.target.value;clearTim
 $('#bertha').onchange=e=>cmd({action:'bertha',on:e.target.checked});
 setInterval(()=>{if(!st||!st.berthaAt){$('#berthaCd').textContent='--:--';return}$('#berthaCd').textContent=mmss((st.berthaAt-(Date.now()+pl.skew))/1000)},50);
 setInterval(()=>{for(const id in pl.a){const a=pl.a[id],p=$(`[data-pos="${id}"]`),s=$(`[data-seek="${id}"]`);if(!p||!st)continue;
-  const c=st.ch[id];let pos=pl.enabled&&!a.paused?a.currentTime:pl.pos(id);const d=a.duration&&isFinite(a.duration)?a.duration:0;if(d&&c.repeat)pos=pos%d;if(d&&!c.repeat)pos=Math.min(pos,d);
+  const c=st.ch[id];let pos=pl.pos(id);const d=c.dur||0;if(d&&c.repeat)pos=pos%d;if(d&&!c.repeat)pos=Math.min(pos,d); // Stelle und Dauer kommen vom Server
   if(seeking[id])continue;
   p.textContent=c.file?mmss(pos)+' / '+mmss(d||NaN):'--:-- / --:--';if(s){s.max=Math.floor(d);s.value=Math.floor(pos);s.disabled=!c.file||!d}
   updateStatus(id)}},500);

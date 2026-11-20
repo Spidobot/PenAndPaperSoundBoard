@@ -510,7 +510,7 @@ $('#wave').innerHTML='<i></i>'.repeat(16);
 pl.setMaster(LS.get('hh-vol',70)/100);$('#pvol').value=LS.get('hh-vol',70);
 function startStream(){pl.enabled=true;if(es)return;
   es=liveEvents('/api/sound/events',m=>{if(m.type==='fx')pl.fx(m.file);else{pl.apply(m);sstat(m)}},ok=>{if(!ok)$('#pstat').textContent='Verbindung unterbrochen, verbinde neu…'},()=>pl.enabled&&pl.master>0?'?hoert=1':'')}
-function stopStream(){pl.enabled=false;if(es){es.close();es=null}for(const k in pl.a)pl.a[k].pause()}
+function stopStream(){pl.enabled=false;if(es){es.close();es=null}pl.stop()} // Ton aus = Stream trennen; beim Einschalten wieder live
 function sstat(m){$('#pstat').textContent=(m.ch.music.playing||m.ch.bg.playing)?'Verbunden. Du hörst den Spieltisch.':'Verbunden. Gerade ist es still.'}
 pl.onFxError=(file,why)=>toast('Effekt konnte nicht abgespielt werden: '+why);
 $('#pplay').onclick=()=>{pl.unlock();const on=$('#pplay').getAttribute('aria-pressed')!=='true';$('#pplay').setAttribute('aria-pressed',on);$('#pplay').textContent=on?'❚❚':'▶';

@@ -22,13 +22,16 @@ async function api(path,opt={}){
 const mmss=s=>!isFinite(s)?'--:--':String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0');
 const ICON=k=>`/common/icons/${k}.png`;
 
-/** Spielt den Soundboard-Zustand vom Server ab (Meister-Tab mit Ton und Spieler).
- *  Jede neue Anweisung macht ältere, noch wartende (z. B. "abspielen, sobald geladen") ungültig. */
+/** Hört den Soundboard-Stream wie Internetradio (Meister-Tab mit Ton und Spieler).
+ *  Der Server schickt je Kanal einen Live-Datenstrom ab der aktuellen Stelle; der Browser spult nie selbst.
+ *  Neu verbunden wird nur, wenn der Meister Titel wechselt, startet, anhält oder spult (anchor) oder die Verbindung abreißt. */
 const SILENT='data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
 class Player{
-  constructor(){this.a={music:new Audio(),bg:new Audio()};this.gen={music:0,bg:0};this.master=1;this.enabled=false;this.skew=0;this.state=null;
-    for(const k in this.a){const el=this.a[k];el.preload='metadata';
-      el.addEventListener('ended',()=>this.onEnded&&this.onEnded(k));
+  constructor(){this.a={music:new Audio(),bg:new Audio()};this.gen={music:0,bg:0};this.master=1;this.enabled=false;this.skew=0;this.state=null;this.n=0;this.retry={};
+    for(const k in this.a){const el=this.a[k];el.preload='none';
+      // Stream abgerissen (Netz, Proxy, Server-Neustart): nach kurzer Pause live neu verbinden
+      const lost=()=>{if(!el.dataset.want)return;el.dataset.want='';clearTimeout(this.retry[k]);this.retry[k]=setTimeout(()=>this.state&&this.apply(this.state),1500)};
+      el.addEventListener('ended',lost);el.addEventListener('error',lost);
       ['waiting','playing','pause','loadstart','canplay'].forEach(ev=>el.addEventListener(ev,()=>this.onStatus&&this.onStatus(k)))}}
   url(f){const [p,q]=f.split('?');return '/audio/'+p.split('/').map(encodeURIComponent).join('/')+(q?'?'+q:'')}
   /** Position laut Server, auf jetzt hochgerechnet */
@@ -38,31 +41,23 @@ class Player{
   clock(serverNow){if(!serverNow)return;const s=serverNow-Date.now(),now=Date.now();
     this.samples=(this.samples||[]).filter(x=>now-x.t<300000);this.samples.push({t:now,s});this.skew=Math.max(...this.samples.map(x=>x.s))}
   apply(st){this.state=st;this.clock(st.serverNow);
-    for(const k in this.a){const c=st.ch[k],el=this.a[k],g=++this.gen[k];
-      el.loop=!!c.repeat;el.volume=Math.max(0,Math.min(1,c.volume/100*this.master));
-      if(c.file&&el.dataset.f!==c.file){el.dataset.f=c.file;el.src=this.url(c.file)}
-      if(!this.enabled||!c.file||!c.playing){if(!el.paused)el.pause();continue}
-      el.preload='auto';
-      const sync=()=>{if(g!==this.gen[k])return; // inzwischen kam eine neuere Anweisung
-        // Während eines laufenden Spulvorgangs nichts anfassen: die Dauer ist dann oft nur geschätzt,
-        // ein p%d mit falscher Dauer warf die Position an den Anfang und der Titel hing.
-        if(el.seeking){el.play().catch(()=>{});return}
-        // Gleicher Startpunkt wie zuletzt und der Titel läuft: nichts korrigieren (Lautstärke, Wiederholen, Zuhörer usw.)
-        if(el.dataset.anchor===c.anchor&&!el.paused)return;
-        el.dataset.anchor=c.anchor;
-        let p=this.pos(k);const d=el.duration;
-        if(d&&isFinite(d)&&p>=d){if(c.repeat)p=p%d;else{el.pause();return}}
-        if(Math.abs(el.currentTime-p)>2){try{el.currentTime=p}catch(e){}}
-        el.play().catch(()=>{})};
-      if(el.readyState>=1)sync();else el.addEventListener('loadedmetadata',sync,{once:true});
-    }}
+    for(const k in this.a){const c=st.ch[k],el=this.a[k];
+      el.volume=Math.max(0,Math.min(1,c.volume/100*this.master));
+      if(!this.enabled||!c.file||!c.playing){this.drop(k);continue}
+      const want='/stream/'+k+'?a='+encodeURIComponent(c.anchor);
+      if(el.dataset.want!==want){el.dataset.want=want;el.src=want+'&n='+(++this.n);el.play().catch(()=>{})}
+      else if(el.paused)el.play().catch(()=>{})}}
+  /** Stream eines Kanals trennen (still und keine Daten mehr) */
+  drop(k){const el=this.a[k];clearTimeout(this.retry[k]);if(!el.dataset.want&&!el.getAttribute('src'))return;el.dataset.want='';el.pause();el.removeAttribute('src');el.load()}
+  /** alles aus (Spieler schaltet den Ton ab); beim Einschalten ist man wieder live */
+  stop(){for(const k in this.a)this.drop(k)}
   /** sofort lokal anhalten (ohne auf den Server zu warten) */
-  pauseNow(k){this.gen[k]++;this.a[k].pause()}
+  pauseNow(k){this.drop(k)}
   setVolumeNow(k,v){this.a[k].volume=Math.max(0,Math.min(1,v/100*this.master))}
   setMaster(v){this.master=v;if(this.state)for(const k in this.a)this.a[k].volume=Math.max(0,Math.min(1,this.state.ch[k].volume/100*v))}
   /** Effekt-Spieler einmal beim Klick freischalten (Firefox spielt sonst nur, was direkt ein Klick auslöst) */
   unlock(){if(this.fxPool)return;this.fxPool=[0,1,2,3].map(()=>{const a=new Audio(SILENT);a.play().catch(()=>{});return a});this.fxNext=0;
-    for(const k in this.a){const el=this.a[k];if(!el.src){el.src=SILENT;el.play().then(()=>el.pause()).catch(()=>{})}}}
+    for(const k in this.a){const el=this.a[k];if(!el.getAttribute('src')){el.src=SILENT;el.play().then(()=>{if(!el.dataset.want){el.pause();el.removeAttribute('src')}}).catch(()=>{})}}}
   fx(file){if(!this.enabled)return;let a;
     if(this.fxPool){a=this.fxPool[this.fxNext++%this.fxPool.length];a.pause();a.src=this.url(file)}else a=new Audio(this.url(file));
     a.onerror=()=>this.onFxError&&this.onFxError(file,a.error?('Code '+a.error.code+(a.error.message?': '+a.error.message:'')):'unbekannt');a.volume=Math.max(0,Math.min(1,this.master*((this.state?.fxVolume??80)/100)));a.play().catch(e=>this.onFxError&&this.onFxError(file,e.name+': '+e.message))}

@@ -60,6 +60,8 @@ public final class App {
             });
             a.exception(io.javalin.http.ContentTooLargeResponse.class, (e, ctx) -> ctx.status(413).json(Map.of("error", "Die Datei ist zu groß für eine einzelne Anfrage. Bitte Seite neu laden, große Dateien werden dann in Teilen hochgeladen.")));
             a.error(404, ctx -> { if (ctx.path().startsWith("/api/") && ctx.result() == null) ctx.json(Map.of("error", "Diese Funktion gibt es auf dem Server nicht (mehr). Bitte die Seite neu laden (Strg+F5).")); });
+            // Internetradio: Live-Datenstrom je Kanal (music, bg)
+            a.get("/stream/{ch}", ctx -> Radio.stream(ctx, sound, ctx.pathParam("ch")));
             a.get("/audio/<path>", ctx -> {
                 Path p = sound.resolve(ctx.pathParam("path"));
                 Sound.serve(ctx, p);
@@ -77,7 +79,7 @@ public final class App {
         m.before(ctx -> {
             String p = ctx.path();
             if (p.equals("/login.html") || p.startsWith("/common/") || p.equals("/api/admin/login") || p.equals("/api/public") || admin(db, adminPw, ctx)) return;
-            if (p.startsWith("/api/") || p.startsWith("/audio/")) throw new UnauthorizedResponse("Du bist nicht (mehr) angemeldet. Bitte neu anmelden.");
+            if (p.startsWith("/api/") || p.startsWith("/audio/") || p.startsWith("/stream/")) throw new UnauthorizedResponse("Du bist nicht (mehr) angemeldet. Bitte neu anmelden.");
             ctx.redirect("/login.html");
             ctx.skipRemainingHandlers();
         });
@@ -334,7 +336,7 @@ public final class App {
         // ---------------- Spieler ----------------
         s.before(ctx -> {
             String p = ctx.path();
-            if ((p.startsWith("/api/") || p.startsWith("/audio/")) && !p.equals("/api/login") && !p.equals("/api/account/confirm") && !p.equals("/api/public") && accounts.current(ctx) == null)
+            if ((p.startsWith("/api/") || p.startsWith("/audio/") || p.startsWith("/stream/")) && !p.equals("/api/login") && !p.equals("/api/account/confirm") && !p.equals("/api/public") && accounts.current(ctx) == null)
                 throw new UnauthorizedResponse("Du bist nicht (mehr) angemeldet. Bitte neu anmelden.");
         });
         s.post("/api/login", ctx -> {
@@ -784,7 +786,7 @@ Icons: Icons8 (icons8.com).""";
             c.jetty.multipartConfig.maxTotalRequestSize(maxRequest, io.javalin.config.SizeUnit.BYTES);
             c.showJavalinBanner = false;
             // Anfragen, die länger als 3 s dauern, ins Docker-Log (Hängern auf die Spur kommen)
-            c.requestLogger.http((ctx, ms) -> { if (ms > 3000 && !ctx.path().startsWith("/audio/")) System.err.println("LANGSAM " + Math.round(ms) + " ms: " + ctx.method() + " " + ctx.path()); });
+            c.requestLogger.http((ctx, ms) -> { if (ms > 3000 && !ctx.path().startsWith("/audio/") && !ctx.path().startsWith("/stream/")) System.err.println("LANGSAM " + Math.round(ms) + " ms: " + ctx.method() + " " + ctx.path()); });
         });
     }
 

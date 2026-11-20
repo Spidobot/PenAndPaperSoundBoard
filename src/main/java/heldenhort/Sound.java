@@ -6,9 +6,8 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /**
- * Soundboard-Zustand liegt auf dem Server. Alle Meister-Tabs und alle Spieler bekommen ihn per SSE
- * und spielen die MP3s selbst ab, synchron über Startzeitpunkt + Position.
- * ponytail: kein serverseitiges Mischen/Streamen. Reicht für eine Runde; Icecast erst, wenn Sync nicht genügt.
+ * Soundboard-Zustand liegt auf dem Server. Gehört wird wie Internetradio: je Kanal ein Live-Datenstrom (Radio.java)
+ * ab der Stelle, an der der Server gerade ist. Browser fragen nur den Zustand ab (Titel, Lautstärke, Effekte).
  */
 public final class Sound {
     public static final List<String> SCENES = List.of("Village", "Travel", "Dungeon", "Castle", "Fight");
@@ -30,6 +29,7 @@ public final class Sound {
         public int volume;
         public double offset;        // Sekunden im Titel zum Zeitpunkt 'since'
         public long since;           // Server-Zeit ms
+        public long gen;             // zählt bei Titelwechsel/Start/Pause/Spulen hoch: Zuhörer verbinden dann neu
         Channel(int v) { volume = v; }
         double pos() { return playing ? offset + (System.currentTimeMillis() - since) / 1000.0 : offset; }
     }
@@ -181,35 +181,53 @@ public final class Sound {
                 case "pick" -> {
                     String file = String.valueOf(c.get("file"));
                     resolve(file); // prüft Pfad
-                    k.file = file; k.offset = 0; k.since = now; k.playing = true;
+                    k.file = file; k.offset = 0; k.since = now; k.playing = true; k.gen++;
+                    Path p = resolve(file);
+                    scanner.submit(() -> { try { Radio.index(p); } catch (Exception e) { System.err.println("MP3 nicht lesbar: " + p + " - " + e); } }); // Dauer vorab
                 }
-                case "play" -> { if (k.file == null) throw new IllegalArgumentException("Es ist noch kein Titel gewählt. Erst einen Titel doppelt anklicken."); if (!k.playing) { k.since = now; k.playing = true; } }
-                case "pause" -> { k.offset = c.get("pos") instanceof Number n ? n.doubleValue() : k.pos(); k.playing = false; }
+                case "play" -> { if (k.file == null) throw new IllegalArgumentException("Es ist noch kein Titel gewählt. Erst einen Titel doppelt anklicken."); if (!k.playing) { k.since = now; k.playing = true; k.gen++; } }
+                case "pause" -> { k.offset = trackPos(k); k.since = now; k.playing = false; k.gen++; }
                 case "seek" -> {
                     if (!(c.get("pos") instanceof Number n) || n.doubleValue() < 0) throw new IllegalArgumentException("Spulen ging nicht: keine gültige Position übermittelt.");
-                    k.offset = n.doubleValue(); k.since = now;
+                    k.offset = n.doubleValue(); k.since = now; k.gen++;
                 }
-                case "stop" -> { k.offset = 0; k.playing = false; }
+                case "stop" -> { k.offset = 0; k.playing = false; k.gen++; }
                 case "volume" -> k.volume = Math.max(0, Math.min(100, ((Number) c.get("value")).intValue()));
                 case "repeat" -> {
+                    // Position in den Titel zurückrechnen, sonst gilt ein schon mehrfach wiederholter Titel als zu Ende.
+                    // Kein gen++: wer zuhört, hört ohne Unterbrechung weiter.
+                    k.offset = trackPos(k); k.since = now;
                     k.repeat = Boolean.TRUE.equals(c.get("value"));
-                    // aktuelle Position übernehmen, sonst springt ein schon mehrfach wiederholter Titel ans Ende
-                    if (c.get("pos") instanceof Number n) { k.offset = n.doubleValue(); k.since = now; }
                 }
-                case "ended" -> { if (!k.repeat && k.playing) { k.playing = false; k.offset = 0; } } // meldet ein Meister-Tab am Titelende
+                case "ended" -> { } // früher vom Meister-Tab gemeldet; das Titelende kennt jetzt der Server selbst
                 default -> throw new IllegalArgumentException("Aktion unbekannt: " + action);
             }
         }
         return state();
     }
 
+    /** Dauer des Titels in Sekunden, 0 solange noch nicht eingelesen. */
+    double dauer(Channel k) {
+        if (k.file == null) return 0;
+        try { Radio.Index ix = Radio.cached(resolve(k.file)); return ix == null ? 0 : ix.dauer(); } catch (Exception e) { return 0; }
+    }
+
+    /** Stelle im Titel (bei Wiederholung zurückgerechnet). */
+    double trackPos(Channel k) {
+        double p = k.pos(), d = dauer(k);
+        return d > 0 && k.repeat ? p % d : d > 0 ? Math.min(p, d) : p;
+    }
+
     public synchronized Map<String, Object> state() {
         Map<String, Object> chs = new LinkedHashMap<>();
         ch.forEach((n, k) -> {
+            double d = dauer(k);
+            // Titelende ohne Wiederholung: der Server hält selbst an (kein Browser muss es melden)
+            if (k.playing && !k.repeat && d > 0 && k.pos() >= d) { k.playing = false; k.offset = 0; k.since = System.currentTimeMillis(); k.gen++; }
             Map<String, Object> m = new LinkedHashMap<>();
-            m.put("file", k.file); m.put("playing", k.playing); m.put("repeat", k.repeat); m.put("volume", k.volume); m.put("pos", k.pos());
-            // ändert sich nur bei Titel/Start/Pause/Spulen: nur dann dürfen Browser ihre Position korrigieren
-            m.put("anchor", k.file + "|" + k.playing + "|" + k.offset + "|" + k.since);
+            m.put("file", k.file); m.put("playing", k.playing); m.put("repeat", k.repeat); m.put("volume", k.volume); m.put("pos", trackPos(k)); m.put("dur", d);
+            // ändert sich nur bei Titel/Start/Pause/Spulen: nur dann verbindet der Zuhörer seinen Stream neu
+            m.put("anchor", k.file + "|" + k.playing + "|" + k.gen);
             chs.put(n, m);
         });
         Map<String, Object> s = new LinkedHashMap<>();
