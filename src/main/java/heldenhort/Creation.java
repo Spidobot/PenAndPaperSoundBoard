@@ -460,6 +460,7 @@ public final class Creation {
         Map<String, Object> s = new LinkedHashMap<>();
         s.put("rasse", String.valueOf(call(hew, "getRasse")));
         s.put("kultur", String.valueOf(call(hew, "getKultur")));
+        try { s.put("profession", String.valueOf(call(hew, "getProfession"))); } catch (Exception ignored) { }
 
         Object k = call(hew, "getKosten");
         Map<String, Object> kosten = new LinkedHashMap<>();
@@ -559,14 +560,20 @@ public final class Creation {
         if (tester == null || element == null) return null;
         try {
             Class<?> bvC = tester.getClass().getClassLoader().loadClass("helden.framework.bedingungen.BedingungsVerknuepfung");
+            Class<?> abC = tester.getClass().getClassLoader().loadClass("helden.framework.bedingungen.AbstraktBedingung");
+            // SF liefern eine Verknüpfung, Vor-/Nachteile eine einzelne AbstraktBedingung: beides nehmen, Einzelne in UND verpacken
             Object bed = null;
             for (Class<?> c = element.getClass(); c != null && bed == null; c = c.getSuperclass())
                 for (Method m : c.getDeclaredMethods())
-                    if (m.getParameterCount() == 0 && bvC.isAssignableFrom(m.getReturnType()) && !java.lang.reflect.Modifier.isStatic(m.getModifiers())) {
+                    if (m.getParameterCount() == 0 && abC.isAssignableFrom(m.getReturnType()) && !java.lang.reflect.Modifier.isStatic(m.getModifiers())) {
                         m.setAccessible(true); bed = m.invoke(element); if (bed != null) break;
                     }
+            if (bed != null && !bvC.isInstance(bed)) {
+                Object arr = java.lang.reflect.Array.newInstance(abC, 1);
+                java.lang.reflect.Array.set(arr, 0, bed);
+                bed = bvC.getMethod("AND", arr.getClass()).invoke(null, arr);
+            }
             if (bed == null || (Boolean) bvC.getMethod("isEmpty").invoke(bed)) return null; // Jar kennt keine Voraussetzung → Regelwerk prüft
-            Class<?> abC = tester.getClass().getClassLoader().loadClass("helden.framework.bedingungen.AbstraktBedingung");
             List<Method> leaf = new ArrayList<>();
             for (Method m : tester.getClass().getMethods())
                 if (m.getReturnType() == boolean.class && m.getParameterCount() == 1 && m.getParameterTypes()[0] == abC && !java.lang.reflect.Modifier.isStatic(m.getModifiers())) leaf.add(m);

@@ -18,7 +18,7 @@ import java.util.stream.Stream;
  * Neu eingelesen wird automatisch, sobald sich eine Datei ändert.
  */
 final class Regeln {
-    record Eintrag(String name, List<String> namen, String art, String zusatz, String quelle, String text) {}
+    record Eintrag(String name, List<String> namen, String art, String zusatz, String quelle, String text, String buchkosten) {}
 
     private final Path dir;
     // Aktueller Suchbereich (je Aufruf mit nimm(...) gesetzt; alle Zugriffe laufen synchronisiert)
@@ -99,7 +99,7 @@ final class Regeln {
             }
             if (quellen.size() == 1) { out.add(a); continue; }
             String text = a.text() + (abweichung ? "<p><i>Der Wortlaut in den genannten Quellen weicht minimal voneinander ab (z. B. Errata).</i></p>" : "");
-            out.add(new Eintrag(a.name(), a.namen(), a.art(), a.zusatz(), String.join(" · ", quellen), text));
+            out.add(new Eintrag(a.name(), a.namen(), a.art(), a.zusatz(), String.join(" · ", quellen), text, a.buchkosten()));
         }
         return out;
     }
@@ -143,6 +143,30 @@ final class Regeln {
             Set<String> hat = new HashSet<>();
             for (Object o : (List<?>) zustand.getOrDefault("sf", List.of())) if (o instanceof Map<?, ?> m) hat.add(norm(String.valueOf(m.get("name"))));
             for (Object o : (List<?>) zustand.getOrDefault("vorteile", List.of())) if (o instanceof Map<?, ?> m) hat.add(norm(String.valueOf(m.get("name"))));
+            nichtAngeboten(zustand, eig, hat);
+            // 0 AP laut helden.jar, im Buch aber mit Kosten (z. B. waffenlose Manöver „Block (30 AP)“): beides zeigen
+            for (Object o : (List<?>) zustand.getOrDefault("sfMoeglich", List.of())) {
+                if (!(o instanceof Map<?, ?> raw) || !"0".equals(String.valueOf(raw.get("ap")))) continue;
+                @SuppressWarnings("unchecked") Map<String, Object> m = (Map<String, Object>) raw;
+                nimm(List.of("Sonderfertigkeit"));
+                for (Eintrag e : sucheKern(String.valueOf(m.get("name"))))
+                    if (!e.buchkosten().isBlank()) { m.put("hinweis", "Die helden.jar führt das mit 0 AP; laut " + e.quelle() + " kostet es " + e.buchkosten() + "."); break; }
+            }
+            // Tier-Abrichtung/-Fähigkeiten (Zoo-Botanica) bietet die helden.jar mit 0 AP auch Helden an: die gelten nur für Tiere/Begleiter
+            for (Object o : (List<?>) zustand.getOrDefault("sfMoeglich", List.of())) {
+                if (!(o instanceof Map<?, ?> raw)) continue;
+                @SuppressWarnings("unchecked") Map<String, Object> m = (Map<String, Object>) raw;
+                String name = String.valueOf(m.get("name"));
+                nimm(List.of("Sonderfertigkeit"));
+                boolean heldenSf = !sucheKern(name).isEmpty() && !name.contains("(Tier)");
+                if (heldenSf) continue;
+                nimm(List.of("Tierfähigkeit"));
+                List<Eintrag> tier = sucheKern(name);
+                if (tier.isEmpty() && !name.contains("(Tier)")) continue;
+                m.put("fehlt", List.of("Tier-Fähigkeit bzw. Abrichtung" + (tier.isEmpty() ? "" : " (" + tier.get(0).quelle() + ")")
+                        + ": gilt nur für Tiere und Begleiter, nicht für den Helden selbst. Darum kostet sie hier auch 0 AP."));
+                m.remove("ungeprueft");
+            }
             for (String liste : List.of("sfMoeglich", "vorteileMoeglich"))
                 for (Object o : (List<?>) zustand.getOrDefault(liste, List.of())) {
                     if (!(o instanceof Map<?, ?> raw) || !Boolean.TRUE.equals(raw.get("ungeprueft"))) continue;
@@ -161,6 +185,71 @@ final class Regeln {
                     }
                 }
         } catch (Exception e) { System.err.println("Voraussetzungen aus dem Regelwerk: " + e); }
+    }
+
+    /**
+     * Was die helden.jar für diesen Helden gar nicht anbietet (Vor-/Nachteile, Sonderfertigkeiten), trotzdem zeigen:
+     * gesperrt, mit dem Grund aus dem Regelwerk (nur für Vollzauberer, nur Elfen, erfordert …, fehlende Werte).
+     * Ergebnis: vorteileGesperrt / sfGesperrt im Zustand.
+     */
+    private void nichtAngeboten(Map<String, Object> z, Map<String, Integer> eig, Set<String> hat) {
+        String wer = String.join(", ", java.util.stream.Stream.of("rasse", "kultur", "profession").map(k -> String.valueOf(z.getOrDefault(k, ""))).filter(x -> !x.isBlank() && !"null".equals(x)).toList());
+        for (String[] l : new String[][]{{"vorteileMoeglich", "vorteileGesperrt", "Vorteil", "Nachteil"}, {"sfMoeglich", "sfGesperrt", "Sonderfertigkeit", ""}}) {
+            Set<String> angeboten = new HashSet<>();
+            for (Object o : (List<?>) z.getOrDefault(l[0], List.of())) if (o instanceof Map<?, ?> m) {
+                String n = String.valueOf(m.get("name"));
+                angeboten.add(norm(n)); angeboten.add(norm(ohneKlammern(n)));
+            }
+            List<String> arten = l[3].isEmpty() ? List.of(l[2]) : List.of(l[2], l[3]);
+            nimm(arten);
+            Map<String, Map<String, Object>> out = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            for (Eintrag e : alle) {
+                if (!arten.contains(e.art()) || out.containsKey(e.name())) continue;
+                boolean da = false;
+                for (String a : e.namen()) if (angeboten.contains(norm(a)) || angeboten.contains(norm(ohneKlammern(a))) || hat.contains(norm(a)) || hat.contains(norm(ohneKlammern(a)))) { da = true; break; }
+                if (da) continue;
+                List<String> gruende = new ArrayList<>(grundAusZusatz(e.zusatz()));
+                java.util.regex.Matcher mt = java.util.regex.Pattern.compile("<b>\\s*Voraussetzung(?:en)?\\s*:?\\s*</b>(.*?)(?=<b>[^<]{2,40}:|</p>|$)", java.util.regex.Pattern.DOTALL).matcher(e.text());
+                String vtext = null;
+                if (mt.find()) {
+                    vtext = mt.group(1).replaceAll("<[^>]+>", "").replaceAll("\\s+", " ").trim().replaceAll("[;,.]\\s*$", "");
+                    gruende.addAll(pruefe(mt.group(1), vtext, eig, hat));
+                    nimm(arten);
+                }
+                if (gruende.isEmpty())
+                    gruende.add(vtext != null && !vtext.isEmpty() ? "Voraussetzung laut Regelwerk: " + vtext
+                            : "Die helden.jar bietet das für diesen Helden nicht an" + (wer.isEmpty() ? "" : " (" + wer + ")") + "; laut Regelwerk an Rasse, Kultur oder Profession gebunden");
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("name", e.name()); m.put("fehlt", gruende); m.put("quelle", e.quelle()); m.put("nichtAngeboten", true);
+                if ("Nachteil".equals(e.art())) m.put("nachteil", true);
+                if (vtext != null) m.put("voraussetzung", vtext);
+                out.put(e.name(), m);
+            }
+            z.put(l[1], new ArrayList<>(out.values()));
+        }
+    }
+
+    /** Kürzel aus dem Regelwerk („Magischer Vorteil; ZHV; nur Elfen …“) in lesbare Bedingungen übersetzen. */
+    static List<String> grundAusZusatz(String zusatz) {
+        List<String> g = new ArrayList<>();
+        if (zusatz == null || zusatz.isBlank()) return g;
+        for (String t : zusatz.split("\\s*;\\s*")) {
+            String x = t.trim().replace("(", "").replace(")", "").replace("*", "");
+            switch (x) {
+                case "Z" -> g.add("nur für Vollzauberer");
+                case "ZH" -> g.add("nur für Voll- und Halbzauberer");
+                case "ZHV", "ZHV(G)", "ZHVG" -> g.add("nur für Zauberkundige (Voll-, Halb- oder Viertelzauberer)");
+                case "H" -> g.add("nur für Halbzauberer");
+                case "V", "VH" -> g.add("nur für Viertelzauberer");
+                case "G" -> g.add("nur für Geweihte");
+                case "OR" -> g.add("Objektritual: nur mit dem passenden Traditionsartefakt");
+                case "ZHB", "ZHVB" -> g.add("nur für Zauberkundige, teils nur borbaradianische Repräsentation");
+                default -> {
+                    if (x.matches("(?i)^(nur|erfordert|automatisch|vier).*")) g.add(t.trim().replace("erfordert als Voraussetzung", "erfordert"));
+                }
+            }
+        }
+        return g;
     }
 
     /** Prüft Eigenschaftswerte („GE 12“, „IN und GE je 12“, „KL, IN je 13“) und genannte SF/Vorteile (kursiv, „A oder B“). */
@@ -186,8 +275,8 @@ final class Regeln {
     }
 
     private boolean istSf(String name) {
-        nimm(List.of("Sonderfertigkeit", "Vorteil", "Nachteil"));
-        return exakt.getOrDefault(norm(name), List.of()).stream().anyMatch(e -> List.of("Sonderfertigkeit", "Vorteil", "Nachteil").contains(e.art()));
+        nimm(List.of("Sonderfertigkeit", "Vorteil"));
+        return exakt.getOrDefault(norm(name), List.of()).stream().anyMatch(e -> List.of("Sonderfertigkeit", "Vorteil").contains(e.art())); // Nachteile im Voraussetzungstext sind Ausschlüsse, keine Forderung
     }
 
     private static boolean hatSf(Set<String> hat, String name) {
@@ -365,7 +454,7 @@ final class Regeln {
             List<String> namen = new ArrayList<>(List.of(name));
             for (JsonNode a : e.path("namen")) if (!a.asText("").isBlank()) namen.add(a.asText());
             neu.add(new Eintrag(name, namen, e.path("art").asText(""), e.path("zusatz").asText(""), e.path("quelle").asText(p.getFileName().toString()),
-                    Jsoup.clean(e.path("text").asText(""), Safelist.basic().addTags("h3", "h4", "table", "tr", "td", "th", "tbody", "thead"))));
+                    Jsoup.clean(e.path("text").asText(""), Safelist.basic().addTags("h3", "h4", "table", "tr", "td", "th", "tbody", "thead")), e.path("buchkosten").asText("")));
         }
         dateiCache.put(p, new Datei(st, neu));
         System.out.println("Regeltexte: " + p.getFileName() + " gelesen (" + neu.size() + " Einträge)");

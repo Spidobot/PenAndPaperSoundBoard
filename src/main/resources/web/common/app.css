@@ -309,3 +309,5 @@ tr.geplant td{background:var(--acc-soft)}
 /* Kacheln mittig, gleich breit, auch wenn eine Reihe nicht voll ist */
 .tiles{display:flex;flex-wrap:wrap;justify-content:center}
 .tiles>.tile{flex:0 1 320px;min-width:260px}
+
+.picklist .hinw{display:block;color:var(--warn);font-size:.85rem;margin-top:2px}
