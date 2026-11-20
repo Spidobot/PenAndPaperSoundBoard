@@ -15,7 +15,7 @@ import org.w3c.dom.*;
  */
 public final class Heroes {
     static final Map<String, String> SHORT = Map.of("Mut", "MU", "Klugheit", "KL", "Intuition", "IN", "Charisma", "CH",
-            "Fingerfertigkeit", "FF", "Gewandtheit", "GE", "Konstitution", "KO", "Körperkraft", "KK");
+            "Fingerfertigkeit", "FF", "Gewandtheit", "GE", "Konstitution", "KO", "Körperkraft", "KK", "Sozialstatus", "SO");
     static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
     private final Db db;

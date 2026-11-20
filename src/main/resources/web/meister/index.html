@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261120b">
+<link rel="stylesheet" href="/common/app.css?v=20261120c">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -174,7 +174,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261120b"></script>
+<script src="/common/common.js?v=20261120c"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -465,7 +465,7 @@ const quick=['Sinnenschärfe','Gefahreninstinkt','Selbstbeherrschung','Schwimmen
 $('#quick').innerHTML=quick.map(q=>`<button class="chip" data-q="${q}">${q}</button>`).join('');
 $('#quick').onclick=e=>{const b=e.target.closest('[data-q]');if(b){$('#q').value=b.dataset.q;$('#qcat').value='';renderSearch()}};
 $('#q').oninput=renderSearch;$('#qcat').onchange=renderSearch;
-const ATTR=['MU','KL','IN','CH','FF','GE','KO','KK'];
+const ATTR=['MU','KL','IN','CH','FF','GE','KO','KK','SO'];
 const MAX={eigenschaft:21,talent:18,zauber:18,vorteil:15};
 const sections=h=>(h.sheet&&h.sheet.sections)||[];
 /** Vorschläge und Arten aus allen Helden der Session */
@@ -515,7 +515,7 @@ $('#awardCard').addEventListener('click',async e=>{const b=e.target.closest('but
   if(b.id==='awSend'){if(b.dataset.ask!=='1'){b.dataset.ask='1';b.textContent='Wirklich aussenden?';return}
     try{const r=await api('/api/awards/send',{method:'POST'});toast('Ausgesendet: '+r.done.join(' · '));renderAward()}catch(x){toastErr(x.message)}}});
 
-function renderAttr(){const hs=sessHeroes(),ks=['MU','KL','IN','CH','FF','GE','KO','KK'];
+function renderAttr(){const hs=sessHeroes(),ks=ATTR;
   $('#attrtab').innerHTML=hs.length?'<thead><tr><th>Held</th>'+ks.map(k=>`<th class="mono">${k}</th>`).join('')+'</tr></thead><tbody>'+
    hs.map(h=>'<tr><td><button class="link" data-sheet="'+esc(h.file)+'">'+esc(h.name)+'</button></td>'+ks.map(k=>{const best=Math.max(...hs.map(x=>x.E[k]??0));return`<td class="mono${h.E[k]===best?' best':''}">${h.E[k]??''}</td>`}).join('')+'</tr>').join('')+'</tbody>':''}
 
