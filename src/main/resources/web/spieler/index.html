@@ -6,7 +6,7 @@
 <title>Heldenhort</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261120c">
+<link rel="stylesheet" href="/common/app.css?v=20261120e">
 <style>
 html,body{margin:0}
 .pl .inner{width:min(1200px,100%)}
@@ -63,8 +63,8 @@ html,body{margin:0}
   <div id="s-create" hidden>
     <div class="spread" style="margin-bottom:10px">
       <div class="row"><button class="btn sm" data-go="s-drafts">← Entwürfe</button><h1 id="cTitle">Heldenerstellung</h1></div>
-      <div class="costs" id="costs"></div>
     </div>
+    <div class="budget" id="costs" aria-live="polite"></div>
     <div class="note" style="margin-bottom:12px" id="engineNote">Regeln, Auswahllisten, Kosten und Regelprüfung kommen aus der helden.jar. Alles wird am Server gespeichert.</div>
     <div id="phaseA" hidden>
       <div class="card" id="rkp"></div>
@@ -121,7 +121,7 @@ html,body{margin:0}
 </div></div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261120c"></script>
+<script src="/common/common.js?v=20261120e"></script>
 <script>
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const VIEWS=['s-login','s-home','s-drafts','s-create','s-mine','s-konto','s-stream','s-termine'];
@@ -165,7 +165,7 @@ $('#draftList').onclick=async e=>{const b=e.target.closest('button');if(!b)retur
 let D=null,inp={},R=null,S=null,step=0;
 const STEPS=['Eigenschaften','Vor- & Nachteile','Sonderfertigkeiten','Talente','Backgroundstory','Prüfen & senden'];
 async function openDraft(id){show('s-create');$('#rkp').innerHTML='<p class="mut">Lade…</p>';$('#phaseA').hidden=false;$('#phaseB').hidden=true;$('#costs').innerHTML='';
-  try{D=await api('/api/drafts/'+id)}catch(e){toastErr(e.message);return go('s-drafts')}
+  TK={};try{D=await api('/api/drafts/'+id)}catch(e){toastErr(e.message);return go('s-drafts')}
   inp=D.input||{};inp.answers=inp.answers||[];$('#cTitle').textContent=D.name;
   if(D.status==='gesendet'){$('#rkp').innerHTML='<p>Dieser Held ist schon beim Meister.</p>';return}
   if(D.haupt){$('#phaseA').hidden=true;$('#phaseB').hidden=false;step=LS.get('hh-step-'+id,0);await edit([])}else await rkp()}
@@ -229,33 +229,62 @@ $('#rkp').addEventListener('click',e=>{
     inp.answers=inp.answers.slice(0,p.index);inp.answers[p.index]=ans;rkp()}});
 
 /* Phase B: Werte */
-async function edit(ops){busy(true);try{S=await api('/api/drafts/'+D.id+'/edit',{method:'POST',body:{ops}})}catch(e){busy(false);toastErr(e.message);return false}busy(false);renderCosts();renderStep();return true}
+// Nach jeder Änderung zeigen, was sie gekostet hat (Unterschied der Kosten vorher/nachher)
+async function edit(ops,label){const before=S&&S.kosten?JSON.parse(JSON.stringify(S.kosten)):null;busy(true);
+  try{S=await api('/api/drafts/'+D.id+'/edit',{method:'POST',body:{ops}})}catch(e){busy(false);toastErr(e.message);return false}busy(false);
+  if(before){const d=Object.entries(S.kosten).map(([n,[u,a]])=>{const x=u-((before[n]||[0])[0]);return x?`${n} ${x>0?'+':''}${x}${a>=0?` (noch ${a-u} frei)`:''}`:''}).filter(Boolean);
+    if(d.length)toast((label?label+': ':'')+d.join(' · '))}
+  // Talent geändert: nur dessen Preis neu holen; andere Änderungen (z. B. Vorteile wie Begabung) können alle Preise ändern
+  if((ops||[]).every(o=>o.op==='talent'))for(const o of ops)delete TK[o.name];else if((ops||[]).length)TK={};
+  renderCosts();renderStep();return true}
+/* Budget immer sichtbar: ausgegeben, verfügbar, frei */
 function renderCosts(){const k=S.kosten,parts=[];
-  for(const[n,[u,a]]of Object.entries(k))parts.push(`<span class="cost${a>=0&&u>a?' over':''}">${esc(n)} ${u}${a>=0?' / '+a:''}</span>`);
-  parts.push(`<span class="cost${S.eigenschaftenGP[0]>S.eigenschaftenGP[1]?' over':''}">Eigenschafts-GP ${S.eigenschaftenGP[0]} / ${S.eigenschaftenGP[1]}</span>`);
+  const chip=(n,u,a)=>{const frei=a-u;return `<span class="cost${a>=0&&u>a?' over':''}"><b>${esc(n)}</b> ${u}${a>=0?` von ${a} · <b>${frei>=0?'noch '+frei+' frei':(-frei)+' zu viel'}</b>`:' ausgegeben'}</span>`};
+  for(const[n,[u,a]]of Object.entries(k))parts.push(chip(n,u,a));
+  parts.push(chip('Eigenschafts-GP',S.eigenschaftenGP[0],S.eigenschaftenGP[1]));
   $('#costs').innerHTML=parts.join('')}
+let TK={}; // Talentname -> Kosten für +1 (von der helden.jar gerechnet)
+async function loadTK(names){if(!D||!D.haupt)return;const q=names?'?nur='+encodeURIComponent(names.join('|')):'';
+  try{const r=await api('/api/drafts/'+D.id+'/talentkosten'+q);Object.assign(TK,r);if(step===3)fillTK()}catch(e){}}
+function tkText(t){if(t.max!=null&&t.value>=t.max)return '<span class="mut">Höchstwert</span>';const c=TK[t.name];if(!c)return '<span class="mut">…</span>';
+  if(c.nicht)return `<span class="mut" title="${esc(c.nicht)}">geht nicht</span>`;const e=Object.entries(c);return e.length?e.map(([k,v])=>`${v} ${esc(k)}`).join(', '):'kostenlos'}
+function fillTK(){for(const t of S.talente){const el=document.querySelector(`[data-tk="${CSS.escape(t.name)}"]`);if(el)el.innerHTML=tkText(t)}
+  const miss=S.talente.filter(t=>!TK[t.name]&&!(t.max!=null&&t.value>=t.max)).map(t=>t.name);if(miss.length&&!fillTK.busy){fillTK.busy=true;loadTK(miss).finally(()=>fillTK.busy=false)}}
+/* Meldungen der Regelprüfung (Fehler) in jedem Schritt oben anzeigen */
+function ruleBox(){const F=(S.hinweise||[]).filter(h=>h.art==='F');return F.length?`<div class="hint F"><b>Regelprüfung der helden.jar:</b><ul>${F.map(h=>`<li>${esc(h.text)}</li>`).join('')}</ul></div>`:''}
+/* Auswahlliste zum Durchsehen und Anklicken (statt nur Vorschläge beim Tippen) */
+function pickList(id,items,label){return `<details class="pick" ${items.length<=40?'open':''}><summary>${label} (${items.length}) anzeigen</summary>
+  <input type="search" class="pickq" data-pl="${id}" placeholder="Liste filtern…" aria-label="${label} filtern">
+  <div class="picklist" id="${id}">${items.map(i=>`<button type="button" data-pick-to="${i.to}" data-pv="${esc(i.name)}"><span>${esc(i.name)}</span>${i.info?`<span class="mut small">${esc(i.info)}</span>`:''}</button>`).join('')}</div></details>`}
 function renderStep(){LS.set('hh-step-'+D.id,step);
   $('#steps').innerHTML=STEPS.map((s,i)=>`<button data-st="${i}"${i===step?' aria-current="step"':''}>${i+1}. ${s}</button>`).join('')+`<button id="toRkp" class="small">↺ Herkunft neu wählen</button>`;
   const b=$('#stepbody');
   if(step===0)b.innerHTML=`<div class="spread"><h2>Eigenschaften</h2><div class="field" style="min-width:240px"><label class="label" for="hname">Name</label><input type="text" id="hname" value="${esc(D.name)}" maxlength="80"></div></div>
-    <div class="tw"><table class="vals"><thead><tr><th>Eigenschaft</th><th>Wert</th><th>erlaubt</th></tr></thead><tbody>${S.eigenschaften.map(e=>`<tr><td>${esc(e.name)}</td><td><input type="number" data-eig="${esc(e.name)}" value="${e.value}" min="${e.min}" max="${e.max}"></td><td class="mono small mut">${e.min}–${e.max}</td></tr>`).join('')}</tbody></table></div>
+    ${ruleBox()}<div class="tw"><table class="vals zebra"><thead><tr><th>Eigenschaft</th><th>Wert</th><th>erlaubt</th></tr></thead><tbody>${S.eigenschaften.map(e=>`<tr><td>${esc(e.name)}</td><td><input type="number" data-eig="${esc(e.name)}" value="${e.value}" min="${e.min}" max="${e.max}"></td><td class="mono small mut">${e.min}–${e.max}</td></tr>`).join('')}</tbody></table></div>
     <p class="small mut">Werte inklusive Rassen- und Kulturmodifikatoren. Kosten rechnet die helden.jar.</p>`;
-  if(step===1)b.innerHTML=`<h2>Vor- & Nachteile</h2>
+  if(step===1)b.innerHTML=`<h2>Vor- & Nachteile</h2>${ruleBox()}
     <div class="tw"><table><tbody>${S.vorteile.map(v=>`<tr><td><b>${esc(v.name)}</b></td><td class="mono">${esc(v.value)}</td><td><button class="btn sm danger" data-vdel="${esc(v.name)}">Entfernen</button></td></tr>`).join('')||'<tr><td class="empty">Keine.</td></tr>'}</tbody></table></div>
     <div class="row" style="flex-wrap:nowrap"><input type="text" id="vname" list="vlist" placeholder="Vorteil oder Nachteil (${S.vorteileMoeglich.length} wählbar)" aria-label="Vorteil oder Nachteil"><input type="text" id="vval" placeholder="Wert/Stufe, falls nötig" style="width:200px" aria-label="Wert"><button class="btn pri" id="vadd">Hinzufügen</button></div>
     <datalist id="vlist">${S.vorteileMoeglich.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+    ${pickList('vpl',S.vorteileMoeglich.map(n=>({name:n,to:'vname'})),'Wählbare Vor- und Nachteile')}
     <p class="small mut">Bei Nachteilen wie „Goldgier“ die Stufe als Wert angeben, bei „Herausragender Sinn“ z. B. „Gehör“.</p>`;
   if(step===2){const own=S.sf.filter(x=>x.eigene),fix=S.sf.filter(x=>!x.eigene);
-    b.innerHTML=`<h2>Sonderfertigkeiten</h2>
+    b.innerHTML=`<h2>Sonderfertigkeiten</h2>${ruleBox()}
     <div class="tw"><table><tbody>${own.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td><button class="btn sm danger" data-sdel="${esc(x.name)}">Entfernen</button></td></tr>`).join('')||'<tr><td class="empty">Noch keine eigenen gewählt.</td></tr>'}</tbody></table></div>
     <div class="row" style="flex-wrap:nowrap"><input type="text" id="sname" list="slist" placeholder="Sonderfertigkeit (${S.sfMoeglich.length} wählbar)" aria-label="Sonderfertigkeit"><select id="skart" style="width:auto" aria-label="Bezahlen mit"><option value="">Bezahlen mit…</option><option>GP</option><option>AP</option></select><button class="btn pri" id="sadd">Hinzufügen</button></div>
     <datalist id="slist">${S.sfMoeglich.map(x=>`<option value="${esc(x.name)}">${x.ap} AP</option>`).join('')}</datalist>
+    ${pickList('spl',S.sfMoeglich.map(x=>({name:x.name,info:x.ap+' AP',to:'sname'})),'Wählbare Sonderfertigkeiten')}
     <details class="sec"><summary class="small mut">Aus Rasse, Kultur und Profession (${fix.length})</summary><p class="small">${fix.map(x=>esc(x.name)).join(', ')}</p></details>`}
-  if(step===3)b.innerHTML=`<div class="spread"><h2>Talente</h2><input type="search" id="tq" placeholder="Talent suchen…" style="width:220px" aria-label="Talent suchen"></div>
-    <div class="tw"><table class="vals"><thead><tr><th>Talent</th><th>Probe</th><th>TaW</th><th>max</th></tr></thead><tbody id="tbody">${S.talente.map(t=>`<tr data-tn="${esc(t.name.toLowerCase())}"><td>${esc(t.name)}</td><td class="mono small">${esc(t.probe)}</td><td><input type="number" data-tal="${esc(t.name)}" value="${t.value}"${t.max!=null?` max="${t.max}"`:''}></td><td class="mono small mut">${t.max??''}</td></tr>`).join('')}</tbody></table></div>
-    <div class="row" style="flex-wrap:nowrap"><input type="text" id="tname" list="tlist" placeholder="Talent aktivieren (${S.talenteAktivierbar[0]}/${S.talenteAktivierbar[1]} aktiviert)" aria-label="Talent aktivieren"><button class="btn pri" id="tadd">Aktivieren</button></div>
-    <datalist id="tlist">${S.talenteMoeglich.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
-  if(step===4){b.innerHTML=`<div class="spread"><h2>Backgroundstory</h2><span class="pill" id="bgst"></span></div>
+  if(step===3){b.innerHTML=`<div class="spread"><h2>Talente</h2><input type="search" id="tq" placeholder="Talent suchen…" style="width:220px" aria-label="Talent suchen"></div>
+    ${ruleBox()}
+    <p class="small mut">Die Regeln prüft die helden.jar: Bei der Erstellung darf ein Talent höchstens um 2 Punkte gesteigert werden, und nur begrenzt viele Kampf- bzw. körperliche Talente (die genaue Meldung erscheint oben, sobald etwas nicht passt). „+1 kostet“ rechnet ebenfalls die helden.jar.</p>
+    <div class="tw tscroll"><table class="vals zebra tal"><thead><tr><th>Talent</th><th>Wert</th><th>+1 kostet</th><th>Höchstwert</th><th>Probe</th></tr></thead><tbody id="tbody">${S.talente.map(t=>`<tr data-tn="${esc(t.name.toLowerCase())}"><td>${esc(t.name)}</td><td><input type="number" data-tal="${esc(t.name)}" value="${t.value}"${t.max!=null?` max="${t.max}"`:''} aria-label="${esc(t.name)} Wert"></td><td class="small" data-tk="${esc(t.name)}">${tkText(t)}</td><td class="mono small mut">${t.max??''}</td><td class="mono small mut">${esc(t.probe)}</td></tr>`).join('')}</tbody></table></div>
+    <h3 style="margin-top:14px">Talent aktivieren <span class="small mut">(${S.talenteAktivierbar[0]} von ${S.talenteAktivierbar[1]} aktiviert)</span></h3>
+    <div class="row" style="flex-wrap:nowrap"><input type="text" id="tname" list="tlist" placeholder="Talent" aria-label="Talent aktivieren"><button class="btn pri" id="tadd">Aktivieren</button></div>
+    <datalist id="tlist">${S.talenteMoeglich.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+    ${pickList('tpl',S.talenteMoeglich.map(n=>({name:n,to:'tname'})),'Aktivierbare Talente')}`;
+    fillTK()}
+  if(step===4){b.innerHTML=`${ruleBox()}<div class="spread"><h2>Backgroundstory</h2><span class="pill" id="bgst"></span></div>
     <div><div class="tb" id="tb">
       <button data-cmd="bold" title="Fett"><b>F</b></button><button data-cmd="italic" title="Kursiv"><i>K</i></button><button data-cmd="underline" title="Unterstrichen"><u>U</u></button>
       <button data-cmd="formatBlock" data-v="h3" title="Überschrift">Ü</button><button data-cmd="formatBlock" data-v="p" title="Absatz">¶</button>
@@ -303,16 +332,19 @@ $('#steps').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
     await api('/api/drafts/'+D.id+'/reset',{method:'POST'});D.haupt=false;inp.answers=[];$('#phaseB').hidden=true;$('#phaseA').hidden=false;rkp();return}
   step=+b.dataset.st;renderStep()};
 $('#stepbody').addEventListener('change',e=>{const t=e.target;
-  if(t.dataset.eig)edit([{op:'eig',name:t.dataset.eig,value:+t.value}]);
-  if(t.dataset.tal)edit([{op:'talent',name:t.dataset.tal,value:+t.value}]);
+  if(t.dataset.eig){const old=(S.eigenschaften.find(x=>x.name===t.dataset.eig)||{}).value;edit([{op:'eig',name:t.dataset.eig,value:+t.value}],`${t.dataset.eig} ${old}→${t.value}`)}
+  if(t.dataset.tal){const old=(S.talente.find(x=>x.name===t.dataset.tal)||{}).value;edit([{op:'talent',name:t.dataset.tal,value:+t.value}],`${t.dataset.tal} ${old}→${t.value}`)}
   if(t.id==='hname'&&t.value.trim()){D.name=t.value.trim();$('#cTitle').textContent=D.name;edit([{op:'name',value:D.name}])}});
-$('#stepbody').addEventListener('input',e=>{if(e.target.id==='tq'){const q=e.target.value.toLowerCase();$$('#tbody tr').forEach(r=>r.hidden=q&&!r.dataset.tn.includes(q))}});
+$('#stepbody').addEventListener('input',e=>{if(e.target.dataset.pl){const q=e.target.value.toLowerCase();$$('#'+e.target.dataset.pl+' button').forEach(x=>x.hidden=q&&!x.dataset.pv.toLowerCase().includes(q));return}
+  if(e.target.id==='tq'){const q=e.target.value.toLowerCase();$$('#tbody tr').forEach(r=>r.hidden=q&&!r.dataset.tn.includes(q))}});
 $('#stepbody').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.pickTo){const i=$('#'+b.dataset.pickTo);i.value=b.dataset.pv;i.focus();$$('.picklist button.on').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+    if(b.dataset.pickTo==='vname')$('#vval').focus();return}
   if(b.id==='vadd'){const n=$('#vname').value.trim();if(!n)return toast('Vorteil oder Nachteil fehlt');edit([{op:'vorteil+',name:n,value:$('#vval').value.trim()}])}
   if(b.dataset.vdel)edit([{op:'vorteil-',name:b.dataset.vdel}]);
   if(b.id==='sadd'){const n=$('#sname').value.trim();if(!n)return toast('Sonderfertigkeit fehlt');edit([{op:'sf+',name:n,kostenart:$('#skart').value}])}
   if(b.dataset.sdel)edit([{op:'sf-',name:b.dataset.sdel}]);
-  if(b.id==='tadd'){const n=$('#tname').value.trim();if(!n)return toast('Talent fehlt');edit([{op:'talent',name:n,value:0}])}});
+  if(b.id==='tadd'){const n=$('#tname').value.trim();if(!n)return toast('Talent fehlt');edit([{op:'talent',name:n,value:0}],n+' aktiviert')}});
 
 /* ---------- Meine Helden ---------- */
 let mine=[];

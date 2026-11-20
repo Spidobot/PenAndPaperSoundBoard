@@ -282,6 +282,41 @@ public final class Creation {
         return out;
     }
 
+    /**
+     * Was kostet +1 bei jedem Talent? Rechnet die helden.jar selbst: Talent probehalber um 1 erhöhen, Kosten vergleichen.
+     * Liefert Talentname -> Änderung je Kostenart (z. B. {"AP": 3}), oder "nicht" -> Grund, wenn +1 nicht geht.
+     */
+    public Map<String, Object> talentCosts(String draft, Set<String> only) throws Exception {
+        Map<String, Integer> base = baseCosts(draft);
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (org.w3c.dom.Element t : Heroes.all(parse(draft).getDocumentElement(), "talent")) {
+            if (!t.hasAttribute("value")) continue;
+            String n = t.getAttribute("name");
+            if (only != null && !only.contains(n)) continue;
+            // je Talent einzeln sperren, damit andere Spieler zwischendurch weiterarbeiten können
+            try { out.put(n, costOne(draft, n, Heroes.num(t.getAttribute("value")) + 1, base)); }
+            catch (Exception e) { out.put(n, Map.of("nicht", String.valueOf(e.getMessage()))); }
+        }
+        return out;
+    }
+
+    private synchronized Map<String, Integer> baseCosts(String draft) throws Exception { return used(load(init(), draft)); }
+
+    private synchronized Map<String, Integer> costOne(String draft, String name, int value, Map<String, Integer> base) throws Exception {
+        Object hew = load(init(), setTalent(draft, name, value));
+        call(hew, "recalc");
+        Map<String, Integer> d = new LinkedHashMap<>();
+        used(hew).forEach((k, v) -> { int x = v - base.getOrDefault(k, 0); if (x != 0) d.put(k, x); });
+        return d;
+    }
+
+    private static Map<String, Integer> used(Object hew) throws Exception {
+        Object k = call(hew, "getKosten");
+        Map<String, Integer> m = new LinkedHashMap<>();
+        for (Object ka : (List<?>) call(k, "getAlleKostenArten")) m.put(ka.toString(), (Integer) call(k, "getKosten", ka));
+        return m;
+    }
+
     /** Fertiger Held als XML plus Meldungen der Regelprüfung. */
     public synchronized Map<String, Object> finish(String draft, String name) throws Exception { return finish(init(), draft, name); }
 

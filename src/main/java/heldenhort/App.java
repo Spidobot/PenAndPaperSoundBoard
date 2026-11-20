@@ -275,7 +275,9 @@ public final class App {
             String st = String.valueOf(b.get("status")), c = b.get("comment") == null ? "" : String.valueOf(b.get("comment")).trim();
             if (!List.of("freigegeben", "geändert", "abgelehnt").contains(st)) throw new IllegalArgumentException("Status unbekannt");
             if (st.equals("geändert") && c.isEmpty()) throw new IllegalArgumentException("Bei „geändert“ bitte im Kommentar schreiben, was geändert wurde");
-            var kp = db.query("SELECT kind, payload, status FROM approval_item WHERE id=?", ctx.pathParam("id"));
+            var kp = db.query("SELECT kind, payload, status, comment FROM approval_item WHERE id=?", ctx.pathParam("id"));
+            if (!kp.isEmpty() && st.equals(kp.get(0).get("status")) && c.equals(str(kp.get(0).get("comment") == null ? "" : kp.get(0).get("comment"))))
+                throw new IllegalStateException("Ist schon „" + st + "“"); // kein zweites Mal, keine doppelte Mail
             if (!kp.isEmpty() && "STEIG".equals(kp.get(0).get("kind"))) {
                 if (!"offen".equals(kp.get(0).get("status"))) throw new IllegalStateException("Über diese Steigerung ist schon entschieden");
                 if (st.equals("geändert")) throw new IllegalArgumentException("Steigerungen bitte freigeben oder ablehnen");
@@ -384,6 +386,12 @@ public final class App {
             if (bg.length() > 200_000) throw new IllegalArgumentException("Backgroundstory zu lang");
             db.exec("UPDATE draft SET bg=?, updated=? WHERE id=?", bg, now(), d.get("id"));
             ctx.json(Map.of("ok", true));
+        });
+        s.get("/api/drafts/{id}/talentkosten", ctx -> {
+            var d = draft(db, accounts, ctx);
+            if (d.get("xml") == null) throw new IllegalStateException("Erst Herkunft und Profession wählen");
+            String only = ctx.queryParam("nur");
+            ctx.json(creation.talentCosts((String) d.get("xml"), only == null || only.isBlank() ? null : new HashSet<>(Arrays.asList(only.split("\\|")))));
         });
         s.put("/api/drafts/{id}/extra", ctx -> {
             var d = draft(db, accounts, ctx);

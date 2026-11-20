@@ -230,3 +230,24 @@ main:has(> #m-sound:not([hidden])){padding-bottom:16px}
 .lstnw{position:relative;display:inline-block}
 #lstn{cursor:pointer;font:inherit;font-size:.8rem}
 .lpop{position:absolute;top:calc(100% + 6px);left:0;z-index:40;min-width:180px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:8px 12px;box-shadow:0 6px 20px rgba(0,0,0,.35);display:grid;gap:4px;font-size:.9rem;white-space:nowrap}
+.budget{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:8px;padding:8px 0;margin-bottom:8px;background:var(--bg)}
+.budget .cost{font-size:.9rem}
+table.zebra tbody tr:nth-child(even){background:var(--panel2)}
+table.tal{width:auto;min-width:min(720px,100%)}
+table.tal td:first-child{min-width:180px}
+table.tal input[type=number]{width:72px}
+.tscroll{max-height:62vh;overflow:auto}
+.tscroll thead th{position:sticky;top:0;background:var(--panel);z-index:1;box-shadow:0 1px 0 var(--line)}
+details.pick{margin-top:10px}
+details.pick summary{cursor:pointer;font-size:.9rem}
+.pickq{margin:8px 0;max-width:320px}
+.picklist{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:var(--r)}
+.picklist button{display:flex;justify-content:space-between;gap:12px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:none;padding:6px 10px;cursor:pointer;color:inherit;font:inherit}
+.picklist button:nth-child(even){background:var(--panel2)}
+.picklist button:hover,.picklist button.on{background:var(--acc-soft)}
+table.zebra td{vertical-align:middle}
+/* Popup: eigener Scrollbereich, Hintergrund scrollt nicht mit; Kopf mit ✕ bleibt oben */
+.sheetdlg{overflow:auto;overscroll-behavior:contain;padding-top:0}
+html:has(dialog[open]){overflow:hidden}
+.sheethead{position:sticky;top:0;z-index:5;background:var(--bg);padding:14px 0 10px;border-bottom:1px solid var(--line);margin-bottom:10px}
+.xclose{font-size:1.1rem;line-height:1;padding:6px 12px}

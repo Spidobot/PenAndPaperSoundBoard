@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261120c">
+<link rel="stylesheet" href="/common/app.css?v=20261120e">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -174,7 +174,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261120c"></script>
+<script src="/common/common.js?v=20261120e"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -417,15 +417,25 @@ function renderFg(){
   const open=fg.reduce((n,r)=>n+r.items.filter(i=>i.status==='offen').length,0);$('#fgBadge').textContent=open;$('#fgBadge').hidden=!open;
   if(location.hash!=='#m-freigaben'&&$('#fglist').innerHTML)return;
   if($('#fglist').contains(document.activeElement))return; // nicht beim Tippen neu zeichnen
-  $('#fglist').innerHTML=fg.map(r=>`<div class="card"><div class="spread"><h3>${esc(r.hero)}</h3><span class="small mut">${esc(r.player)} · ${esc(r.created)}</span></div>
-   ${r.items.map(i=>`<div style="display:grid;gap:8px;border-top:1px solid var(--line);padding-top:10px">
+  // Offene Anfragen oben, entschiedene eingeklappt unter „Erledigt“
+  const isOpen=r=>r.items.some(i=>i.status==='offen');
+  const card=r=>`<div class="card"><div class="spread"><h3>${esc(r.hero)}</h3><span class="small mut">${esc(r.player)} · ${esc(r.created)}</span></div>
+   ${r.items.map(i=>{const fix=i.kind==='STEIG'&&i.status!=='offen'; // ausgeführte Steigerungen lassen sich nicht mehr ändern
+     const btn=(s,l,c)=>i.status===s?'':`<button class="btn sm ${c}" data-fg="${i.id}" data-s="${s}">${l}</button>`;
+     return `<div style="display:grid;gap:8px;border-top:1px solid var(--line);padding-top:10px">
      <div class="spread"><span>${esc(i.text)}</span><span class="pill ${ST[i.status]}">${esc(i.status)}</span></div>
-     <div class="row" style="flex-wrap:nowrap"><input type="text" placeholder="Kommentar an den Spieler (bei Ändern Pflicht)" value="${esc(i.comment)}" data-fgc="${i.id}">
-       <button class="btn sm pri" data-fg="${i.id}" data-s="freigegeben">Freigeben</button><button class="btn sm" data-fg="${i.id}" data-s="geändert">Ändern</button><button class="btn sm danger" data-fg="${i.id}" data-s="abgelehnt">Ablehnen</button></div>
-   </div>`).join('')}</div>`).join('')||'<p class="mut">Keine Anfragen.</p>';
+     ${fix?(i.comment?`<div class="small mut">${esc(i.comment)}</div>`:''):`<div class="row" style="flex-wrap:nowrap"><input type="text" placeholder="Kommentar an den Spieler (bei Ändern Pflicht)" value="${esc(i.comment)}" data-fgc="${i.id}">
+       ${btn('freigegeben','Freigeben','pri')}${i.kind==='STEIG'?'':btn('geändert','Ändern','')}${btn('abgelehnt','Ablehnen','danger')}</div>`}
+   </div>`}).join('')}</div>`;
+  const o=fg.filter(isOpen),d=fg.filter(r=>!isOpen(r)),was=$('#fgdone')&&$('#fgdone').open;
+  $('#fglist').innerHTML=(o.map(card).join('')||'<p class="mut">Keine offenen Anfragen.</p>')+
+    (d.length?`<details class="card" id="fgdone"${was?' open':''}><summary><b>Erledigt</b> <span class="mut small">(${d.length})</span></summary><div style="display:grid;gap:14px;margin-top:10px">${d.map(card).join('')}</div></details>`:'');
 }
-$('#fglist').onclick=async e=>{const b=e.target.closest('[data-fg]');if(!b)return;
-  try{await api('/api/approvals/items/'+b.dataset.fg,{method:'POST',body:{status:b.dataset.s,comment:$(`[data-fgc="${b.dataset.fg}"]`).value}});b.blur();toast(b.dataset.s+'. Der Spieler sieht es beim nächsten Abgleich.');loadFg()}catch(x){toastErr(x.message)}};
+$('#fglist').onclick=async e=>{const b=e.target.closest('[data-fg]');if(!b||b.disabled)return;
+  const row=b.parentElement;row.querySelectorAll('button').forEach(x=>x.disabled=true);const txt=b.textContent;b.textContent='…';
+  try{await api('/api/approvals/items/'+b.dataset.fg,{method:'POST',body:{status:b.dataset.s,comment:$(`[data-fgc="${b.dataset.fg}"]`).value}});
+    toast(txt+': gespeichert. Der Spieler bekommt eine Mail.');document.activeElement&&document.activeElement.blur();await loadFg()}
+  catch(x){toastErr(x.message);row.querySelectorAll('button').forEach(y=>y.disabled=false);b.textContent=txt}};
 setInterval(loadFg,10000);setInterval(()=>{if(location.hash==='#m-helden')loadHeroes()},15000);
 
 /* ---------- Session ---------- */
@@ -522,13 +532,13 @@ function renderAttr(){const hs=sessHeroes(),ks=ATTR;
 /* ---------- Heldenbogen ---------- */
 function sheetHtml(h,dialog){const s=h.sheet||{basis:{},sections:[],notizen:[]};
   const basis={'Profession':h.profession,...s.basis,'Eingang':h.received,'Datei':h.file};
-  return `<div class="spread"><h2>${esc(h.name)}</h2><div class="row">
+  return `<div class="spread${dialog?' sheethead':''}"><h2>${esc(h.name)}</h2><div class="row">
       <input type="search" class="sq" placeholder="Im Bogen suchen…" aria-label="Im Bogen suchen" style="width:220px">
       <a class="btn sm" href="/api/heroes/${encodeURIComponent(h.file)}/xml">XML</a>
       <a class="btn sm" href="/api/heroes/${encodeURIComponent(h.file)}/zip" title="XML, Backgroundstory und Zusatzinfos als ZIP">XML + Texte</a>
       ${pdfLink('/api/heroes/'+encodeURIComponent(h.file),'pdfbg-m'+(dialog?'d':'')) }
       ${h.status==='neu'?'<button class="btn sm pri" data-take>Übernehmen</button>':''}
-      ${dialog?'<button class="btn sm" data-close>Schließen</button>':''}</div></div>
+      ${dialog?'<button class="btn sm xclose" data-close aria-label="Schließen" title="Schließen (Esc)">✕</button>':''}</div></div>
     <div class="row small"><label for="owner-${esc(h.file)}" class="label">Gehört</label>
       <select id="owner-${esc(h.file)}" class="owner" data-file="${esc(h.file)}" style="width:auto"><option value="">– niemandem (FTP) –</option>${accts.map(a=>`<option value="${a.id}"${String(a.id)===String(h.account)?' selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
     <div class="row small"><label class="label" for="sap-${esc(h.file)}">Sonder-AP</label><input type="number" min="1" id="sap-${esc(h.file)}" class="sapv" style="width:110px" aria-label="Sonder-AP">
@@ -546,7 +556,7 @@ function fillSheet(root,h){
   bgEditor(root.querySelector('.bgview'),h.background,async html=>{await api('/api/heroes/'+encodeURIComponent(h.file)+'/bg',{method:'PUT',body:{bg:html}});h.background=html});
   bgEditor(root.querySelector('.exview'),h.extra,async html=>{await api('/api/heroes/'+encodeURIComponent(h.file)+'/extra',{method:'PUT',body:{extra:html}});h.extra=html},'Zusatzinfos');
   const sq=root.querySelector('.sq');sq.oninput=()=>{const q=sq.value.trim().toLowerCase();
-    root.querySelectorAll('details.sec').forEach(d=>{let any=false;d.querySelectorAll('tr[data-txt]').forEach(tr=>{const ok=!q||tr.dataset.txt.includes(q);tr.hidden=!ok;any=any||ok});
+    root.querySelectorAll('details.sec').forEach(d=>{let any=false;d.querySelectorAll('tr[data-txt]').forEach(tr=>{const ok=!q||(tr.dataset.txt.includes(q)||fuzzy(q,tr.dataset.txt));tr.hidden=!ok;any=any||ok});
       if(d.querySelector('tr[data-txt]'))d.hidden=!any;if(q&&any)d.open=true})};
   root.onclick=async e=>{if(e.target.closest('[data-close]'))$('#sheet').close();
     const sap=e.target.closest('[data-sap]');
