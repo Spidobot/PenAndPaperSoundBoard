@@ -95,7 +95,7 @@ function bgEditor(root,html,save,label='Backgroundstory'){
     <button type="button" data-cmd="formatBlock" data-v="h3" title="Überschrift">Ü</button><button type="button" data-cmd="formatBlock" data-v="p" title="Absatz">¶</button>
     <button type="button" data-cmd="insertUnorderedList" title="Liste">• Liste</button><button type="button" data-cmd="insertOrderedList" title="Nummeriert">1. Liste</button>
     <button type="button" data-cmd="formatBlock" data-v="blockquote" title="Zitat">„Zitat“</button><button type="button" data-cmd="removeFormat" title="Formatierung entfernen">⌫ Format</button></div>
-    <div class="ed" contenteditable="true" data-ph="Woher kommt der Held? Was treibt ihn an? Familie, Feinde, Geheimnisse…"></div>
+    <div class="ed" contenteditable="true" data-ph="${label==='Zusatzinfos'?'Z. B. Prinzipientreue, Geiz, Eitelkeit genauer beschrieben, Eigenheiten, Wünsche an den Meister …':'Woher kommt der Held? Was treibt ihn an? Familie, Feinde, Geheimnisse…'}"></div>
     <div class="row" style="margin-top:8px"><button type="button" class="btn sm pri" data-bgsave>${label} speichern</button><span class="small mut" data-bgst></span></div>`;
   const ed=root.querySelector('.ed'),tb=root.querySelector('.tb');ed.innerHTML=html||'';
   ed.oninput=()=>root.querySelector('[data-bgst]').textContent='nicht gespeichert';
