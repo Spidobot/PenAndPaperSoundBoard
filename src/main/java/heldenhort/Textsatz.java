@@ -42,7 +42,7 @@ final class Textsatz {
         finally { if (t.cs != null) t.cs.close(); }
     }
 
-    private static final java.util.Set<String> BLOCK = java.util.Set.of("p", "h1", "h2", "h3", "h4", "li", "div", "ul", "ol", "br", "tr");
+    private static final java.util.Set<String> BLOCK = java.util.Set.of("p", "h1", "h2", "h3", "h4", "li", "div", "ul", "ol", "br", "tr", "hr");
 
     private static Block walk(Node n, List<Block> out, Block cur, boolean b, boolean i) {
         for (Node c : n.childNodes()) {
@@ -57,6 +57,7 @@ final class Textsatz {
                 if (BLOCK.contains(tag)) {
                     if (tag.equals("ul") || tag.equals("ol") || tag.equals("div") || tag.equals("tr")) { walk(e, out, null, bb, ii); cur = null; continue; }
                     if (tag.equals("br")) { cur = null; continue; }
+                    if (tag.equals("hr")) { out.add(new Block("hr", new ArrayList<>())); cur = null; continue; } // neue Seite
                     Block nb = new Block(tag, new ArrayList<>());
                     out.add(nb);
                     walk(e, out, nb, bb || tag.startsWith("h"), ii);
@@ -82,6 +83,7 @@ final class Textsatz {
     }
 
     private void block(Block b) throws Exception {
+        if (b.tag().equals("hr")) { if (cs != null) neueSeite(); return; }
         float size = switch (b.tag()) { case "h1" -> 15; case "h2" -> 12.5f; case "h3" -> 10.5f; default -> 9; };
         float before = switch (b.tag()) { case "h1" -> 0; case "h2" -> 10; case "h3" -> 7; default -> 3; };
         float lead = size * 1.25f;

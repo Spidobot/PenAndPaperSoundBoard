@@ -717,29 +717,71 @@ Icons: Icons8 (icons8.com).""";
         return r.isEmpty() ? "" : str(r.get(0).get("background"));
     }
 
-    /** Vor-/Nachteile, Sonderfertigkeiten (inkl. Manöver, Rituale, Liturgien) und Zauber eines Helden: Name → Wert. */
+    /** Alles Regeltechnische eines Helden: Vor-/Nachteile, SF (inkl. Manöver, Rituale, Liturgien), Talente, Zauber. Name → Wert. */
     @SuppressWarnings("unchecked")
     static Map<String, String> regelNamen(Map<String, Object> h) {
         Map<String, String> out = new LinkedHashMap<>();
         for (Map<String, String> v : (List<Map<String, String>>) h.get("V")) out.putIfAbsent(v.get("name"), str(v.get("value")));
         for (String sf : (List<String>) h.get("SF")) out.putIfAbsent(sf, "");
+        ((Map<String, Integer>) h.getOrDefault("T", Map.of())).forEach((t, w) -> out.putIfAbsent(t, "TaW " + w));
         ((Map<String, String>) h.getOrDefault("Z", Map.of())).forEach((z, w) -> out.putIfAbsent(z, w.isBlank() ? "" : "ZfW " + w));
         return out;
     }
+
+    static final String TIERART = "Tierart: ";
+
+    /**
+     * Regelzusammenfassung für Helden samt Begleitern. Begleiter (Tier, Vertrauter, Dämon …) stehen in einer eigenen
+     * Rubrik ab neuer Seite, damit klar ist, was zum Spielercharakter gehört und was zum Begleiter.
+     * helden: Heldenname → parse()-Ergebnis. mitHelden: je Regel dazuschreiben, wer sie hat (Session).
+     */
+    @SuppressWarnings("unchecked")
+    static String regelHtml(Regeln regeln, Map<String, Map<String, Object>> helden, boolean mitHelden) {
+        Map<String, Map<String, String>> spieler = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        Map<String, Map<String, String>> tiere = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        Map<String, String> wasIst = new TreeMap<>(String.CASE_INSENSITIVE_ORDER); // Begleiter → „Nebelkrähe (Krähe), Tier“
+        helden.forEach((name, h) -> {
+            spieler.put(name, regelNamen(h));
+            for (Map<String, Object> b : (List<Map<String, Object>>) h.getOrDefault("W", List.of())) {
+                String art = str(b.get("art")), gattung = str(b.get("gattung")), familie = str(b.get("familie"));
+                String wer = str(b.get("name")) + (mitHelden ? ", Begleiter von " + name : "");
+                Map<String, String> r = new LinkedHashMap<>();
+                if (!gattung.isBlank() || !familie.isBlank())
+                    r.put(TIERART + (familie.isBlank() ? gattung : familie) + (gattung.isBlank() || familie.isBlank() ? "" : " / " + gattung), "");
+                r.putAll((Map<String, String>) b.get("regeln"));
+                tiere.put(wer, r);
+                wasIst.put(wer, String.join(", ", java.util.stream.Stream.of(familie.isBlank() ? gattung : familie + (gattung.isBlank() ? "" : " (" + gattung + ")"), art).filter(x -> !x.isBlank()).toList()));
+            }
+        });
+        List<String> tierArten = List.of("Tierfähigkeit", "Tier", "Wesen");
+        String html = regeln.zusammenfassung(spieler, mitHelden);
+        if (tiere.isEmpty()) return html;
+        StringBuilder sb = new StringBuilder(html);
+        sb.append("<hr><h1>Begleiter</h1><p><i>Tiere, Vertraute, Dämonen und andere Wesen der Helden. Das hier gilt für den Begleiter, nicht für den Helden.</i></p>");
+        sb.append("<ul>");
+        wasIst.forEach((wer, was) -> sb.append("<li><b>").append(esc(wer)).append("</b>").append(was.isEmpty() ? "" : " – " + esc(was)).append("</li>"));
+        sb.append("</ul>");
+        sb.append(regeln.zusammenfassung(tiere, true, n -> n.startsWith(TIERART)
+                ? regeln.tierart(n.substring(TIERART.length()).split(" / "))
+                : regeln.suche(n, tierArten)));
+        return sb.toString();
+    }
+
+    static String esc(String s) { return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"); }
 
     static Map.Entry<String, String> sessionRegeln(Db db, Heroes heroes, Regeln regeln, String id) throws Exception {
         var r = db.query("SELECT name, heroes FROM session WHERE id=?", id);
         if (r.isEmpty()) throw new NotFoundResponse("Diese Session gibt es nicht mehr, vermutlich wurde sie gelöscht.");
         List<?> files = new com.fasterxml.jackson.databind.ObjectMapper().readValue(str(r.get(0).get("heroes")), List.class);
         if (files.isEmpty()) throw new IllegalArgumentException("In dieser Session sind noch keine Helden.");
-        Map<String, Map<String, String>> helden = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        Map<String, Map<String, Object>> helden = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (Object f : files) {
             Path p;
             try { p = heroes.file(str(f)); } catch (Exception gone) { continue; } // Held inzwischen gelöscht
             Map<String, Object> h = Heroes.parse(Files.readAllBytes(p));
-            helden.put(str(h.get("name")), regelNamen(h));
+            helden.put(str(h.get("name")), h);
         }
-        return Map.entry(str(r.get(0).get("name")), regeln.zusammenfassung(helden, true));
+        return Map.entry(str(r.get(0).get("name")), regelHtml(regeln, helden, true));
     }
 
     /** Heldenbogen als PDF, gedruckt von der helden.jar; ?bg=1 hängt Backgroundstory und Zusatzinfos an, ?regeln=1 die Regelzusammenfassung. */
@@ -749,7 +791,7 @@ Icons: Icons8 (icons8.com).""";
         String name = str(parsed.get("name"));
         byte[] pdf;
         boolean mit = "1".equals(ctx.queryParam("bg"));
-        String regelHtml = "1".equals(ctx.queryParam("regeln")) ? regeln.zusammenfassung(Map.of(name, regelNamen(parsed)), false) : null;
+        String regelHtml = "1".equals(ctx.queryParam("regeln")) ? regelHtml(regeln, Map.of(name, parsed), false) : null;
         try { pdf = Pdf.heldenbogen(jar, p, name, mit ? background(db, file) : null, mit ? extra(db, file) : null, heroes.bild(file), regelHtml); }
         catch (Exception e) { // 4xx statt 5xx: Cloudflare ersetzt 5xx durch eine eigene Seite
             Throwable c = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null ? e.getCause() : e;

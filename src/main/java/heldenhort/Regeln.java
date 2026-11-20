@@ -61,14 +61,45 @@ final class Regeln {
         return out;
     }
 
-    private static final List<String> ART = List.of("Vorteil", "Nachteil", "Sonderfertigkeit", "Ritual", "Liturgie", "Zauber");
+    private static final List<String> ART = List.of("Tier", "Wesen", "Vorteil", "Nachteil", "Sonderfertigkeit", "Tierfähigkeit", "Talent", "Ritual", "Liturgie", "Zauber");
 
     /**
      * Regelzusammenfassung als HTML für Vor-/Nachteile und Sonderfertigkeiten (inkl. Manöver, Rituale, Liturgien).
      * helden: Heldenname → (Name aus dem Helden → Wert, z. B. „Goldgier“ → „7“). Jeder Regeltext steht nur einmal, mit den Helden, die ihn haben
      * (mitHelden=false für den Bogen eines einzelnen Helden). Namen ohne Regeltext stehen am Ende.
      */
-    String zusammenfassung(Map<String, ? extends Map<String, String>> helden, boolean mitHelden) {
+    String zusammenfassung(Map<String, ? extends Map<String, String>> helden, boolean mitHelden) { return zusammenfassung(helden, mitHelden, this::suche); }
+
+    /** Treffer bevorzugt aus diesen Arten (z. B. bei Begleitern Tier-Fähigkeiten statt der gleichnamigen Helden-SF). */
+    List<Eintrag> suche(String name, java.util.Collection<String> bevorzugt) {
+        List<Eintrag> l = suche(name);
+        List<Eintrag> b = l.stream().filter(e -> bevorzugt.contains(e.art())).toList();
+        return b.isEmpty() ? l : b;
+    }
+
+    /** Tierart eines Begleiters: erst über den Namen (Familie, dann Gattung), sonst die Bestiariums-Seite, die das Wort am häufigsten nennt. */
+    synchronized List<Eintrag> tierart(String... woerter) {
+        laden();
+        for (String w : woerter) {
+            if (w == null || w.isBlank()) continue;
+            List<Eintrag> l = suche(w, List.of("Tier", "Wesen"));
+            if (!l.isEmpty() && List.of("Tier", "Wesen").contains(l.get(0).art())) return l.subList(0, 1);
+        }
+        for (String w : woerter) {
+            if (w == null || w.isBlank()) continue;
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile("(?U)\\b" + java.util.regex.Pattern.quote(w) + "\\w{0,2}\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
+            Eintrag best = null; long max = 0;
+            for (Eintrag e : alle) if ("Tier".equals(e.art())) {
+                long n = p.matcher(e.text()).results().count();
+                if (n > max) { max = n; best = e; }
+            }
+            if (best != null) return List.of(best);
+        }
+        return List.of();
+    }
+
+    /** wie oben, aber mit eigener Suche (Begleiter: Tier-Fähigkeiten bevorzugt, „Tierart: …“ übers Bestiarium). */
+    String zusammenfassung(Map<String, ? extends Map<String, String>> helden, boolean mitHelden, java.util.function.Function<String, List<Eintrag>> finder) {
         record Gruppe(List<Eintrag> e, Map<String, Set<String>> wer) {}
         Map<String, Gruppe> gruppen = new LinkedHashMap<>();
         Map<String, Set<String>> ohne = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
@@ -76,7 +107,7 @@ final class Regeln {
             for (Map.Entry<String, String> nw : namen.entrySet()) {
                 String n = nw.getKey();
                 if (n == null || n.isBlank()) continue;
-                List<Eintrag> l = suche(n);
+                List<Eintrag> l = finder.apply(n);
                 if (nw.getValue() != null && !nw.getValue().isBlank()) n = n.trim() + " " + nw.getValue().trim(); // Anzeige mit Wert
                 if (l.isEmpty()) { ohne.computeIfAbsent(n.trim(), x -> new TreeSet<>()).add(held); continue; }
                 String key = l.stream().map(e -> e.name() + "|" + e.quelle()).sorted().reduce("", String::concat);
@@ -118,7 +149,8 @@ final class Regeln {
     private static String mehrzahl(String art) {
         return switch (art == null ? "" : art) {
             case "Vorteil" -> "Vorteile"; case "Nachteil" -> "Nachteile"; case "Sonderfertigkeit" -> "Sonderfertigkeiten und Manöver";
-            case "Ritual" -> "Rituale"; case "Liturgie" -> "Liturgien"; case "Zauber" -> "Zauber"; default -> "Sonstiges";
+            case "Ritual" -> "Rituale"; case "Liturgie" -> "Liturgien"; case "Zauber" -> "Zauber"; case "Talent" -> "Talente";
+            case "Tierfähigkeit" -> "Fähigkeiten und Abrichtung"; case "Tier" -> "Tierart"; case "Wesen" -> "Wesen und ihre Eigenschaften"; default -> "Sonstiges";
         };
     }
 
@@ -245,6 +277,6 @@ final class Regeln {
         if (s == null) return "";
         String t = s.toLowerCase(Locale.GERMAN).replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss").replace("­", "");
         t = Normalizer.normalize(t, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
-        return t.replaceAll("[^a-z0-9]+", " ").trim();
+        return t.replace("ph", "f").replaceAll("[^a-z0-9]+", " ").trim(); // Geografie = Geographie
     }
 }

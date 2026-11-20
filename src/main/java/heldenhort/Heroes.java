@@ -147,6 +147,7 @@ public final class Heroes {
         Map<String, String> zb = new LinkedHashMap<>(); // Zauber → ZfW (für die Regelzusammenfassung)
         for (Element z : all(held, "zauber")) if (!z.getAttribute("name").isBlank()) zb.putIfAbsent(z.getAttribute("name"), z.getAttribute("value"));
         h.put("Z", zb);
+        h.put("W", begleiter(held)); // Tiere, Vertraute, Dämonen … getrennt vom Helden
         // Meldungen der Regelprüfung, die die helden.jar als Ereignis in den Helden schreibt
         // Aufbau: text="Meistergenehmigung notwendig", obj="<worum es geht>", time=<Zeitstempel>, version=…
         List<String> mg = new ArrayList<>();
@@ -279,10 +280,46 @@ public final class Heroes {
         return n.getLength() == 0 ? null : (Element) n.item(0);
     }
 
+    /**
+     * Alle Elemente mit diesem Namen unter p, aber nicht aus Begleitern: Tiere, Vertraute, Dämonen usw. stehen als
+     * gegenstand/Wesen mit eigenen Eigenschaften, Vorteilen, SF und Zaubern im Helden. Die gehören nicht zum Helden
+     * (früher überschrieb z. B. der MU des Raben den MU der Hexe). Ist p selbst ein Wesen (oder darin), zählt alles darunter.
+     */
     static List<Element> all(Element p, String tag) {
         NodeList n = p.getElementsByTagName(tag);
         List<Element> out = new ArrayList<>(n.getLength());
-        for (int i = 0; i < n.getLength(); i++) out.add((Element) n.item(i));
+        for (int i = 0; i < n.getLength(); i++) {
+            Element e = (Element) n.item(i);
+            boolean imWesen = false;
+            for (Node x = e.getParentNode(); x != null && x != p; x = x.getParentNode()) if ("Wesen".equals(x.getNodeName())) { imWesen = true; break; }
+            if (!imWesen) out.add(e);
+        }
+        return out;
+    }
+
+    /** Begleiter des Helden (Tier, Vertrauter, Dämon …): Name, Gattung, Familie, Art und eigene Vor-/Nachteile, SF, Zauber, Talente. */
+    static List<Map<String, Object>> begleiter(Element held) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        NodeList ws = held.getElementsByTagName("Wesen");
+        for (int i = 0; i < ws.getLength(); i++) {
+            Element w = (Element) ws.item(i);
+            Element geg = w.getParentNode() instanceof Element g ? g : null;
+            String name = geg == null ? "" : attr(first(geg, "name"), "value");
+            if (name.isBlank() && geg != null) name = geg.getAttribute("name");
+            Map<String, Object> b = new LinkedHashMap<>();
+            b.put("name", name.isBlank() ? "Begleiter" : name);
+            b.put("gattung", attr(first(w, "gattung"), "value"));
+            b.put("familie", attr(first(w, "familie"), "value"));
+            b.put("art", attr(first(w, "wesensart"), "value"));
+            Map<String, String> regeln = new LinkedHashMap<>();
+            for (Element v : all(w, "vorteil")) regeln.putIfAbsent(v.getAttribute("name"), v.getAttribute("value"));
+            for (Element s : all(w, "sonderfertigkeit")) regeln.putIfAbsent(s.getAttribute("name"), "");
+            for (Element z : all(w, "zauber")) regeln.putIfAbsent(z.getAttribute("name"), z.getAttribute("value").isBlank() ? "" : "ZfW " + z.getAttribute("value"));
+            for (Element t : all(w, "talent")) regeln.putIfAbsent(t.getAttribute("name"), t.getAttribute("value").isBlank() ? "" : "TaW " + t.getAttribute("value"));
+            regeln.remove("");
+            b.put("regeln", regeln);
+            out.add(b);
+        }
         return out;
     }
 
