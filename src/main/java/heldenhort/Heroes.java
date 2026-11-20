@@ -148,19 +148,29 @@ public final class Heroes {
         for (Element z : all(held, "zauber")) if (!z.getAttribute("name").isBlank()) zb.putIfAbsent(z.getAttribute("name"), z.getAttribute("value"));
         h.put("Z", zb);
         // Meldungen der Regelprüfung, die die helden.jar als Ereignis in den Helden schreibt
+        // Aufbau: text="Meistergenehmigung notwendig", obj="<worum es geht>", time=<Zeitstempel>, version=…
         List<String> mg = new ArrayList<>();
         for (Element e : all(held, "ereignis")) {
-            boolean hit = false; StringBuilder txt = new StringBuilder();
-            NamedNodeMap at = e.getAttributes();
-            for (int i = 0; i < at.getLength(); i++) {
-                String v = at.item(i).getNodeValue();
-                if (v.contains("Meistergenehmigung")) hit = true; else if (!v.isBlank() && v.length() > 8) txt.append(v).append(' ');
-            }
-            if (hit) mg.add(txt.toString().trim());
+            String text = e.getAttribute("text"), obj = e.getAttribute("obj");
+            if (!(text + " " + obj).contains("Meistergenehmigung")) continue;
+            mg.add(lesbar(obj.isBlank() ? text : obj));
         }
         h.put("meistergenehmigung", mg);
         h.put("sheet", sheet(held));
         return h;
+    }
+
+    /**
+     * Freigabe-Punkt so, dass ihn jeder versteht: ohne Zeitstempel und Programm-Kauderwelsch.
+     * „Die folgenden Vor- bzw. Nachteile unterliegen der Meistergenehmigung: X“ → „Vor-/Nachteil braucht deine Genehmigung: X“.
+     */
+    static String lesbar(String s) {
+        if (s == null) return "";
+        String t = s.replaceAll("\\b\\d{12,}\\b", " ").replaceAll("\\s+", " ").trim(); // Zeitstempel der helden.jar
+        t = t.replaceFirst("(?i)^Die folgenden Vor- bzw\\. Nachteile unterliegen der Meistergenehmigung:\\s*", "Vor-/Nachteil braucht deine Genehmigung: ");
+        t = t.replaceFirst("(?i)^Die folgenden Sonderfertigkeiten unterliegen der Meistergenehmigung:\\s*", "Sonderfertigkeit braucht deine Genehmigung: ");
+        t = t.replaceFirst("(?i)^Meistergenehmigung notwendig$", "");
+        return t;
     }
 
     /** Abschnitte des Heldenbogens: Tag in der XML -> Überschrift. Reihenfolge = Anzeige-Reihenfolge. */

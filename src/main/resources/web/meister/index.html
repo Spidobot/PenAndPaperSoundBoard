@@ -71,7 +71,9 @@
 
     <section class="view" id="m-freigaben" hidden>
       <div class="spread"><h1>Meisterfreigaben</h1><span class="small mut">Neue Anfragen kommen zusätzlich per Mail.</span></div>
-      <p class="small mut">Die Punkte kommen aus der Regelprüfung der helden.jar (Art „Meistergenehmigung“). Der Spieler sieht deine Entscheidung und deinen Kommentar automatisch.</p>
+      <div class="note small"><b>Worum geht es?</b> Manche Dinge darf ein Held laut Regelwerk nur mit Zustimmung des Meisters haben (z. B. seltene Vor- und Nachteile) oder die Helden-Software meldet etwas Ungewöhnliches (z. B. viele ungenutzte AP). Außerdem landen hier Steigerungen und Löschwünsche der Spieler.<br>
+        <b>Freigeben</b> = passt so. <b>Ändern</b> = du hast es angepasst, schreib kurz dazu, was. <b>Ablehnen</b> = so nicht erlaubt.<br>
+        Der Spieler sieht deine Entscheidung sofort auf seiner Seite. Per Mail bekommt er <b>eine</b> Zusammenfassung, sobald du 3 Minuten lang nichts mehr entschieden hast.</div>
       <div id="fglist" style="display:grid;gap:14px"></div>
     </section>
 
@@ -417,10 +419,10 @@ const ST={offen:'warn',freigegeben:'ok',geändert:'ok',abgelehnt:'warn',zurückg
 const fgEdit=new Set(); // MG-Punkte, bei denen „Entscheidung ändern“ geklickt wurde
 let fg=[];
 async function loadFg(){try{fg=await api('/api/approvals')}catch(e){return}renderFg()}
-function renderFg(){
+function renderFg(force){
   const open=fg.reduce((n,r)=>n+r.items.filter(i=>i.status==='offen').length,0);$('#fgBadge').textContent=open;$('#fgBadge').hidden=!open;
   if(location.hash!=='#m-freigaben'&&$('#fglist').innerHTML)return;
-  if($('#fglist').contains(document.activeElement))return; // nicht beim Tippen neu zeichnen
+  if(!force&&$('#fglist').contains(document.activeElement)&&document.activeElement.matches('input,textarea'))return; // nicht beim Tippen neu zeichnen
   // Offene Anfragen oben, entschiedene eingeklappt unter „Erledigt“
   const isOpen=r=>r.items.some(i=>i.status==='offen');
   const card=r=>`<div class="card"><div class="spread"><h3>${esc(r.hero)}</h3><span class="small mut">${esc(r.player)} · ${esc(r.created)}</span></div>
@@ -429,18 +431,26 @@ function renderFg(){
      return `<div style="display:grid;gap:8px;border-top:1px solid var(--line);padding-top:10px">
      <div class="spread"><span>${esc(i.text)}</span><span class="pill ${ST[i.status]}">${esc(i.status)}</span></div>
      ${(i.status!=='offen'&&!(i.kind==='MG'&&fgEdit.has(i.id)))?`<div class="spread small mut"><span>${esc(i.comment||'')}</span>${i.kind==='MG'&&!['zurückgezogen','überholt'].includes(i.status)?`<button class="btn sm" data-fgedit="${i.id}">Entscheidung ändern</button>`:''}</div>`:fix?'':`<div class="row" style="flex-wrap:nowrap"><input type="text" placeholder="Kommentar an den Spieler (bei Ändern Pflicht)" value="${esc(i.comment)}" data-fgc="${i.id}">
-       ${btn('freigegeben','Freigeben','pri')}${['STEIG','DEL'].includes(i.kind)?'':btn('geändert','Ändern','')}${btn('abgelehnt','Ablehnen','danger')}</div>`}
+       ${btn('freigegeben','Freigeben','pri')}${['STEIG','DEL'].includes(i.kind)?'':btn('geändert','Ändern','')}${btn('abgelehnt','Ablehnen','danger')}${fgEdit.has(i.id)?`<button class="btn sm" data-fgcancel="${i.id}">Abbrechen</button>`:''}</div>
+       <div class="small err" data-fghint="${i.id}" hidden>Bei „Ändern“ bitte kurz ins Feld schreiben, was du geändert hast. Ohne Änderung einfach „Freigeben“ oder „Abbrechen“.</div>`}
    </div>`}).join('')}</div>`;
   const o=fg.filter(isOpen),d=fg.filter(r=>!isOpen(r)),was=$('#fgdone')&&$('#fgdone').open;
   $('#fglist').innerHTML=(o.map(card).join('')||'<p class="mut">Keine offenen Anfragen.</p>')+
     (d.length?`<details class="card" id="fgdone"${was?' open':''}><summary><b>Erledigt</b> <span class="mut small">(${d.length})</span></summary><div style="display:grid;gap:14px;margin-top:10px">${d.map(card).join('')}</div></details>`:'');
 }
-$('#fglist').addEventListener('click',e=>{const x=e.target.closest('[data-fgedit]');if(x){fgEdit.add(+x.dataset.fgedit);renderFg()}},true);
-$('#fglist').onclick=async e=>{const b=e.target.closest('[data-fg]');if(!b||b.disabled)return;fgEdit.delete(+b.dataset.fg);
+// „Entscheidung ändern“ / „Abbrechen“: sofort umschalten (der Knopf selbst hat den Fokus, daher force)
+$('#fglist').addEventListener('click',e=>{const x=e.target.closest('[data-fgedit]'),c=e.target.closest('[data-fgcancel]');
+  if(x){fgEdit.add(+x.dataset.fgedit);renderFg(true);const f=$(`[data-fgc="${x.dataset.fgedit}"]`);f&&f.focus()}
+  if(c){fgEdit.delete(+c.dataset.fgcancel);renderFg(true)}},true);
+$('#fglist').onclick=async e=>{const b=e.target.closest('[data-fg]');if(!b||b.disabled)return;const id=+b.dataset.fg,inp=$(`[data-fgc="${id}"]`),hint=$(`[data-fghint="${id}"]`);
+  // erst prüfen, dann senden: bei „Ändern“ ohne Kommentar bleibt alles, wie es ist
+  if(b.dataset.s==='geändert'&&!inp.value.trim()){hint.hidden=false;inp.focus();return}
   const row=b.parentElement;row.querySelectorAll('button').forEach(x=>x.disabled=true);const txt=b.textContent;b.textContent='…';
-  try{await api('/api/approvals/items/'+b.dataset.fg,{method:'POST',body:{status:b.dataset.s,comment:$(`[data-fgc="${b.dataset.fg}"]`).value}});
-    toast(txt+': gespeichert. Der Spieler bekommt eine Mail.');document.activeElement&&document.activeElement.blur();await loadFg()}
-  catch(x){toastErr(x.message);row.querySelectorAll('button').forEach(y=>y.disabled=false);b.textContent=txt}};
+  try{await api('/api/approvals/items/'+id,{method:'POST',body:{status:b.dataset.s,comment:inp.value}});
+    fgEdit.delete(id);toast(txt+': gespeichert. Der Spieler sieht es sofort, die Mail kommt gesammelt.');document.activeElement&&document.activeElement.blur();await loadFg()}
+  catch(x){
+    if(/Ist schon/.test(x.message)){fgEdit.delete(id);toast('Keine Änderung, bleibt wie es war.');await loadFg();return} // gleiche Entscheidung nochmal: kein Fehler
+    toastErr(x.message);row.querySelectorAll('button').forEach(y=>y.disabled=false);b.textContent=txt}};
 setInterval(loadFg,10000);setInterval(()=>{if(location.hash==='#m-helden')loadHeroes()},15000);
 
 /* ---------- Session ---------- */

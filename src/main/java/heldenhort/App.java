@@ -29,6 +29,7 @@ public final class App {
         jar.selfTest = probe -> { try { return creation.selfTest(probe); } catch (Exception e) { return "FEHLER " + e.getMessage(); } };
         jar.onRejected = msg -> mail.notifyMeister("helden.jar-Update zurückgehalten", msg);
         Heroes heroes = new Heroes(db, data.resolve("helden"));
+        HEROES_DIR = heroes.dir();
         Regeln regeln = new Regeln(data.resolve("regeln")); // Regeltexte aus /data/regeln/*.json (per FTP, nie im Repo)
         // per FTP abgelegte Helden: vermerkte Meistergenehmigungen landen ebenfalls unter „Freigaben“
         heroes.onFtp = (file, h) -> {
@@ -327,9 +328,10 @@ public final class App {
                     && db.query("SELECT 1 FROM approval_item WHERE approval=? AND status='offen' AND kind='MG'", ap.get(0).get("id")).isEmpty())
                 db.exec("UPDATE hero SET status='übernommen' WHERE file=? AND status='neu'", ap.get(0).get("file"));
             var it = db.query("SELECT a.hero, a.account, i.text FROM approval_item i JOIN approval a ON a.id=i.approval WHERE i.id=?", ctx.pathParam("id"));
+            // Keine Mail je Klick: Entscheidungen werden je Spieler gesammelt und nach 3 Minuten Ruhe als eine Mail verschickt
             if (!it.isEmpty() && it.get(0).get("account") != null)
-                mail.notify(accounts.email(it.get(0).get("account")), "Freigabe: " + it.get(0).get("hero"),
-                        "Der Meister hat entschieden: " + st + "\n\n" + it.get(0).get("text") + (c.isEmpty() ? "" : "\n\nKommentar: " + c));
+                mail.sammeln(accounts.email(it.get(0).get("account")), str(it.get(0).get("hero")),
+                        "• " + Heroes.lesbar(str(it.get(0).get("text"))) + "\n  Entscheidung: " + st + (c.isEmpty() ? "" : "\n  Kommentar: " + c));
             ctx.json(Map.of("ok", true));
         });
 
@@ -496,7 +498,9 @@ public final class App {
             Object id = accounts.current(ctx).get("id");
             Map<String, Object> o = new LinkedHashMap<>();
             o.put("heroes", db.query("SELECT file,status FROM hero WHERE account=? ORDER BY file", id));
-            o.put("items", db.query("SELECT i.id,i.text,i.status,i.comment,a.hero FROM approval_item i JOIN approval a ON a.id=i.approval WHERE a.account=? ORDER BY i.id", id));
+            var items = db.query("SELECT i.id,i.text,i.status,i.comment,a.hero FROM approval_item i JOIN approval a ON a.id=i.approval WHERE a.account=? ORDER BY i.id", id);
+            for (var it : items) { String t = Heroes.lesbar(str(it.get("text"))); it.put("text", t.isEmpty() ? "Braucht die Genehmigung des Meisters" : t); }
+            o.put("items", items);
             o.put("awards", db.query("SELECT COUNT(*) AS n FROM award WHERE sent IS NOT NULL AND file IN (SELECT file FROM hero WHERE account=?)", id).get(0).get("n"));
             ctx.json(o);
         });
@@ -794,7 +798,23 @@ Icons: Icons8 (icons8.com).""";
         var list = id == null
                 ? db.query("SELECT * FROM approval a WHERE (a.file IS NOT NULL AND a.file IN (SELECT file FROM hero)) OR (a.file IS NULL AND a.id IN (SELECT approval FROM draft WHERE approval IS NOT NULL)) ORDER BY id DESC")
                 : db.query("SELECT * FROM approval WHERE id=?", id);
-        for (var a : list) a.put("items", db.query("SELECT id,kind,text,status,comment FROM approval_item WHERE approval=? ORDER BY id", a.get("id")));
+        for (var a : list) {
+            var items = db.query("SELECT id,kind,text,status,comment FROM approval_item WHERE approval=? ORDER BY id", a.get("id"));
+            for (var it : items) it.put("text", Heroes.lesbar(str(it.get("text"))));
+            // Alte Einträge, bei denen nur der Zeitstempel übrig blieb: Text aus der Helden-XML nachtragen (einmalig, dann gespeichert)
+            if (HEROES_DIR != null && a.get("file") != null && items.stream().anyMatch(it -> "MG".equals(it.get("kind")) && str(it.get("text")).isEmpty())) {
+                try {
+                    List<?> mg = (List<?>) Heroes.parse(Files.readAllBytes(HEROES_DIR.resolve(str(a.get("file"))))).get("meistergenehmigung");
+                    var mgItems = items.stream().filter(it -> "MG".equals(it.get("kind"))).toList();
+                    for (int i = 0; i < mgItems.size() && i < mg.size(); i++) if (str(mgItems.get(i).get("text")).isEmpty()) {
+                        mgItems.get(i).put("text", str(mg.get(i)));
+                        db.exec("UPDATE approval_item SET text=? WHERE id=?", str(mg.get(i)), mgItems.get(i).get("id"));
+                    }
+                } catch (Exception ignored) { }
+            }
+            for (var it : items) if (str(it.get("text")).isEmpty()) it.put("text", "Braucht deine Genehmigung (die helden.jar hat keinen Grund mitgeliefert)");
+            a.put("items", items);
+        }
         return list;
     }
 
@@ -803,6 +823,8 @@ Icons: Icons8 (icons8.com).""";
         mac.init(new SecretKeySpec(HexFormat.of().parseHex(db.get("secret", "")), "HmacSHA256"));
         return Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(s.getBytes(StandardCharsets.UTF_8)));
     }
+
+    static Path HEROES_DIR; // für approvals(): alte Freigabe-Texte aus der Helden-XML nachtragen
 
     static String env(String k, String d) { String v = System.getenv(k); return v == null || v.isBlank() ? d : v; }
 }
