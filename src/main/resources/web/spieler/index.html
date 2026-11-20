@@ -24,6 +24,9 @@ html,body{margin:0}
 .busy{opacity:.6;pointer-events:none}
 .list{display:grid;gap:10px}
 .item{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:var(--r);padding:10px 14px;background:var(--panel)}
+.gear{position:relative}.gear>summary{list-style:none;cursor:pointer;font-size:1.7rem!important;line-height:1;padding:8px 14px!important;min-width:48px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}.gear>summary::-webkit-details-marker{display:none}
+.gearmenu{position:absolute;right:0;top:calc(100% + 6px);z-index:20;display:grid;min-width:210px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,.35);overflow:hidden}
+.gearmenu button{background:none;border:0;border-bottom:1px solid var(--line);color:inherit;font:inherit;text-align:left;padding:10px 14px;cursor:pointer}.gearmenu button:last-child{border-bottom:0}.gearmenu button:hover{background:var(--acc-soft)}
 </style>
 </head>
 <body>
@@ -44,26 +47,18 @@ html,body{margin:0}
 
   <!-- Start -->
   <div id="s-home" hidden>
-    <div class="spread" style="margin-bottom:18px"><div style="display:grid;gap:4px"><span class="smalllogo"><img src="/common/d20.svg" alt="" width="22" height="22"> Heldenhort</span><h1 id="greet"></h1></div><button class="btn sm" id="logout">Abmelden</button></div>
+    <div class="spread" style="margin-bottom:18px"><div style="display:grid;gap:4px"><span class="smalllogo"><img src="/common/d20.svg" alt="" width="22" height="22"> Heldenhort</span><h1 id="greet"></h1></div><details class="gear"><summary class="btn sm" aria-label="Einstellungen" title="Konto und Abmelden">⚙</summary><div class="gearmenu"><button type="button" data-go="s-konto">Konto (Passwort, Mail)</button><button type="button" id="logout">Abmelden</button></div></details></div>
     <div class="tiles">
-      <button class="tile" data-go="s-drafts"><span class="ico">✦</span><h2>Heldenerstellung</h2><span class="mut">Neue Helden bauen, mit Backgroundstory an den Meister senden.</span></button>
-      <button class="tile" data-go="s-mine"><span class="ico">⚔</span><h2>Meine Helden</h2><span class="mut">Deine Helden beim Meister ansehen.</span></button>
+      <button class="tile" data-go="s-mine"><span class="ico">⚔</span><h2>Meine Helden</h2><span class="mut">Deine Helden ansehen, neue Helden erstellen und angefangene weiterbauen.</span></button>
       <button class="tile" data-go="s-stream"><span class="ico">♪</span><h2>Soundstream</h2><span class="mut">Musik und Geräusche vom Spieltisch. Du regelst nur deine Lautstärke.</span></button>
       <button class="tile" data-go="s-termine"><span class="ico">⧗</span><h2>Termine</h2><span class="mut">Abstimmen, wann die nächste Runde stattfindet.</span></button>
-      <button class="tile" data-go="s-konto"><span class="ico">⚙</span><h2>Konto</h2><span class="mut">Passwort ändern, Mail-Adresse für Benachrichtigungen.</span></button>
     </div>
-  </div>
-
-  <!-- Entwürfe -->
-  <div id="s-drafts" hidden>
-    <div class="spread" style="margin-bottom:14px"><div class="row"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Heldenerstellung</h1></div><button class="btn pri" id="newDraft">Neuer Held</button></div>
-    <div class="list" id="draftList"></div>
   </div>
 
   <!-- Assistent -->
   <div id="s-create" hidden>
     <div class="spread" style="margin-bottom:10px">
-      <div class="row"><button class="btn sm" data-go="s-drafts">← Entwürfe</button><h1 id="cTitle">Heldenerstellung</h1></div>
+      <div class="row"><button class="btn sm" data-go="s-mine">← Meine Helden</button><h1 id="cTitle">Heldenerstellung</h1></div>
     </div>
     <div class="budget" id="costs" aria-live="polite"></div>
     <div class="note" style="margin-bottom:12px" id="engineNote">Regeln, Auswahllisten, Kosten und Regelprüfung kommen aus der helden.jar. Alles wird am Server gespeichert.</div>
@@ -78,7 +73,8 @@ html,body{margin:0}
 
   <!-- Meine Helden -->
   <div id="s-mine" hidden>
-    <div class="row" style="margin-bottom:14px"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Meine Helden</h1></div>
+    <div class="spread" style="margin-bottom:14px"><div class="row"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Meine Helden</h1></div><button class="btn pri" id="newDraft">✦ Neuer Held</button></div>
+    <div class="card" id="draftBox" hidden style="margin-bottom:14px"><h3>In Arbeit <span class="small mut">(noch nicht an den Meister geschickt)</span></h3><div class="list" id="draftList"></div></div>
     <form class="card" id="upForm" hidden style="margin-bottom:14px"><h3>Helden-XML hochladen</h3>
       <p class="small mut">Ein Held aus der Helden-Software (Datei → Exportieren/Speichern als XML). Der Meister bekommt ihn wie einen neu erstellten.</p>
       <div class="row"><input type="file" id="upFile" accept=".xml,application/xml,text/xml" aria-label="Helden-XML"><button class="btn pri sm" type="submit">Hochladen</button></div></form>
@@ -125,18 +121,19 @@ html,body{margin:0}
 <script src="/common/common.js?v=@build.version@"></script>
 <script>
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-const VIEWS=['s-login','s-home','s-drafts','s-create','s-mine','s-konto','s-stream','s-termine'];
+const VIEWS=['s-login','s-home','s-create','s-mine','s-konto','s-stream','s-termine'];
 let me=null;
-function show(v){({'s-mine':'#mineList','s-drafts':'#draftList','s-termine':'#pollList'})[v]&&($(({'s-mine':'#mineList','s-drafts':'#draftList','s-termine':'#pollList'})[v]).innerHTML='<p class="mut">lädt …</p>');
+function show(v){if(v==='s-drafts')v='s-mine'; // Heldenerstellung steckt jetzt in „Meine Helden“
+  ({'s-mine':'#mineList','s-termine':'#pollList'})[v]&&($(({'s-mine':'#mineList','s-termine':'#pollList'})[v]).innerHTML='<p class="mut">lädt …</p>');
   if(v==='s-mine'){$('#mineSheet').hidden=true}
-  VIEWS.forEach(x=>$('#'+x).hidden=x!==v);({'s-drafts':loadDrafts,'s-mine':loadMine,'s-konto':loadKonto,'s-termine':loadPolls})[v]?.();window.scrollTo(0,0)}
+  VIEWS.forEach(x=>$('#'+x).hidden=x!==v);({'s-mine':()=>{loadMine();loadDrafts()},'s-konto':loadKonto,'s-termine':loadPolls})[v]?.();window.scrollTo(0,0)}
 function go(v){if(location.hash.slice(1)===v)guard(v);else location.hash=v}
 addEventListener('hashchange',()=>guard(location.hash.slice(1)||'s-home'));
 async function guard(v){
   if(!me&&v!=='s-login'){try{me=await api('/api/me')}catch(e){return show('s-login')}}
   if(me)$('#greet').textContent=me.greeting||('Willkommen, '+me.name);
   if(v.startsWith('d-')){openDraft(+v.slice(2));return}
-  show(VIEWS.includes(v)?v:'s-home')}
+  show(VIEWS.includes(v)||v==='s-drafts'?v:'s-home')}
 addEventListener('hh401',()=>{me=null;show('s-login')});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-go]');if(b)go(b.dataset.go)});
 
@@ -145,6 +142,7 @@ $('#lname').value=LS.get('hh-name','');
 $('#lform').onsubmit=async e=>{e.preventDefault();$('#lerr').hidden=true;
   try{await api('/api/login',{method:'POST',body:{name:$('#lname').value,password:$('#lpw').value}});LS.set('hh-name',$('#lname').value);$('#lpw').value='';me=null;go('s-home')}
   catch(x){$('#lerr').textContent=x.message;$('#lerr').hidden=false}};
+document.addEventListener('click',e=>{const g=$('.gear');if(g&&g.open&&(!g.contains(e.target)||e.target.closest('.gearmenu button')))g.open=false}); // Menü schließt nach Wahl oder Klick daneben
 $('#logout').onclick=async()=>{await api('/api/logout',{method:'POST'}).catch(()=>{});me=null;stopStream();go('s-login')};
 async function loadKonto(){try{me=await api('/api/me')}catch(e){return}
   $('#mailState').innerHTML=me.email?`Bestätigt: <b>${esc(me.email)}</b>`:'<span class="mut">Keine bestätigte Adresse.</span>';
@@ -154,6 +152,7 @@ $('#mailForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/account
 
 /* ---------- Entwürfe ---------- */
 async function loadDrafts(){let ds;try{ds=await api('/api/drafts')}catch(e){return toastErr(e.message)}
+  ds=ds.filter(d=>d.status!=='gesendet');$('#draftBox').hidden=!ds.length; // gesendete stehen unten bei den Helden
   $('#draftList').innerHTML=ds.map(d=>`<div class="item"><div><b>${esc(d.name)}</b> <span class="pill ${d.status==='gesendet'?'ok':''}">${d.status==='gesendet'?'beim Meister':d.haupt?'Werte':'Rasse/Kultur/Profession'}</span><div class="small mut">zuletzt ${esc(d.updated)}</div></div>
     <div class="row">${d.status==='gesendet'?'':`<button class="btn sm pri" data-open="${d.id}">Weiter</button>`}<button class="btn sm danger" data-del="${d.id}">Löschen</button></div></div>`).join('')
     ||'<p class="mut">Noch kein Entwurf. Mit „Neuer Held“ geht es los.</p>'}
@@ -168,7 +167,7 @@ $('#draftList').onclick=async e=>{const b=e.target.closest('button');if(!b)retur
 let D=null,inp={},R=null,S=null,step=0;
 const STEPS=['Eigenschaften','Vor- & Nachteile','Sonderfertigkeiten','Talente','Backgroundstory','Prüfen & senden'];
 async function openDraft(id){show('s-create');$('#rkp').innerHTML='<p class="mut">Lade…</p>';$('#phaseA').hidden=false;$('#phaseB').hidden=true;$('#costs').innerHTML='';
-  TK={};try{D=await api('/api/drafts/'+id)}catch(e){toastErr(e.message);return go('s-drafts')}
+  TK={};try{D=await api('/api/drafts/'+id)}catch(e){toastErr(e.message);return go('s-mine')}
   inp=D.input||{};inp.answers=inp.answers||[];$('#cTitle').textContent=D.name;
   if(D.status==='gesendet'){$('#rkp').innerHTML='<p>Dieser Held ist schon beim Meister.</p>';return}
   if(D.haupt){$('#phaseA').hidden=true;$('#phaseB').hidden=false;step=LS.get('hh-step-'+id,0);await edit([])}else await rkp()}
@@ -314,7 +313,7 @@ function renderStep(){LS.set('hh-step-'+D.id,step);setTimeout(vorladenSchritt,0)
   if(step===4){b.innerHTML=`${ruleBox()}<div class="spread"><h2>Backgroundstory</h2><span class="pill" id="bgst"></span></div>
     <div><div class="tb" id="tb">
       <button data-cmd="bold" title="Fett"><b>F</b></button><button data-cmd="italic" title="Kursiv"><i>K</i></button><button data-cmd="underline" title="Unterstrichen"><u>U</u></button>
-      <button data-cmd="formatBlock" data-v="h3" title="Überschrift">Ü</button><button data-cmd="formatBlock" data-v="p" title="Absatz">¶</button>
+      <button data-cmd="formatBlock" data-v="h1" title="Überschrift 1 (groß)">Ü1</button><button data-cmd="formatBlock" data-v="h2" title="Überschrift 2">Ü2</button><button data-cmd="formatBlock" data-v="h3" title="Überschrift 3 (klein)">Ü3</button><button data-cmd="formatBlock" data-v="p" title="Absatz">¶</button>
       <button data-cmd="insertUnorderedList" title="Liste">• Liste</button><button data-cmd="insertOrderedList" title="Nummeriert">1. Liste</button>
       <button data-cmd="formatBlock" data-v="blockquote" title="Zitat">„Zitat“</button><button data-cmd="removeFormat" title="Formatierung entfernen">⌫ Format</button></div>
     <div class="ed" id="ed" contenteditable="true" data-ph="Woher kommt dein Held? Was treibt ihn an? Familie, Feinde, Geheimnisse…"></div></div>

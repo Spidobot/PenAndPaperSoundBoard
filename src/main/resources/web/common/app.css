@@ -306,3 +306,6 @@ tr.geplant td{background:var(--acc-soft)}
 .waffen li.nein{border-left-color:var(--bad)}
 .waffen .fehlt{color:var(--bad);font-size:.9rem}
 .waffen .ok{color:var(--ok)}
+/* Kacheln mittig, gleich breit, auch wenn eine Reihe nicht voll ist */
+.tiles{display:flex;flex-wrap:wrap;justify-content:center}
+.tiles>.tile{flex:0 1 320px;min-width:260px}
