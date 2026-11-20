@@ -305,3 +305,4 @@ tr.geplant td{background:var(--acc-soft)}
 .waffen li{padding:6px 10px;border-left:3px solid var(--ok);background:var(--panel2);border-radius:4px}
 .waffen li.nein{border-left-color:var(--bad)}
 .waffen .fehlt{color:var(--bad);font-size:.9rem}
+.waffen .ok{color:var(--ok)}

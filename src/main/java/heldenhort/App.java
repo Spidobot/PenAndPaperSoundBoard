@@ -748,6 +748,108 @@ Icons: Icons8 (icons8.com).""";
 
     static final String TIERART = "Tierart: ", WESEN = "Wesen: ";
 
+    static final Set<String> ZWEIHAND = Set.of("Anderthalbhänder", "Zweihandschwerter/-säbel", "Zweihand-Hiebwaffen", "Zweihandflegel", "Infanteriewaffen", "Stäbe", "Kettenstäbe", "Lanzenreiten");
+    static final Map<String, String> EIG_KURZ = Map.of("MU", "Mut", "KL", "Klugheit", "IN", "Intuition", "CH", "Charisma", "FF", "Fingerfertigkeit", "GE", "Gewandtheit", "KO", "Konstitution", "KK", "Körperkraft");
+
+    /** Schild/Parierwaffe: welche SF der Held dafür hat (Wirkung laut WdH S. 280/281). */
+    static void schildPruefen(Map<String, Object> h, Map<String, Object> w) {
+        boolean parier = String.valueOf(w.get("schild")).toLowerCase().contains("parier");
+        List<String> info = new ArrayList<>();
+        if (parier) {
+            String p2 = sfHat(h, "Parierwaffen II"), p1 = sfHat(h, "Parierwaffen I");
+            info.add(p2 != null ? "SF Parierwaffen II: weitere Parade-Boni und eine zusätzliche Abwehraktion mit der Parierwaffe (WdH S. 280)."
+                    : p1 != null ? "SF Parierwaffen I: zusätzliche Parade-Boni mit der Parierwaffe (WdH S. 280). Parierwaffen II bräuchte GE 15."
+                    : "Keine SF Parierwaffen: keine Parade-Boni der Parierwaffe (Parierwaffen I braucht GE 12 und SF Linkhand, WdH S. 280).");
+        } else {
+            String s2 = sfHat(h, "Schildkampf II"), s1 = sfHat(h, "Schildkampf I");
+            info.add(s2 != null ? "SF Schildkampf II: PA mit Schild = PA-Basis + PA-Mod des Schildes + 5, eine zusätzliche Abwehraktion (WdH S. 281)."
+                    : s1 != null ? "SF Schildkampf I: PA mit Schild = PA-Basis + PA-Mod des Schildes + 3 (WdH S. 281). Schildkampf II bräuchte KK 15."
+                    : "Keine SF Schildkampf: ohne die zusätzlichen PA-Punkte aus Schildkampf I/II (Schildkampf I baut auf SF Linkhand auf, WdH S. 281).");
+        }
+        w.put("hinweise", new ArrayList<>(info));
+        w.put("talent", parier ? "Parierwaffe" : "Schild");
+    }
+
+    /**
+     * Besonderheiten eines Ausrüstungsstücks aus Arsenal/Regelwerk lesen und JEDE darin genannte Bedingung gegen den Helden prüfen:
+     * Eigenschaftsschwellen („ab KK 15“, „mindestens GE 12“, „KK von weniger als 12“, „unter …“) und genannte Sonderfertigkeiten.
+     * Jeder Satz mit einer Schwelle erscheint mit dem Wert des Helden und erfüllt/nicht erfüllt. Der volle Text wird immer mitgegeben.
+     */
+    @SuppressWarnings("unchecked")
+    static void besonderheiten(Map<String, Object> h, Map<String, Object> w, Regeln regeln, List<String> arten) {
+        String name = str(w.get("waffe"));
+        Map<String, Integer> e = h.get("E") instanceof Map<?, ?> m ? (Map<String, Integer>) m : Map.of();
+        String bes = "";
+        for (Regeln.Eintrag a : regeln.suche(name, arten)) {
+            if (!arten.contains(a.art())) continue;
+            String t = a.text().replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim();
+            var mb = java.util.regex.Pattern.compile("Besonderheit(?:en)?\\s*:\\s*(.*)$").matcher(t);
+            bes = mb.find() ? mb.group(1).trim() : "";
+            w.put("arsenal", a.quelle());
+            if (!bes.isEmpty()) break;
+        }
+        if (bes.isEmpty()) return;
+        w.put("besonderheiten", bes);
+        List<String> ok = (List<String>) w.computeIfAbsent("hinweise", k -> new ArrayList<String>());
+        List<String> schlecht = (List<String>) w.computeIfAbsent("probleme", k -> new ArrayList<String>());
+        // Der Absatz ab dem ersten Waffenmeister-Satz beschreibt die SF Waffenmeister samt ihrer Voraussetzungen („Erfordert GE 16 …“):
+        // das gilt NICHT für die Waffe selbst. Geprüft wird er nur, wenn der Held diese SF hat.
+        String[] saetze = bes.split("(?<=[.;])\\s+");
+        int wm = saetze.length;
+        for (int i = 0; i < saetze.length; i++) if (saetze[i].toLowerCase().contains("waffenmeister")) { wm = i; break; }
+        boolean hatWm = ((List<String>) h.getOrDefault("SF", List.of())).stream().anyMatch(x -> x.startsWith("Waffenmeister") && x.toLowerCase().contains(name.toLowerCase().replaceAll("\\s*\\(.*", "")));
+        if (wm < saetze.length) w.put("waffenmeister", String.join(" ", Arrays.copyOfRange(saetze, wm, saetze.length)) + (hatWm ? "" : " (gilt nur mit der SF Waffenmeister, die du für diese Waffe nicht hast)"));
+        Set<String> schon = new HashSet<>();
+        for (int si = 0; si < (hatWm ? saetze.length : wm); si++) {
+            String satz = saetze[si];
+            // „TP/KK von 10/3“ ist keine Schwelle; Eigenschaft direkt hinter „/“ überspringen
+            var ms = java.util.regex.Pattern.compile("(?:(ab|mindestens|von weniger als|weniger als|unter|über|mehr als)\\s+)?(?:einer\\s+)?(?<!/)\\b(MU|KL|IN|CH|FF|GE|KO|KK)\\b(?!\\s*/)\\s*(?:von\\s+)?(?:(weniger als|unter|über|mehr als)\\s+)?(\\d{1,2})\\b(?!\\s*/)").matcher(satz);
+            while (ms.find()) {
+                String eig = ms.group(2); Integer hat = e.get(eig);
+                if (hat == null || !schon.add(satz + eig)) continue;
+                int wert = Integer.parseInt(ms.group(4));
+                String op = (ms.group(1) == null ? "" : ms.group(1)) + (ms.group(3) == null ? "" : " " + ms.group(3));
+                boolean unten = op.contains("weniger") || op.contains("unter"), oben = op.contains("über") || op.contains("mehr");
+                boolean trifft = unten ? hat < wert : oben ? hat > wert : hat >= wert;
+                String zeile = "„" + satz.trim() + "“ – du hast " + eig + " " + hat;
+                // „ab KK 15 einhändig“: erfüllt = Vorteil; „KK von weniger als 12 …“: trifft zu = Nachteil
+                if (unten) { if (trifft) schlecht.add(zeile + ": trifft auf dich zu."); }
+                else if (trifft) { ok.add(zeile + ": erfüllt."); if (satz.matches("(?i).*einh[äa]ndig.*")) w.put("einhaendig", true); }
+                else if (satz.matches("(?i).*einh[äa]ndig.*")) schlecht.add(zeile + " (nötig " + eig + " " + wert + "): du kannst sie nur zweihändig führen.");
+                else schlecht.add(zeile + " (nötig " + eig + " " + wert + "): nicht erfüllt.");
+            }
+            // genannte Sonderfertigkeiten
+            {
+                var sf = java.util.regex.Pattern.compile("\\b(?:SF|Sonderfertigkeit)\\s+([A-ZÄÖÜ][\\wäöüß-]+(?:\\s+[IV]+)?)").matcher(satz);
+                while (sf.find()) {
+                    String n = sf.group(1);
+                    if (sfHat(h, n) == null) schlecht.add("„" + satz.trim() + "“ – die SF " + n + " hast du nicht.");
+                    else ok.add("„" + satz.trim() + "“ – SF " + n + " vorhanden.");
+                }
+            }
+        }
+        boolean zweihand = ZWEIHAND.contains(str(w.get("talent"))) || bes.matches("(?is).*(beider H[äa]nde|zweih[äa]ndig gef[üu]hrt).*");
+        if (zweihand && !Boolean.TRUE.equals(w.get("einhaendig")) && !Boolean.TRUE.equals(w.get("fern"))) w.put("zweihand", true);
+        if (ok.isEmpty()) w.remove("hinweise");
+        if (schlecht.isEmpty()) w.remove("probleme");
+    }
+
+    /** Zweihändig geführte Waffe und Schild/Parierwaffe/zweite Waffe links im selben Waffenset geht nicht. */
+    @SuppressWarnings("unchecked")
+    static void setsPruefen(List<?> waffen) {
+        for (Object o : waffen) {
+            Map<String, Object> w = (Map<String, Object>) o;
+            boolean zweihand = Boolean.TRUE.equals(w.get("zweihand")) || ZWEIHAND.contains(str(w.get("talent"))) && !Boolean.TRUE.equals(w.get("einhaendig"));
+            if (!zweihand || Boolean.TRUE.equals(w.get("fern"))) continue;
+            for (Object o2 : waffen) {
+                Map<String, Object> x = (Map<String, Object>) o2;
+                if (x == w || !Objects.equals(str(x.get("set")), str(w.get("set"))) || Boolean.TRUE.equals(x.get("fern"))) continue;
+                if (x.get("schild") != null || Boolean.TRUE.equals(x.get("links")))
+                    ((List<String>) w.computeIfAbsent("probleme", k -> new ArrayList<String>())).add("Wird zweihändig geführt, aber im selben Waffenset ist „" + x.get("waffe") + "“ für die andere Hand eingetragen: beides gleichzeitig geht nicht.");
+            }
+        }
+    }
+
     /** SF des Helden (genauer Name oder mit Zusatz, z. B. „Rüstungsgewöhnung I (Kettenhemd)“); null = hat er nicht. */
     @SuppressWarnings("unchecked")
     static String sfHat(Map<String, Object> h, String sf) {
@@ -783,6 +885,8 @@ Icons: Icons8 (icons8.com).""";
                 if (mt.find()) { ersatz = mt.group(1).trim().replaceAll("[;,.\\s]+$", ""); w.put("quelle", e.quelle()); break; }
             }
             if (!ersatz.isEmpty()) w.put("ersatz", ersatz);
+            if (w.get("schild") != null) { schildPruefen(h, w); besonderheiten(h, w, regeln, List.of("Schild", "Waffe")); continue; }
+            besonderheiten(h, w, regeln, List.of("Waffe"));
             if (Boolean.TRUE.equals(w.get("links")) && sfHat(h, "Linkhand") == null)
                 w.put("links_fehlt", "In der linken Hand (bzw. als Schild/Parierwaffe) geführt, aber die SF Linkhand fehlt. Linkhand ist auch Voraussetzung für Parierwaffen I und Schildkampf I.");
             if (w.get("taw") == null) {
@@ -792,6 +896,7 @@ Icons: Icons8 (icons8.com).""";
                 w.put("fehlt", "Kampftechnik „" + talent + "“ nicht erlernt" + (best != null ? ": nur über „" + best + "“ (TaW " + bw + ") und deutlich erschwert" : ersatz.isEmpty() ? "" : ": keine der ersatzweisen Fertigkeiten (" + ersatz + ") erlernt, nur mit massiver Erschwernis"));
             }
         }
+        setsPruefen(l);
     }
 
     /**

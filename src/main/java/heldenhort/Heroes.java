@@ -158,6 +158,17 @@ public final class Heroes {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("waffe", waffe); m.put("talent", talent); m.put("taw", tal.get(talent));
             m.put("links", "links".equalsIgnoreCase(w.getAttribute("hand")) || !List.of("", "0").contains(w.getAttribute("schild").trim()));
+            m.put("set", w.getAttribute("set"));
+            m.put("fern", w.getAttribute("name").startsWith("fk"));
+            waffen.add(m);
+        }
+        // Schilde und Parierwaffen (schildname, verwendungsArt) je Waffenset
+        for (Element w : all(held, "heldenausruestung")) {
+            String sn = w.getAttribute("schildname").trim();
+            if (sn.isEmpty() || !schon.add(sn + "|schild|" + w.getAttribute("set"))) continue;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("waffe", sn); m.put("talent", ""); m.put("schild", w.getAttribute("verwendungsArt").isBlank() ? "Schild" : w.getAttribute("verwendungsArt"));
+            m.put("set", w.getAttribute("set")); m.put("links", true);
             waffen.add(m);
         }
         h.put("waffen", waffen);
