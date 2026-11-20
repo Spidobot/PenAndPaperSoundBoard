@@ -586,7 +586,8 @@ public final class Creation {
                     break;
                 }
             List<String> f = fehlend(tester, bed, bvC, leaf);
-            return f.isEmpty() ? List.of("Voraussetzungen laut helden.jar noch nicht erfüllt") : f;
+            // Jar sagt „noch nicht sicher“, aber kein Einzelpunkt ist eindeutig offen: dann die Bedingung im Wortlaut zeigen
+            return f.isEmpty() ? List.of(lesbar(String.valueOf(bed)) + " (laut helden.jar noch nicht sicher erfüllt)") : f;
         } catch (Throwable e) { if (DEBUG_BED) System.err.println("Voraussetzung " + element + ": " + e); }
         return null;
     }

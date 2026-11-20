@@ -53,7 +53,7 @@
             <div class="prog" id="uplProg" hidden><i></i></div>
             <div class="small mut" id="uplInfo"></div>
             <p class="small mut">Nur MP3, mehrere auf einmal gehen. In der Rubrik Session landen sie in der oben gewählten Session. Gleichnamige Dateien werden ersetzt. Effekte werden nicht hier hochgeladen, sondern per FTP nach /data/audio/Effects.</p>
-            <details class="sec"><summary class="small">Effekt-Dateien prüfen</summary><div id="fxDiag"></div></details>
+            <details class="sec" open><summary class="small">Effekt-Dateien prüfen</summary><div id="fxDiag"></div></details>
           </div>
           <div class="plists">
             <div class="card plist" data-ch="music"></div>
@@ -151,7 +151,7 @@
           <h3>Spielerseite</h3>
           <div class="field"><label class="label" for="greeting">Begrüßung nach dem Anmelden ({name} = Name des Spielers, Emojis erlaubt)</label><input type="text" id="greeting" maxlength="120" placeholder="z. B. Praios zum Gruße, {name}! ☀️"></div>
         </div>
-        <details class="card tech">
+        <details class="card tech" open>
           <summary><h3 style="display:inline">Technische Detaileinstellungen</h3></summary>
           <h3>Impressum</h3>
           <div class="field"><label class="label" for="impressum">Auf beiden Anmeldeseiten verlinkt. Die eckigen Klammern durch deine Angaben ersetzen.</label><textarea id="impressum" rows="14"></textarea></div>
@@ -435,7 +435,7 @@ function renderFg(force){
        ${btn('freigegeben','Freigeben','pri')}${['STEIG','DEL'].includes(i.kind)?'':btn('geändert','Ändern','')}${btn('abgelehnt','Ablehnen','danger')}${fgEdit.has(i.id)?`<button class="btn sm" data-fgcancel="${i.id}">Abbrechen</button>`:''}</div>
        <div class="small err" data-fghint="${i.id}" hidden>Bei „Ändern“ bitte kurz ins Feld schreiben, was du geändert hast. Ohne Änderung einfach „Freigeben“ oder „Abbrechen“.</div>`}
    </div>`}).join('')}</div>`;
-  const o=fg.filter(isOpen),d=fg.filter(r=>!isOpen(r)),was=$('#fgdone')&&$('#fgdone').open;
+  const o=fg.filter(isOpen),d=fg.filter(r=>!isOpen(r)),was=!$('#fgdone')||$('#fgdone').open; // standardmäßig ausgeklappt, Zuklappen bleibt erhalten
   $('#fglist').innerHTML=(o.map(card).join('')||'<p class="mut">Keine offenen Anfragen.</p>')+
     (d.length?`<details class="card" id="fgdone"${was?' open':''}><summary><b>Erledigt</b> <span class="mut small">(${d.length})</span></summary><div style="display:grid;gap:14px;margin-top:10px">${d.map(card).join('')}</div></details>`:'');
 }
@@ -560,7 +560,7 @@ function sheetHtml(h,dialog){const s=h.sheet||{basis:{},sections:[],notizen:[]};
       <select id="owner-${esc(h.file)}" class="owner" data-file="${esc(h.file)}" style="width:auto"><option value="">– niemandem (FTP) –</option>${accts.map(a=>`<option value="${a.id}"${String(a.id)===String(h.account)?' selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
     <div class="row small"><label class="label" for="sap-${esc(h.file)}">Sonder-AP</label><input type="number" min="1" id="sap-${esc(h.file)}" class="sapv" style="width:110px" aria-label="Sonder-AP">
       <input type="text" class="sapn" placeholder="Grund (z. B. nachgebauter Held)" style="width:280px" aria-label="Grund"><button class="btn sm" data-sap>Sofort gutschreiben</button></div>
-    <details class="small"><summary>Bild für den Heldenbogen</summary><div class="hbild" data-base="/api/heroes/${encodeURIComponent(h.file)}"></div></details>
+    <details class="small" open><summary>Bild für den Heldenbogen</summary><div class="hbild" data-base="/api/heroes/${encodeURIComponent(h.file)}"></div></details>
     <dl class="kv">${Object.entries(basis).filter(([k,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
     <div class="attr">${ATTR.map(k=>`<div class="a"><span class="label">${k}</span><b>${h.E&&h.E[k]!=null?h.E[k]:'–'}</b></div>`).join('')}</div>
     ${h.meistergenehmigung&&h.meistergenehmigung.length?`<div class="note"><b>Meistergenehmigung laut XML:</b><ul class="small">${h.meistergenehmigung.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}

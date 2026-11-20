@@ -157,9 +157,16 @@ public final class Heroes {
             if (waffe.isEmpty() || talent.isEmpty() || !schon.add(waffe + "|" + talent)) continue;
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("waffe", waffe); m.put("talent", talent); m.put("taw", tal.get(talent));
+            m.put("links", "links".equalsIgnoreCase(w.getAttribute("hand")) || !List.of("", "0").contains(w.getAttribute("schild").trim()));
             waffen.add(m);
         }
         h.put("waffen", waffen);
+        List<String> ruestung = new ArrayList<>();
+        for (Element w : all(held, "heldenausruestung")) {
+            String r = w.getAttribute("ruestungsname").trim();
+            if (!r.isEmpty() && !ruestung.contains(r)) ruestung.add(r);
+        }
+        h.put("ruestung", ruestung);
         // Meldungen der Regelprüfung, die die helden.jar als Ereignis in den Helden schreibt
         // Aufbau: text="Meistergenehmigung notwendig", obj="<worum es geht>", time=<Zeitstempel>, version=…
         List<String> mg = new ArrayList<>();

@@ -271,9 +271,9 @@ function ruleBox(){const F=(S.hinweise||[]).filter(h=>h.art==='F');return F.leng
 function pickList(id,items,label,open){const ok=items.filter(i=>!i.fehlt),zu=items.filter(i=>i.fehlt);
   const row=i=>`<div class="pickrow${i.fehlt?' gesperrt':''}"><button type="button" data-pick-to="${i.to}" data-pv="${esc(i.name)}"${i.fehlt?' disabled aria-disabled="true"':''}>
       <span>${esc(i.name.replace(/\s*\(\)\s*$/,''))}${i.fehlt?`<span class="fehlt">Fehlt: ${i.fehlt.map(esc).join(' · ')}${i.quelle?` <span class="mut">(laut ${esc(i.quelle)})</span>`:''}</span>`:''}</span>${i.info?`<span class="mut small">${esc(i.info)}</span>`:''}</button>${i.ri?`<button type="button" class="ib info" data-ri="${esc(i.name)}" data-ri-info="${esc(i.info||'')}" aria-label="Was bedeutet ${esc(i.name)}?" title="Was bedeutet das?">ⓘ</button>`:''}</div>`;
-  return `<details class="pick" ${open||items.length<=40?'open':''}><summary>${label} (${ok.length} wählbar${zu.length?`, ${zu.length} noch gesperrt`:''})</summary>
+  return `<details class="pick" open><summary>${label} (${ok.length} wählbar${zu.length?`, ${zu.length} noch gesperrt`:''})</summary>
   <input type="search" class="pickq" data-pl="${id}" placeholder="Liste filtern…" aria-label="${label} filtern">
-  <div class="picklist" id="${id}">${ok.map(row).join('')}${zu.length?`<div class="pickhead">Noch gesperrt: Voraussetzungen fehlen</div>${zu.map(row).join('')}`:''}</div></details>`}
+  <div class="picklist" id="${id}">${ok.map(row).join('')}${zu.length?`<div class="pickhead">Noch gesperrt (bei jedem Eintrag steht in Rot, was genau fehlt)</div>${zu.map(row).join('')}`:''}</div></details>`}
 /** gesperrt-Prüfung vor dem Hinzufügen (auch beim Tippen in das Feld) */
 function gesperrt(liste,name){const x=(liste||[]).find(v=>v.name===name);return x&&x.fehlt?x:null}
 function renderStep(){LS.set('hh-step-'+D.id,step);
@@ -297,7 +297,7 @@ function renderStep(){LS.set('hh-step-'+D.id,step);
     <div class="row" style="flex-wrap:nowrap"><input type="text" id="sname" list="slist" placeholder="Sonderfertigkeit (${S.sfMoeglich.filter(x=>!x.fehlt).length} wählbar)" aria-label="Sonderfertigkeit"><select id="skart" style="width:auto" aria-label="Bezahlen mit"><option value="">Bezahlen mit…</option><option>GP</option><option>AP</option></select><button class="btn pri" id="sadd">Hinzufügen</button></div>
     <datalist id="slist">${S.sfMoeglich.map(x=>`<option value="${esc(x.name)}">${x.ap} AP</option>`).join('')}</datalist>
     ${pickList('spl',S.sfMoeglich.map(x=>({name:x.name,info:x.ap+' AP',to:'sname',ri:1,fehlt:x.fehlt,quelle:x.quelle})),'Wählbare Sonderfertigkeiten')}
-    <details class="sec"><summary class="small mut">Aus Rasse, Kultur und Profession (${fix.length})</summary><p class="small">${fix.map(x=>esc(x.name)).join(', ')}</p></details>`}
+    <details class="sec" open><summary class="small mut">Aus Rasse, Kultur und Profession (${fix.length})</summary><p class="small">${fix.map(x=>esc(x.name)).join(', ')}</p></details>`}
   if(step===3){b.innerHTML=`<div class="spread"><h2>Talente</h2><input type="search" id="tq" placeholder="Talent suchen…" style="width:220px" aria-label="Talent suchen"></div>
     ${ruleBox()}
     <p class="small mut">Die Regeln prüft die helden.jar: Bei der Erstellung darf ein Talent höchstens um 2 Punkte gesteigert werden, und nur begrenzt viele Kampf- bzw. körperliche Talente (die genaue Meldung erscheint oben, sobald etwas nicht passt). „+1 kostet“ rechnet ebenfalls die helden.jar.</p>
@@ -492,7 +492,7 @@ $('#mineList').onclick=e=>{if(e.target.closest('[data-hdel]'))return;const a=e.t
   const b=e.target.closest('[data-h]');if(!b)return;const h=mine.find(x=>x.file===b.dataset.h);const s=h.sheet||{basis:{},sections:[]};
   $('#mineSheet').hidden=false;
   $('#mineSheet').innerHTML=`<h2>${esc(h.name)}</h2><dl class="kv">${Object.entries({...s.basis,'Profession':h.profession}).filter(([k,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>${waffenBox(h)}
-    ${s.sections.map(sec=>`<details class="sec"><summary><b>${esc(sec.title)}</b> <span class="mut small">${sec.rows.length}</span></summary><div class="tw"><table class="small"><tbody>${sec.rows.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td class="mono">${esc(r.value)}</td><td class="mut">${esc(r.details)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')}`;
+    ${s.sections.map(sec=>`<details class="sec" open><summary><b>${esc(sec.title)}</b> <span class="mut small">${sec.rows.length}</span></summary><div class="tw"><table class="small"><tbody>${sec.rows.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td class="mono">${esc(r.value)}</td><td class="mut">${esc(r.details)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')}`;
   $('#mineSheet').scrollIntoView({behavior:'smooth'})};
 
 /* ---------- Termine ---------- */

@@ -748,12 +748,29 @@ Icons: Icons8 (icons8.com).""";
 
     static final String TIERART = "Tierart: ", WESEN = "Wesen: ";
 
+    /** SF des Helden (genauer Name oder mit Zusatz, z. B. „Rüstungsgewöhnung I (Kettenhemd)“); null = hat er nicht. */
+    @SuppressWarnings("unchecked")
+    static String sfHat(Map<String, Object> h, String sf) {
+        for (String s : (List<String>) h.getOrDefault("SF", List.of()))
+            if (s.equals(sf) || s.startsWith(sf + ":") || s.startsWith(sf + " (")) return s; // „Rüstungsgewöhnung I“ passt nicht auf „… II“
+        return null;
+    }
+
     /**
      * Waffen ohne erlernte Kampftechnik: Hinweis mit den ersatzweise verwendbaren Fertigkeiten aus dem Regelwerk.
      * Führen darf man die Waffe trotzdem, aber nur über eine verwandte Kampftechnik und deutlich erschwert.
      */
     @SuppressWarnings("unchecked")
     static void waffenPruefen(Map<String, Object> h, Regeln regeln) {
+        // Rüstung: Behinderung je nach Rüstungsgewöhnung (WdH S. 280)
+        if (h.get("ruestung") instanceof List<?> rl && !rl.isEmpty()) {
+            String rg3 = sfHat(h, "Rüstungsgewöhnung III"), rg2 = sfHat(h, "Rüstungsgewöhnung II"), rg1 = sfHat(h, "Rüstungsgewöhnung I");
+            h.put("ruestungInfo", rg3 != null ? "Rüstungsgewöhnung III: jede Rüstung behindert um 2 Punkte weniger (BE –2), INI-Abzug nur (BE–2)/2 (WdH S. 280)."
+                    : rg2 != null ? "Rüstungsgewöhnung II: jede Rüstung behindert um 1 Punkt weniger (BE –1) (WdH S. 280)."
+                    : rg1 != null ? rg1 + ": nur der gewählte Rüstungstyp behindert um 1 Punkt weniger (BE –1); alle anderen Rüstungen voll (WdH S. 280)."
+                    : "Keine Rüstungsgewöhnung: jede Rüstung behindert mit ihrer vollen BE laut Rüstungstabelle (Abzüge auf AT, PA, INI und körperliche Talente).");
+            h.put("ruestungOk", rg3 != null || rg2 != null || rg1 != null);
+        }
         if (!(h.get("waffen") instanceof List<?> l)) return;
         Map<String, Integer> taw = h.get("T") instanceof Map<?, ?> t ? (Map<String, Integer>) t : Map.of();
         for (Object o : l) {
@@ -766,6 +783,8 @@ Icons: Icons8 (icons8.com).""";
                 if (mt.find()) { ersatz = mt.group(1).trim().replaceAll("[;,.\\s]+$", ""); w.put("quelle", e.quelle()); break; }
             }
             if (!ersatz.isEmpty()) w.put("ersatz", ersatz);
+            if (Boolean.TRUE.equals(w.get("links")) && sfHat(h, "Linkhand") == null)
+                w.put("links_fehlt", "In der linken Hand (bzw. als Schild/Parierwaffe) geführt, aber die SF Linkhand fehlt. Linkhand ist auch Voraussetzung für Parierwaffen I und Schildkampf I.");
             if (w.get("taw") == null) {
                 // ersatzweise Kampftechnik, die der Held hat (höchster TaW)
                 String best = null; int bw = Integer.MIN_VALUE;

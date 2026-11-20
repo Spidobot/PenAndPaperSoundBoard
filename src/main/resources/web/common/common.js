@@ -21,9 +21,9 @@ async function api(path,opt={}){
 }
 const mmss=s=>!isFinite(s)?'--:--':String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0');
 /** Geführte Waffen mit Kampftechnik: grün = erlernt, rot = nicht erlernt (nur ersatzweise und erschwert, laut Regelwerk) */
-function waffenBox(h){const w=h.waffen||[];if(!w.length)return'';
-  return `<details open class="sec"><summary><b>Waffen und Kampftechniken</b> <span class="mut small">${w.length}</span></summary><ul class="waffen">${w.map(x=>`<li class="${x.fehlt?'nein':'ja'}"><b>${esc(x.waffe)}</b> · ${esc(x.talent)}${x.taw!=null?` (TaW ${x.taw})`:''}
-    ${x.fehlt?`<div class="fehlt">${esc(x.fehlt)}</div>`:''}${x.ersatz?`<div class="small mut">Ersatzweise verwendbar: ${esc(x.ersatz)}${x.quelle?' · '+esc(x.quelle):''}</div>`:''}</li>`).join('')}</ul></details>`}
+function waffenBox(h){const w=h.waffen||[],r=h.ruestung||[];if(!w.length&&!r.length)return'';
+  return `<details open class="sec"><summary><b>Waffen, Rüstung und Voraussetzungen</b> <span class="mut small">${w.length+r.length}</span></summary><ul class="waffen">${r.length?`<li class="${h.ruestungOk?'ja':'nein'}"><b>Rüstung:</b> ${r.map(esc).join(', ')}<div class="${h.ruestungOk?'small mut':'fehlt'}">${esc(h.ruestungInfo||'')}</div></li>`:''}${w.map(x=>`<li class="${x.fehlt?'nein':'ja'}"><b>${esc(x.waffe)}</b> · ${esc(x.talent)}${x.taw!=null?` (TaW ${x.taw})`:''}
+    ${x.fehlt?`<div class="fehlt">${esc(x.fehlt)}</div>`:''}${x.links_fehlt?`<div class="fehlt">${esc(x.links_fehlt)}</div>`:''}${x.ersatz?`<div class="small mut">Ersatzweise verwendbar: ${esc(x.ersatz)}${x.quelle?' · '+esc(x.quelle):''}</div>`:''}</li>`).join('')}</ul></details>`}
 /** Gesamt-AP lesbar, z. B. „5.000 AP“ */
 const fmtAp=ap=>ap!=null&&ap!==''?Number(ap).toLocaleString('de-AT')+' AP':'– AP';
 const ICON=k=>`/common/icons/${k}.png`;
@@ -167,7 +167,7 @@ async function regelInfo(name,info,editable){let d=document.getElementById('riDl
   if(editable){box.innerHTML='<h3>Eigener Text</h3><p class="mut">Für alle Spieler, steht über dem Regeltext (was es regeltechnisch bewirkt und was es im Spiel bedeutet):</p><div id="riEd"></div>'
       +(rt?`<h3>Aus dem Regelwerk</h3>${rt}`:'<p class="mut">Kein Regeltext gefunden (Datei unter /data/regeln, siehe Konfiguration).</p>');
     bgEditor(box.querySelector('#riEd'),r.text,async html=>{await api('/api/regelinfo',{method:'PUT',body:{name,text:html}})},'Text')}
-  else if(meister)box.innerHTML='<h3>Vom Meister</h3>'+r.text+(rt?`<details><summary>Aus dem Regelwerk</summary>${rt}</details>`:'');
+  else if(meister)box.innerHTML='<h3>Vom Meister</h3>'+r.text+(rt?`<details open><summary>Aus dem Regelwerk</summary>${rt}</details>`:'');
   else box.innerHTML=rt?'<h3>Aus dem Regelwerk</h3>'+rt:'<span class="mut">Dazu gibt es noch keinen Text. Schau in die Wiki Aventurica.</span>'}
 
 /* Zahlenfelder bekommen links ein rotes − und rechts ein grünes + (statt der winzigen Pfeile).
