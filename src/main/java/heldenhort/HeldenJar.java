@@ -85,7 +85,7 @@ public final class HeldenJar {
     public synchronized String update() {
         String result;
         try {
-            if (!present()) throw new IllegalStateException("helden.jar fehlt");
+            if (!present()) throw new IllegalStateException("Die helden.jar fehlt auf dem Server. Der Meister muss sie in der Konfiguration aktualisieren oder per FTP ablegen.");
             String local = md5(jar);
             Map<String, String> info = query("index.php?pw=&md5=" + local);
             String url = info.get("updatepath"), md5 = info.get("md5"), text = info.getOrDefault("updatetext", "");

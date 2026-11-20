@@ -60,7 +60,7 @@ public final class Polls {
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
             String title = App.str(b.get("title"));
             List<?> opts = b.get("options") instanceof List<?> l ? l : List.of();
-            if (title.isEmpty()) throw new IllegalArgumentException("Titel fehlt");
+            if (title.isEmpty()) throw new IllegalArgumentException("Bitte einen Titel eintragen.");
             List<String> labels = new ArrayList<>();
             for (Object o : opts) { String s = App.str(o); if (!s.isEmpty()) labels.add(s); }
             if (labels.isEmpty()) throw new IllegalArgumentException("Mindestens einen Termin angeben");
@@ -75,10 +75,10 @@ public final class Polls {
         });
         meister.post("/api/polls/{id}/fix", ctx -> {
             var p = db.query("SELECT * FROM poll WHERE id=?", ctx.pathParam("id"));
-            if (p.isEmpty()) throw new NotFoundResponse("Abstimmung unbekannt");
+            if (p.isEmpty()) throw new NotFoundResponse("Diese Terminabstimmung gibt es nicht mehr, vermutlich wurde sie gelöscht.");
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
             var opt = db.query("SELECT * FROM poll_option WHERE id=? AND poll=?", b.get("option"), ctx.pathParam("id"));
-            if (opt.isEmpty()) throw new IllegalArgumentException("Termin unbekannt");
+            if (opt.isEmpty()) throw new IllegalArgumentException("Diesen Termin gibt es in der Abstimmung nicht mehr.");
             double hours = b.get("hours") instanceof Number n ? n.doubleValue() : 4;
             if (hours <= 0 || hours > 48) throw new IllegalArgumentException("Dauer zwischen 0 und 48 Stunden");
             java.time.LocalDateTime start;

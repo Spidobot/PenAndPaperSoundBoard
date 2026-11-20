@@ -83,7 +83,7 @@ public final class Heroes {
 
     public Path file(String file) {
         Path p = dir.resolve(file).normalize();
-        if (!p.getParent().equals(dir.normalize()) || !Files.isRegularFile(p)) throw new IllegalArgumentException("Datei unbekannt");
+        if (!p.getParent().equals(dir.normalize()) || !Files.isRegularFile(p)) throw new IllegalArgumentException("Diese Datei gibt es nicht mehr, vermutlich wurde sie gelöscht oder umbenannt. Bitte Seite neu laden.");
         return p;
     }
 

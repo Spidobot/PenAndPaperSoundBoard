@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261120f">
+<link rel="stylesheet" href="/common/app.css?v=20261120h">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -142,6 +142,7 @@
           <div class="field"><label class="label" for="mailTo">Hierhin gehen alle Nachrichten an den Meister</label><input type="email" id="mailTo"></div>
           <div class="field"><label class="label" for="steigerLimit">Steigerungen ohne Freigabe</label><input type="number" id="steigerLimit" min="0" max="999" style="max-width:160px"></div>
           <p class="small mut">Wie oft eine Fertigkeit seit dem letzten Aussenden gesteigert werden darf, bevor du freigeben musst (mit Mail an dich). 0 = keine Grenze.</p>
+          <div class="field"><label class="label" for="autoUebernehmen">Helden übernehmen</label><select id="autoUebernehmen" style="max-width:420px"><option value="1">automatisch, sobald nichts mehr zu genehmigen ist</option><option value="0">immer selbst mit „Übernehmen“</option></select></div>
         </div>
         <div class="card">
           <h3>Spielerseite</h3>
@@ -174,7 +175,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261120f"></script>
+<script src="/common/common.js?v=20261120h"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -410,7 +411,8 @@ function renderHeroes(){
 $('#htab').onclick=e=>{const b=e.target.closest('[data-h]');if(b){selHero=b.dataset.h;renderHeroes()}};
 
 /* ---------- Freigaben ---------- */
-const ST={offen:'warn',freigegeben:'ok',geändert:'ok',abgelehnt:'warn'};
+const ST={offen:'warn',freigegeben:'ok',geändert:'ok',abgelehnt:'warn',zurückgezogen:'',überholt:''};
+const fgEdit=new Set(); // MG-Punkte, bei denen „Entscheidung ändern“ geklickt wurde
 let fg=[];
 async function loadFg(){try{fg=await api('/api/approvals')}catch(e){return}renderFg()}
 function renderFg(){
@@ -424,14 +426,15 @@ function renderFg(){
      const btn=(s,l,c)=>i.status===s?'':`<button class="btn sm ${c}" data-fg="${i.id}" data-s="${s}">${l}</button>`;
      return `<div style="display:grid;gap:8px;border-top:1px solid var(--line);padding-top:10px">
      <div class="spread"><span>${esc(i.text)}</span><span class="pill ${ST[i.status]}">${esc(i.status)}</span></div>
-     ${fix?(i.comment?`<div class="small mut">${esc(i.comment)}</div>`:''):`<div class="row" style="flex-wrap:nowrap"><input type="text" placeholder="Kommentar an den Spieler (bei Ändern Pflicht)" value="${esc(i.comment)}" data-fgc="${i.id}">
+     ${(i.status!=='offen'&&!(i.kind==='MG'&&fgEdit.has(i.id)))?`<div class="spread small mut"><span>${esc(i.comment||'')}</span>${i.kind==='MG'&&!['zurückgezogen','überholt'].includes(i.status)?`<button class="btn sm" data-fgedit="${i.id}">Entscheidung ändern</button>`:''}</div>`:fix?'':`<div class="row" style="flex-wrap:nowrap"><input type="text" placeholder="Kommentar an den Spieler (bei Ändern Pflicht)" value="${esc(i.comment)}" data-fgc="${i.id}">
        ${btn('freigegeben','Freigeben','pri')}${['STEIG','DEL'].includes(i.kind)?'':btn('geändert','Ändern','')}${btn('abgelehnt','Ablehnen','danger')}</div>`}
    </div>`}).join('')}</div>`;
   const o=fg.filter(isOpen),d=fg.filter(r=>!isOpen(r)),was=$('#fgdone')&&$('#fgdone').open;
   $('#fglist').innerHTML=(o.map(card).join('')||'<p class="mut">Keine offenen Anfragen.</p>')+
     (d.length?`<details class="card" id="fgdone"${was?' open':''}><summary><b>Erledigt</b> <span class="mut small">(${d.length})</span></summary><div style="display:grid;gap:14px;margin-top:10px">${d.map(card).join('')}</div></details>`:'');
 }
-$('#fglist').onclick=async e=>{const b=e.target.closest('[data-fg]');if(!b||b.disabled)return;
+$('#fglist').addEventListener('click',e=>{const x=e.target.closest('[data-fgedit]');if(x){fgEdit.add(+x.dataset.fgedit);renderFg()}},true);
+$('#fglist').onclick=async e=>{const b=e.target.closest('[data-fg]');if(!b||b.disabled)return;fgEdit.delete(+b.dataset.fg);
   const row=b.parentElement;row.querySelectorAll('button').forEach(x=>x.disabled=true);const txt=b.textContent;b.textContent='…';
   try{await api('/api/approvals/items/'+b.dataset.fg,{method:'POST',body:{status:b.dataset.s,comment:$(`[data-fgc="${b.dataset.fg}"]`).value}});
     toast(txt+': gespeichert. Der Spieler bekommt eine Mail.');document.activeElement&&document.activeElement.blur();await loadFg()}
@@ -548,7 +551,7 @@ function sheetHtml(h,dialog){const s=h.sheet||{basis:{},sections:[],notizen:[]};
     <div class="attr">${ATTR.map(k=>`<div class="a"><span class="label">${k}</span><b>${h.E&&h.E[k]!=null?h.E[k]:'–'}</b></div>`).join('')}</div>
     ${h.meistergenehmigung&&h.meistergenehmigung.length?`<div class="note"><b>Meistergenehmigung laut XML:</b><ul class="small">${h.meistergenehmigung.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
     ${s.sections.map(sec=>`<details open class="sec"><summary><b>${esc(sec.title)}</b> <span class="mut small">${sec.rows.length}</span></summary>
-      <div class="tw"><table class="small"><tbody>${sec.rows.map(r=>`<tr data-txt="${esc((r.name+' '+r.value+' '+r.details).toLowerCase())}"><td><b>${esc(r.name)}</b></td><td class="mono">${esc(r.value)}</td><td class="mut">${esc(r.details)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')||'<p class="mut">Keine Werte in der XML gefunden.</p>'}
+      <div class="tw"><table class="small"><tbody>${sec.rows.map(r=>`<tr data-txt="${esc((r.name+' '+r.value+' '+r.details).toLowerCase())}"><td><b>${esc(r.name)}</b>${/vorteil|nachteil|sonderfertig/i.test(sec.title)?` <button type="button" class="ib info" data-rim="${esc(r.name)}" title="Was bedeutet das? (Text pflegen)" aria-label="Info zu ${esc(r.name)}">ⓘ</button>`:''}</td><td class="mono">${esc(r.value)}</td><td class="mut">${esc(r.details)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')||'<p class="mut">Keine Werte in der XML gefunden.</p>'}
     ${s.notizen&&s.notizen.length?`<details open class="sec"><summary><b>Notizen</b></summary><ul class="small">${s.notizen.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></details>`:''}
     <details open class="sec"><summary><b>Backgroundstory</b></summary><div class="bgview"></div></details>
     <details open class="sec"><summary><b>Zusatzinfos</b> <span class="mut small">Prinzipientreue, Geiz, Eitelkeit … genauer beschrieben</span></summary><div class="exview"></div></details>`}
@@ -570,7 +573,8 @@ function fillSheet(root,h){
     if(e.target.closest('[data-take]')){try{await api('/api/heroes/'+encodeURIComponent(h.file)+'/accept',{method:'POST'});toast('Held übernommen');h.status='übernommen';loadHeroes()}catch(x){toastErr(x.message)}}}}
 function openSheet(file){const h=heroes.find(x=>x.file===file);if(!h)return;const d=$('#sheet');
   $('#sheetbody').innerHTML=sheetHtml(h,true);fillSheet($('#sheetbody'),h);if(!d.open)d.showModal();$('#sheetbody .sq').focus()}
-document.addEventListener('click',e=>{const b=e.target.closest('[data-sheet]');if(b)openSheet(b.dataset.sheet)});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-sheet]');if(b)openSheet(b.dataset.sheet);
+  const i=e.target.closest('[data-rim]');if(i)regelInfo(i.dataset.rim,'',true)});
 $('#sheet').addEventListener('click',e=>{if(e.target===$('#sheet'))$('#sheet').close()});
 
 /* ---------- Spieler-Konten ---------- */
@@ -629,7 +633,7 @@ $('#pollList').onclick=async e=>{const b=e.target.closest('button');if(!b)return
 setInterval(()=>{if(location.hash==='#m-termine'&&!$('#pollForm').contains(document.activeElement))loadPolls()},15000);
 
 /* ---------- Konfiguration ---------- */
-const CFG=['steigerLimit','greeting','impressum','mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];
+const CFG=['autoUebernehmen','steigerLimit','greeting','impressum','mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];
 // Speichern erst nach erfolgreichem Laden: sonst würden leere Felder die gespeicherte Konfiguration überschreiben
 async function loadCfg(){const sb=$('#cfg button[type=submit]');sb.disabled=true;$('#cfgErr').hidden=true;
   try{const c=await api('/api/config');CFG.forEach(k=>$('#'+k).value=c[k]??'');sb.disabled=false;saveSt('','');loadJar()}

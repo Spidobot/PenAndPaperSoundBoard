@@ -6,14 +6,15 @@
 <title>Heldenhort</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261120f">
+<link rel="stylesheet" href="/common/app.css?v=20261120h">
 <style>
 html,body{margin:0}
 .pl .inner{width:min(1200px,100%)}
 .costs{display:flex;flex-wrap:wrap;gap:8px}
 .cost{border:1px solid var(--line);border-radius:999px;padding:3px 12px;background:var(--panel);font-size:.9rem}
 .cost.over{border-color:var(--bad);color:var(--bad)}
-.ctlgrid{display:grid;gap:4px 12px;align-items:center}
+.ctlgrid{display:grid;gap:4px 12px;align-items:center;justify-content:start}
+.ctlgrid>div{padding:2px 0}
 .ctlgrid .h{font-size:.8rem;color:var(--mut);font-weight:700}
 .opts{display:grid;gap:6px}
 .opt{display:flex;gap:8px;align-items:center}
@@ -121,12 +122,14 @@ html,body{margin:0}
 </div></div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261120f"></script>
+<script src="/common/common.js?v=20261120h"></script>
 <script>
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const VIEWS=['s-login','s-home','s-drafts','s-create','s-mine','s-konto','s-stream','s-termine'];
 let me=null;
-function show(v){VIEWS.forEach(x=>$('#'+x).hidden=x!==v);({'s-drafts':loadDrafts,'s-mine':loadMine,'s-konto':loadKonto,'s-termine':loadPolls})[v]?.();window.scrollTo(0,0)}
+function show(v){({'s-mine':'#mineList','s-drafts':'#draftList','s-termine':'#pollList'})[v]&&($(({'s-mine':'#mineList','s-drafts':'#draftList','s-termine':'#pollList'})[v]).innerHTML='<p class="mut">lädt …</p>');
+  if(v==='s-mine'){$('#mineSheet').hidden=true}
+  VIEWS.forEach(x=>$('#'+x).hidden=x!==v);({'s-drafts':loadDrafts,'s-mine':loadMine,'s-konto':loadKonto,'s-termine':loadPolls})[v]?.();window.scrollTo(0,0)}
 function go(v){if(location.hash.slice(1)===v)guard(v);else location.hash=v}
 addEventListener('hashchange',()=>guard(location.hash.slice(1)||'s-home'));
 async function guard(v){
@@ -192,6 +195,7 @@ function renderRkp(){
    <div class="grid2">${rkpStep('rasse','Rasse')}${rkpStep('kultur','Kultur')}${rkpStep('profession','Profession')}</div>
    ${(R.auswahlenFertig||[]).length?`<div class="small mut">Getroffene Auswahlen: ${R.auswahlenFertig.map(a=>esc(a.title)).join(' · ')} <button class="btn sm" id="ausReset">Neu wählen</button></div>`:''}
    ${p?pendingHtml(p):''}`;
+  verteilRest();
 }
 function pendingHtml(p){
   // Bedienelemente nach Raster gruppieren (so wie die helden.jar sie anordnet)
@@ -199,6 +203,7 @@ function pendingHtml(p){
   for(const c of p.controls){const g=c.grid??'seq';if(!cur||cur.g!==g){cur={g,items:[]};groups.push(cur)}cur.items.push(c)}
   const ctl=c=>{
     if(c.type==='label')return `<span>${esc(c.label)}</span>`;
+    if(c.type==='value')return `<span class="mono small mut">${esc(c.label)}</span>`;
     if(c.type==='list')return c.multi?`<div class="opts">${c.items.map((x,i)=>`<label class="opt"><input type="checkbox" data-cid="${c.id}" data-li="${i}"${c.selected.includes(i)?' checked':''}> ${esc(x)}</label>`).join('')}</div>`
       :`<div class="opts">${c.items.map((x,i)=>`<label class="opt"><input type="radio" name="l${c.id}" data-cid="${c.id}" data-li="${i}"${c.selected.includes(i)?' checked':''}> ${esc(x)}</label>`).join('')}</div>`;
     if(c.type==='radio')return `<input type="radio" name="g${c.grid}-${c.col}" data-cid="${c.id}" data-btn${c.selected?' checked':''}${c.enabled?'':' disabled'} aria-label="${esc(c.label||'wählen')}">${c.label?' '+esc(c.label):''}`;
@@ -209,14 +214,23 @@ function pendingHtml(p){
   const body=groups.map(g=>{if(g.g==='seq')return g.items.map(ctl).join('<br>');
     const cols=Math.max(...g.items.map(c=>c.col??0))+1;
     return `<div class="ctlgrid" style="grid-template-columns:repeat(${cols},auto)">${g.items.map(c=>`<div style="grid-row:${(c.row??0)+1};grid-column:${(c.col??0)+1}" class="${(c.row??0)===0&&c.type==='label'?'h':''}">${ctl(c)}</div>`).join('')}</div>`}).join('');
-  return `<div class="card" style="border-color:var(--acc)"><h3>Auswahl ${p.index+1}: ${esc(p.title)}</h3>${p.error?`<p class="err">${esc(p.error)}</p>`:''}${body}
-    <div class="row"><button class="btn pri" id="ausOk">Übernehmen</button></div></div>`}
+  const tot=verteilTotal(p);
+  return `<div class="card" style="border-color:var(--acc)"><h3>Auswahl ${p.index+1}: ${esc(p.title)}</h3>
+    ${tot!=null?`<div class="budget" id="verteil" data-total="${tot}"></div>`:''}
+    ${p.error?`<p class="err">${esc(p.error)}</p>`:''}<div class="zebra-rows">${body}</div>
+    <div class="row"><button class="btn pri" id="ausOk">Übernehmen</button><span class="small" id="ausWhy"></span></div></div>`}
+/* „Zu verteilen“: Gesamtpunkte stehen bei der helden.jar in einem Textfeld direkt hinter dem Label */
+function verteilTotal(p){const i=p.controls.findIndex(c=>c.type==='label'&&/zu verteilen/i.test(c.label));if(i<0)return null;
+  const v=p.controls.slice(i+1).find(c=>c.type==='value');return v&&/^-?\d+$/.test(v.label)?+v.label:null}
+function verteilRest(){const b=$('#verteil');if(!b)return null;const tot=+b.dataset.total;let used=0;$$('#rkp input[type=number][data-cid]').forEach(x=>used+=(+x.value||0));
+  const rest=tot-used;b.innerHTML=`<span class="cost${rest<0?' over':''}"><b>Zu verteilen</b> ${tot} · verteilt ${used} · <b>${rest>=0?'noch '+rest+' frei':(-rest)+' zu viel'}</b></span>`;
+  const ok=$('#ausOk'),why=$('#ausWhy');if(ok){ok.disabled=rest!==0;why.textContent=rest<0?`Du hast ${-rest} Punkte zu viel verteilt.`:rest>0?`Noch ${rest} Punkte verteilen, dann geht es weiter.`:''}return rest}
 $('#rkp').addEventListener('change',e=>{const t=e.target;
   if(t.id==='rk-g'){inp.geschlecht=t.value;['rasse','kultur','profession'].forEach(k=>delete inp[k]);inp.answers=[];rkp()}
   else if(t.id==='rk-s'){inp.setting=t.value;['rasse','kultur','profession'].forEach(k=>delete inp[k]);inp.answers=[];rkp()}
   else if(t.dataset.k){const order=['rasse','kultur','profession'],i=order.indexOf(t.dataset.k);inp[t.dataset.k]={name:t.value,varianten:[]};order.slice(i+1).forEach(k=>delete inp[k]);inp.answers=[];rkp()}
   else if(t.dataset.v){const order=['rasse','kultur','profession'],i=order.indexOf(t.dataset.v);inp[t.dataset.v].varianten=t.value?[t.value]:[];order.slice(i+1).forEach(k=>delete inp[k]);inp.answers=[];rkp()}});
-$('#rkp').addEventListener('input',e=>{if(e.target.id==='rk-name')inp.name=e.target.value});
+$('#rkp').addEventListener('input',e=>{if(e.target.id==='rk-name')inp.name=e.target.value;if(e.target.dataset.cid)verteilRest()});
 $('#rkp').addEventListener('focusout',e=>{if(e.target.id==='rk-name'&&R&&R.next!=='auswahl')rkp()});
 $('#rkp').addEventListener('click',e=>{
   if(e.target.id==='ausReset'){inp.answers=[];rkp()}
@@ -253,9 +267,9 @@ function fillTK(){for(const t of S.talente){const el=document.querySelector(`[da
 /* Meldungen der Regelprüfung (Fehler) in jedem Schritt oben anzeigen */
 function ruleBox(){const F=(S.hinweise||[]).filter(h=>h.art==='F');return F.length?`<div class="hint F"><b>Regelprüfung der helden.jar:</b><ul>${F.map(h=>`<li>${esc(h.text)}</li>`).join('')}</ul></div>`:''}
 /* Auswahlliste zum Durchsehen und Anklicken (statt nur Vorschläge beim Tippen) */
-function pickList(id,items,label){return `<details class="pick" ${items.length<=40?'open':''}><summary>${label} (${items.length}) anzeigen</summary>
+function pickList(id,items,label,open){return `<details class="pick" ${open||items.length<=40?'open':''}><summary>${label} (${items.length})</summary>
   <input type="search" class="pickq" data-pl="${id}" placeholder="Liste filtern…" aria-label="${label} filtern">
-  <div class="picklist" id="${id}">${items.map(i=>`<button type="button" data-pick-to="${i.to}" data-pv="${esc(i.name)}"><span>${esc(i.name)}</span>${i.info?`<span class="mut small">${esc(i.info)}</span>`:''}</button>`).join('')}</div></details>`}
+  <div class="picklist" id="${id}">${items.map(i=>`<div class="pickrow"><button type="button" data-pick-to="${i.to}" data-pv="${esc(i.name)}"><span>${esc(i.name)}</span>${i.info?`<span class="mut small">${esc(i.info)}</span>`:''}</button>${i.ri?`<button type="button" class="ib info" data-ri="${esc(i.name)}" data-ri-info="${esc(i.info||'')}" aria-label="Was bedeutet ${esc(i.name)}?" title="Was bedeutet das?">ⓘ</button>`:''}</div>`).join('')}</div></details>`}
 function renderStep(){LS.set('hh-step-'+D.id,step);
   $('#steps').innerHTML=STEPS.map((s,i)=>`<button data-st="${i}"${i===step?' aria-current="step"':''}>${i+1}. ${s}</button>`).join('')+`<button id="toRkp" class="small">↺ Herkunft neu wählen</button>`;
   const b=$('#stepbody');
@@ -264,16 +278,19 @@ function renderStep(){LS.set('hh-step-'+D.id,step);
     <p class="small mut">Werte inklusive Rassen- und Kulturmodifikatoren. Kosten rechnet die helden.jar.</p>`;
   if(step===1)b.innerHTML=`<h2>Vor- & Nachteile</h2>${ruleBox()}
     <div class="tw"><table><tbody>${S.vorteile.map(v=>`<tr><td><b>${esc(v.name)}</b></td><td class="mono">${esc(v.value)}</td><td><button class="btn sm danger" data-vdel="${esc(v.name)}">Entfernen</button></td></tr>`).join('')||'<tr><td class="empty">Keine.</td></tr>'}</tbody></table></div>
-    <div class="row" style="flex-wrap:nowrap"><input type="text" id="vname" list="vlist" placeholder="Vorteil oder Nachteil (${S.vorteileMoeglich.length} wählbar)" aria-label="Vorteil oder Nachteil"><input type="text" id="vval" placeholder="Wert/Stufe, falls nötig" style="width:200px" aria-label="Wert"><button class="btn pri" id="vadd">Hinzufügen</button></div>
-    <datalist id="vlist">${S.vorteileMoeglich.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
-    ${pickList('vpl',S.vorteileMoeglich.map(n=>({name:n,to:'vname'})),'Wählbare Vor- und Nachteile')}
+    <div class="row" style="flex-wrap:nowrap"><input type="text" id="vname" list="vlist" placeholder="Vorteil oder Nachteil (aus den Listen unten anklicken)" aria-label="Vorteil oder Nachteil"><input type="text" id="vval" placeholder="Wert/Stufe, falls nötig" style="width:200px" aria-label="Wert"><button class="btn pri" id="vadd">Hinzufügen</button></div>
+    <datalist id="vlist">${S.vorteileMoeglich.map(v=>`<option value="${esc(v.name)}">`).join('')}</datalist>
+    <div class="grid2" style="margin-top:10px">
+      <div><h3>Vorteile <span class="small mut">(kosten GP)</span></h3>${pickList('vpl',S.vorteileMoeglich.filter(v=>!v.nachteil).map(v=>({name:v.name,info:v.gp!=null?v.gp+' GP':'',to:'vname',ri:1})),'Wählbare Vorteile',true)}</div>
+      <div><h3>Nachteile <span class="small mut">(bringen GP)</span></h3>${pickList('npl',S.vorteileMoeglich.filter(v=>v.nachteil).map(v=>({name:v.name,info:v.gp!=null?'+'+v.gp+' GP':'',to:'vname',ri:1})),'Wählbare Nachteile',true)}</div>
+    </div>
     <p class="small mut">Bei Nachteilen wie „Goldgier“ die Stufe als Wert angeben, bei „Herausragender Sinn“ z. B. „Gehör“.</p>`;
   if(step===2){const own=S.sf.filter(x=>x.eigene),fix=S.sf.filter(x=>!x.eigene);
     b.innerHTML=`<h2>Sonderfertigkeiten</h2>${ruleBox()}
     <div class="tw"><table><tbody>${own.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td><button class="btn sm danger" data-sdel="${esc(x.name)}">Entfernen</button></td></tr>`).join('')||'<tr><td class="empty">Noch keine eigenen gewählt.</td></tr>'}</tbody></table></div>
     <div class="row" style="flex-wrap:nowrap"><input type="text" id="sname" list="slist" placeholder="Sonderfertigkeit (${S.sfMoeglich.length} wählbar)" aria-label="Sonderfertigkeit"><select id="skart" style="width:auto" aria-label="Bezahlen mit"><option value="">Bezahlen mit…</option><option>GP</option><option>AP</option></select><button class="btn pri" id="sadd">Hinzufügen</button></div>
     <datalist id="slist">${S.sfMoeglich.map(x=>`<option value="${esc(x.name)}">${x.ap} AP</option>`).join('')}</datalist>
-    ${pickList('spl',S.sfMoeglich.map(x=>({name:x.name,info:x.ap+' AP',to:'sname'})),'Wählbare Sonderfertigkeiten')}
+    ${pickList('spl',S.sfMoeglich.map(x=>({name:x.name,info:x.ap+' AP',to:'sname',ri:1})),'Wählbare Sonderfertigkeiten')}
     <details class="sec"><summary class="small mut">Aus Rasse, Kultur und Profession (${fix.length})</summary><p class="small">${fix.map(x=>esc(x.name)).join(', ')}</p></details>`}
   if(step===3){b.innerHTML=`<div class="spread"><h2>Talente</h2><input type="search" id="tq" placeholder="Talent suchen…" style="width:220px" aria-label="Talent suchen"></div>
     ${ruleBox()}
@@ -335,9 +352,10 @@ $('#stepbody').addEventListener('change',e=>{const t=e.target;
   if(t.dataset.eig){const old=(S.eigenschaften.find(x=>x.name===t.dataset.eig)||{}).value;edit([{op:'eig',name:t.dataset.eig,value:+t.value}],`${t.dataset.eig} ${old}→${t.value}`)}
   if(t.dataset.tal){const old=(S.talente.find(x=>x.name===t.dataset.tal)||{}).value;edit([{op:'talent',name:t.dataset.tal,value:+t.value}],`${t.dataset.tal} ${old}→${t.value}`)}
   if(t.id==='hname'&&t.value.trim()){D.name=t.value.trim();$('#cTitle').textContent=D.name;edit([{op:'name',value:D.name}])}});
-$('#stepbody').addEventListener('input',e=>{if(e.target.dataset.pl){const q=e.target.value.toLowerCase();$$('#'+e.target.dataset.pl+' button').forEach(x=>x.hidden=q&&!x.dataset.pv.toLowerCase().includes(q));return}
+$('#stepbody').addEventListener('input',e=>{if(e.target.dataset.pl){const q=e.target.value.toLowerCase();$$('#'+e.target.dataset.pl+' .pickrow').forEach(x=>{const b=x.querySelector('[data-pv]');x.hidden=q&&!b.dataset.pv.toLowerCase().includes(q)});return}
   if(e.target.id==='tq'){const q=e.target.value.toLowerCase();$$('#tbody tr').forEach(r=>r.hidden=q&&!r.dataset.tn.includes(q))}});
 $('#stepbody').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.ri!==undefined){regelInfo(b.dataset.ri,b.dataset.riInfo,false);return}
   if(b.dataset.pickTo){const i=$('#'+b.dataset.pickTo);i.value=b.dataset.pv;i.focus();$$('.picklist button.on').forEach(x=>x.classList.remove('on'));b.classList.add('on');
     if(b.dataset.pickTo==='vname')$('#vval').focus();return}
   if(b.id==='vadd'){const n=$('#vname').value.trim();if(!n)return toast('Vorteil oder Nachteil fehlt');edit([{op:'vorteil+',name:n,value:$('#vval').value.trim()}])}
@@ -350,7 +368,7 @@ $('#stepbody').addEventListener('click',e=>{const b=e.target.closest('button');i
 let mine=[];
 async function loadMine(){try{[mine,me]=await Promise.all([api('/api/myheroes'),api('/api/me')])}catch(e){return toastErr(e.message)}$('#mineSheet').hidden=true;$('#upForm').hidden=!me.canUpload;
   $('#mineList').innerHTML=mine.map(h=>`<div class="item"><div><b>${esc(h.name)}</b> <span class="small mut">${esc(h.rasse)} · ${esc(h.profession)}</span><div class="small mut">beim Meister seit ${esc(h.received)}</div></div>
-    <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button><button class="btn sm" data-bg="${esc(h.file)}">Backgroundstory</button><button class="btn sm" data-ex="${esc(h.file)}">Zusatzinfos</button><a class="btn sm" href="/api/myheroes/${encodeURIComponent(h.file)}/xml">XML</a>${pdfLink('/api/myheroes/'+encodeURIComponent(h.file),'pdfbg-'+esc(h.file).replace(/\W/g,'_'))}${h.status==='neu'?'':`<button class="btn sm pri" data-adv="${esc(h.file)}">Steigern</button>`}<button class="btn sm danger" data-hdel="${esc(h.file)}">${h.status==='neu'?'Zurückziehen':'Löschen anfragen'}</button></div></div>`).join('')
+    <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button><button class="btn sm" data-bg="${esc(h.file)}">Backgroundstory</button><button class="btn sm" data-ex="${esc(h.file)}">Zusatzinfos</button><a class="btn sm" href="/api/myheroes/${encodeURIComponent(h.file)}/xml">XML</a>${pdfLink('/api/myheroes/'+encodeURIComponent(h.file),'pdfbg-'+esc(h.file).replace(/\W/g,'_'))}${h.status==='neu'?'':`<button class="btn sm pri" data-adv="${esc(h.file)}">Steigern</button>`}${h.delAnfrage?`<span class="pill warn">Löschen angefragt</span><button class="btn sm" data-delzurueck="${h.delAnfrage}" data-file="${esc(h.file)}">Anfrage zurückziehen</button>`:`<button class="btn sm danger" data-hdel="${esc(h.file)}">${h.status==='neu'?'Zurückziehen':'Löschen anfragen'}</button>`}</div></div>`).join('')
     ||'<p class="mut">Noch keine Helden beim Meister.</p>'}
 let advFile=null,advQ='';
 /* Live-Aktualisierung: alle 6 s den Stand holen; Änderungen melden und offene Ansichten auffrischen (ohne Tippen zu stören) */
@@ -363,36 +381,41 @@ async function pollStand(){if(!me||document.hidden)return;let n;try{n=await api(
     if(n.awards!==stand.awards)msgs.push('Neue Abenteuerpunkte sind da');
     const changed=JSON.stringify(n)!==JSON.stringify(stand);
     if(msgs.length)toast(msgs.join(' · '));
-    if(changed){const busy=document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#mineSheet, #stepbody');
+    if(changed){const ae=document.activeElement,busy=ae&&ae.matches&&ae.matches('input[type=text],input[type=search],input[type=number],textarea,[contenteditable=true]')&&ae.closest('#mineSheet, #stepbody');
       if(!busy&&!$('#s-mine').hidden){if(!$('#mineSheet').hidden&&advFile&&$('#mineSheet h2')&&/steigern/i.test($('#mineSheet h2').textContent))openAdvance(advFile);else if($('#mineSheet').hidden)loadMine()}
       if(!busy&&D&&D.haupt&&step===5)renderCheck()}}
   stand=n}
 setInterval(pollStand,6000);
-async function openAdvance(file){advFile=file;let s;try{s=await api('/api/myheroes/'+encodeURIComponent(file)+'/advance')}catch(e){return toastErr(e.message)}
+async function openAdvance(file){advFile=file;let s;try{s=await api('/api/myheroes/'+encodeURIComponent(file)+'/advance')}catch(e){if(e.status===404)return heroGone();return toastErr(e.message)}
   const lim=s.limit,cnt=s.seitAussenden||{},frei=s.freieAp;
   const left=n=>lim>0?` <span class="small mut">(${Math.max(0,lim-(cnt[n]||0))}× ohne Freigabe)</span>`:'';
   // Knopf + klarer Grund, warum es nicht geht
   const why=c=>c>frei?`<span class="small mut">dir fehlen ${c-frei} AP</span>`:'';
   const btn=(kind,name,c,se)=>`<button class="btn sm${se?' pri':''}" data-st="${kind}" data-t="${esc(name)}"${se?' data-se="1"':''}${c>frei?' disabled':''}>+1${se?' mit SE':''} für ${c} AP</button>`;
-  const eigCell=e=>e.cost>0?`${btn('eigenschaft',e.name,e.cost)} ${why(e.cost)}${left(e.name)}`:'<span class="mut">Maximum erreicht</span>';
-  const talCell=t=>t.ende?'<span class="mut">Ende der Steigerungstabelle</span>':t.cost==null?'<span class="mut">nicht steigerbar</span>':t.max!=null&&t.value>=t.max?`<span class="mut">Maximum erreicht (${t.max})</span>`
-    :`${btn('talent',t.name,t.cost)}${t.costSe!=null?' '+btn('talent',t.name,t.costSe,true):''} ${why(Math.min(t.cost,t.costSe??t.cost))}${left(t.name)}`;
+  const RB=n=>s.rueck&&s.rueck[n]!=null?`<button class="step minus" data-rueck="${esc(n)}" title="Letzte Steigerung zurücknehmen (+${s.rueck[n]} AP zurück)" aria-label="${esc(n)} zurücknehmen">−</button>`:'';
+  const eigCell=e=>RB(e.name)+e.cost>0?`${btn('eigenschaft',e.name,e.cost)} ${why(e.cost)}${left(e.name)}`:'<span class="mut">Maximum erreicht</span>';
+  const talCell=t=>RB(t.name)+(t.ende?'<span class="mut">Ende der Steigerungstabelle</span>':t.cost==null?'<span class="mut">nicht steigerbar</span>':t.max!=null&&t.value>=t.max?`<span class="mut">Maximum erreicht (${t.max})</span>`
+    :`${btn('talent',t.name,t.cost)}${t.costSe!=null?' '+btn('talent',t.name,t.costSe,true):''} ${why(Math.min(t.cost,t.costSe??t.cost))}${left(t.name)}`);
   const canE=e=>e.cost>0&&e.cost<=frei,canT=t=>!t.ende&&t.cost!=null&&!(t.max!=null&&t.value>=t.max)&&Math.min(t.cost,t.costSe??t.cost)<=frei;
   const any=s.eigenschaften.some(canE)||s.talente.some(canT);
   $('#mineSheet').hidden=false;
-  $('#mineSheet').innerHTML=`<div class="spread"><h2>${esc(s.name)} steigern</h2><span class="cost">Freie AP <b class="mono">${frei}</b> von ${s.ap}</span></div>
+  // Ansicht neu zeichnen, ohne dass sie springt: Scrollpositionen und Suche bleiben erhalten
+  const keepY=scrollY,keepT=$('#mineSheet .tscroll')?$('#mineSheet .tscroll').scrollTop:0,focusQ=document.activeElement&&document.activeElement.id==='advq';
+  $('#mineSheet').innerHTML=`<div class="budget sticky-ap"><h2 style="margin:0">${esc(s.name)} steigern</h2><span class="cost"><b>Freie AP ${frei}</b> von ${s.ap}${lim>0?` · je Fertigkeit ${lim}× ohne Freigabe`:''}</span></div>
     ${any?'':`<div class="hint MG">Mit deinen ${frei} freien AP kannst du gerade nichts steigern. Neue AP gibt der Meister nach dem Abenteuer.</div>`}
     ${s.se.length?`<p class="small">Spezielle Erfahrungen: ${s.se.map(x=>`<span class="chip">${esc(x.target)}${x.n>1?' ×'+x.n:''}</span>`).join(' ')} <span class="mut">machen eine Steigerung eine Spalte billiger.</span></p>`:''}
-    ${s.offen.length?`<div class="hint MG"><b>Wartet auf Freigabe:</b> ${s.offen.map(o=>esc(o.text)).join('; ')}</div>`:''}
+    ${s.offen.length?`<div class="hint MG"><b>Wartet auf Freigabe beim Meister:</b>${s.offen.map(o=>`<div class="spread" style="margin-top:4px"><span>${esc(o.text)}</span><button class="btn sm" data-zurueck="${o.id}">Anfrage zurückziehen</button></div>`).join('')}</div>`:''}
     ${lim>0?`<p class="small mut">Ohne Freigabe kann jede Fertigkeit ${lim}× seit dem letzten Aussenden gesteigert werden, danach fragt die Steigerung beim Meister an.</p>`:''}
     <label class="small" style="display:inline-flex;gap:6px;align-items:center;margin:6px 0"><input type="checkbox" id="advAfford"${advAfford?' checked':''}> Nur zeigen, was ich mir leisten kann</label>
-    <h3>Eigenschaften</h3><div class="tw"><table class="small zebra"><thead><tr><th>Eigenschaft</th><th>Wert</th><th>Höchstwert</th><th></th></tr></thead><tbody>${s.eigenschaften.map(e=>`<tr data-ok="${canE(e)?1:0}"><td>${esc(e.name)}</td><td class="mono">${e.value}</td><td class="mono mut">${e.max}</td>
+    <h3>Eigenschaften</h3><div class="tw"><table class="small zebra"><thead><tr><th>Eigenschaft</th><th>Wert</th><th>Höchstwert</th><th></th></tr></thead><tbody>${s.eigenschaften.map(e=>`<tr data-ok="${canE(e)||(s.rueck&&s.rueck[e.name]!=null)?1:0}"><td>${esc(e.name)}</td><td class="mono">${e.value}</td><td class="mono mut">${e.max}</td>
       <td>${eigCell(e)}</td></tr>`).join('')}</tbody></table></div>
     <div class="spread"><h3>Talente</h3><input type="search" id="advq" placeholder="Talent suchen…" value="${esc(advQ)}" style="width:220px" aria-label="Talent suchen"></div>
-    <div class="tw tscroll"><table class="small zebra"><thead><tr><th>Talent</th><th>TaW</th><th></th><th>Probe</th><th>Spalte</th></tr></thead><tbody>${s.talente.map(t=>`<tr data-tn="${esc(t.name.toLowerCase())}" data-ok="${canT(t)?1:0}"><td>${esc(t.name)}</td><td class="mono">${t.value}</td>
+    <div class="tw tscroll"><table class="small zebra"><thead><tr><th>Talent</th><th>TaW</th><th></th><th>Probe</th><th>Spalte</th></tr></thead><tbody>${s.talente.map(t=>`<tr data-tn="${esc(t.name.toLowerCase())}" data-ok="${canT(t)||(s.rueck&&s.rueck[t.name]!=null)?1:0}"><td>${esc(t.name)}</td><td class="mono">${t.value}</td>
       <td>${talCell(t)}</td><td class="mono mut">${esc(t.probe)}</td><td class="mono mut">${esc(t.spalte||'')}</td></tr>`).join('')}</tbody></table></div>
     <p class="small mut" id="advNone" hidden>Nichts, was du dir gerade leisten kannst.</p>`;
-  filterAdv()}
+  filterAdv();window.scrollTo(0,keepY);const ts=$('#mineSheet .tscroll');if(ts)ts.scrollTop=keepT;if(focusQ){const q=$('#advq');q.focus();q.setSelectionRange(q.value.length,q.value.length)}
+  if(advFlash){const r=$(`#mineSheet tr[data-tn="${CSS.escape(advFlash.toLowerCase())}"]`)||[...$$('#mineSheet tr')].find(x=>x.firstElementChild&&x.firstElementChild.textContent===advFlash);if(r){r.classList.add('flash');setTimeout(()=>r.classList.remove('flash'),1500)}advFlash=null}}
+let advFlash=null;
 let advAfford=LS.get('hh-afford',false);
 function filterAdv(){let shown=0;$$('#mineSheet tr[data-ok]').forEach(r=>{const h=(advAfford&&r.dataset.ok!=='1')||(r.dataset.tn&&advQ&&!r.dataset.tn.includes(advQ.toLowerCase()));r.hidden=h;if(!h)shown++});
   const n=$('#advNone');if(n)n.hidden=!(advAfford&&!shown)}
@@ -400,12 +423,20 @@ $('#mineSheet').addEventListener('change',e=>{if(e.target.id==='advAfford'){advA
 $('#mineSheet').addEventListener('input',e=>{if(e.target.id==='advq'){advQ=e.target.value;filterAdv()}});
 $('#mineSheet').addEventListener('click',async e=>{const b=e.target.closest('button[data-st]');if(!b||b.disabled)return;
   try{const r=await api('/api/myheroes/'+encodeURIComponent(advFile)+'/steigern',{method:'POST',body:{kind:b.dataset.st,target:b.dataset.t,se:!!b.dataset.se}});
-    toast(r.pending?'Braucht eine Freigabe, der Meister ist informiert: '+r.text:b.dataset.t+' gesteigert für '+r.cost+' AP');openAdvance(advFile)}catch(x){toastErr(x.message)}});
+    toast(r.pending?'Braucht eine Freigabe, der Meister ist informiert: '+r.text:b.dataset.t+' gesteigert für '+r.cost+' AP');advFlash=b.dataset.t;b.blur();openAdvance(advFile)}catch(x){toastErr(x.message);if(/gelöscht/.test(x.message))heroGone()}});
+$('#mineSheet').addEventListener('click',async e=>{const u=e.target.closest('[data-rueck]');if(!u)return;
+  try{const r=await api('/api/myheroes/'+encodeURIComponent(advFile)+'/rueckgaengig',{method:'POST',body:{target:u.dataset.rueck}});toast(u.dataset.rueck+' zurückgenommen, '+r.cost+' AP sind wieder frei.');advFlash=u.dataset.rueck;openAdvance(advFile)}catch(x){toastErr(x.message)}});
+$('#mineSheet').addEventListener('click',async e=>{const b=e.target.closest('[data-zurueck]');if(!b)return;
+  try{await api('/api/myheroes/'+encodeURIComponent(advFile)+'/anfrage/'+b.dataset.zurueck+'/zurueck',{method:'POST'});toast('Anfrage zurückgezogen.');openAdvance(advFile)}catch(x){toastErr(x.message)}});
+/* Held wurde gelöscht, während er offen war: Ansicht schließen und klar sagen, was los ist */
+function heroGone(){$('#mineSheet').hidden=true;advFile=null;toastErr('Dieser Held wurde gelöscht und ist nicht mehr verfügbar.');loadMine()}
 $('#upForm').onsubmit=async e=>{e.preventDefault();const f=$('#upFile').files[0];if(!f)return toast('Datei wählen');
   const fd=new FormData();fd.append('file',f);
   try{const r=await fetch('/api/myheroes/upload',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||d.title||'Fehler '+r.status);
     toast('Hochgeladen. Der Meister ist informiert.');$('#upFile').value='';loadMine()}catch(x){toastErr(x.message)}};
-$('#mineList').addEventListener('click',async e=>{const d=e.target.closest('[data-hdel]');if(!d)return;e.stopPropagation();
+$('#mineList').addEventListener('click',async e=>{const z=e.target.closest('[data-delzurueck]');
+  if(z){e.stopPropagation();try{await api('/api/myheroes/'+encodeURIComponent(z.dataset.file)+'/anfrage/'+z.dataset.delzurueck+'/zurueck',{method:'POST'});toast('Löschanfrage zurückgezogen.');loadMine()}catch(x){toastErr(x.message)}return}
+  const d=e.target.closest('[data-hdel]');if(!d)return;e.stopPropagation();
   const h=mine.find(x=>x.file===d.dataset.hdel),neu=h.status==='neu';
   if(d.dataset.ask!=='1'){d.dataset.ask='1';d.textContent=neu?'Wirklich zurückziehen? Der Meister bekommt ihn dann nicht.':'Wirklich? Der Meister entscheidet.';return}
   try{const r=await api('/api/myheroes/'+encodeURIComponent(h.file)+'/delete',{method:'POST'});

@@ -128,7 +128,18 @@ public final class Creation {
                 return out;
             }
             apply(panel, ans);
-            if (!(Boolean) call(az, "auswahlGueltig")) {
+            boolean gueltig;
+            try { gueltig = (Boolean) call(az, "auswahlGueltig"); }
+            catch (java.awt.HeadlessException frage) {
+                // Die Jar würde jetzt per Dialog fragen, ob Restpunkte verfallen sollen. Das geht ohne Bildschirm nicht
+                // (und „Ja“ lässt sich nicht nachbauen, die Jar speichert dabei selbst). Also: alle Punkte verteilen.
+                desc.put("error", "Es sind noch Punkte übrig. Bitte alle Punkte verteilen, erst dann geht es weiter.");
+                out.put("auswahlenFertig", done);
+                out.put("pending", desc);
+                out.put("next", "auswahl");
+                return out;
+            }
+            if (!gueltig) {
                 desc.put("error", "Diese Auswahl ist so nicht gültig. Bitte genau die verlangte Anzahl wählen.");
                 out.put("auswahlenFertig", done);
                 out.put("pending", desc);
@@ -142,6 +153,30 @@ public final class Creation {
         call(hew, "setName", str(in.get("name")));
         out.put("draft", save(l, hew));
         out.put("next", "haupt");
+        return out;
+    }
+
+    /**
+     * Vor- und Nachteile mit Art (über die lesbare Plugin-Schnittstelle der Jar) und GP.
+     * Die GP stehen in der Jar nur in einem verschleierten Feld (GP × 100, Vorteile negativ). Das Feld wird nicht über
+     * seinen Namen gesucht, sondern über diese Eigenschaft; findet sich keins, fehlen die GP eben (kein Absturz bei Jar-Updates).
+     */
+    private static List<Map<String, Object>> vorteilInfos(ClassLoader l, Iterable<?> list) throws Exception {
+        List<Object> items = new ArrayList<>();
+        for (Object v : list) items.add(v);
+        java.lang.reflect.Constructor<?> dpc = l.loadClass("helden.plugin.datenplugin.impl.DatenPluginVorteilImpl").getConstructors()[0];
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Object v : items) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("name", v.toString());
+            try { m.put("nachteil", call(dpc.newInstance(v), "isNachteil")); } catch (Exception e) { m.put("nachteil", false); }
+            for (Method mm : v.getClass().getMethods()) {
+                if (mm.getParameterCount() != 0 || mm.getReturnType() != int.class || mm.getName().equals("hashCode")) continue;
+                try { int x = (Integer) mm.invoke(v); if (x != 0 && x % 25 == 0 && Math.abs(x) >= 25 && Math.abs(x) <= 10000) { m.put("gp", Math.abs(x) / 100.0); break; } } catch (Exception ignored) { }
+            }
+            out.add(m);
+        }
+        out.sort(Comparator.comparing(m -> m.get("name").toString()));
         return out;
     }
 
@@ -187,9 +222,12 @@ public final class Creation {
             m = new LinkedHashMap<>(Map.of("type", "combo", "items", items, "selected", cb.getSelectedIndex()));
         } else if (c instanceof JLabel lb && lb.getText() != null && !text(lb.getText()).isEmpty()) {
             m = new LinkedHashMap<>(Map.of("type", "label", "label", text(lb.getText())));
+        } else if (c instanceof javax.swing.text.JTextComponent tc && tc.getText() != null && !tc.getText().isBlank()) {
+            m = new LinkedHashMap<>(Map.of("type", "value", "label", tc.getText().trim()));
         }
         if (m != null) {
-            m.put("id", id[0]++);
+            // Textfelder nur zur Anzeige: keine ID, damit gespeicherte Antworten älterer Entwürfe gültig bleiben
+            m.put("id", "value".equals(m.get("type")) ? -1 : id[0]++);
             Container p = c.getParent();
             if (p != null && p.getLayout() instanceof GridBagLayout gb) {
                 GridBagConstraints k = gb.getConstraints(c);
@@ -370,13 +408,13 @@ public final class Creation {
                 }
                 in.put(next, sel);
             }
-            if (r == null || r.get("draft") == null) throw new IllegalStateException("Herkunft/Profession nicht abschließbar");
+            if (r == null || r.get("draft") == null) throw new IllegalStateException("Herkunft und Profession lassen sich so nicht abschließen. Bitte alle Auswahlen treffen.");
             Map<String, Object> e = edit(l, (String) r.get("draft"), List.of());
             List<?> eig = (List<?>) e.get("eigenschaften");
             Map<?, ?> mu = (Map<?, ?>) eig.get(0);
             e = edit(l, (String) e.get("draft"), List.of(Map.of("op", "eig", "name", mu.get("name"), "value", mu.get("min"))));
             String xml = (String) finish(l, (String) e.get("draft"), "Selbsttest").get("xml");
-            if (!xml.contains("Selbsttest") || !xml.contains("<eigenschaft")) throw new IllegalStateException("Helden-XML unvollständig");
+            if (!xml.contains("Selbsttest") || !xml.contains("<eigenschaft")) throw new IllegalStateException("Die Helden-XML ist unvollständig. Bitte in der Helden-Software neu speichern.");
             // Steigern braucht die SKT-Spalte eines Talents (getSteigernKategorie über die Plugin-Schnittstelle)
             Path tf = Files.createTempFile("selbsttest", ".xml");
             try {
@@ -447,10 +485,8 @@ public final class Creation {
             vt.add(Map.of("name", v.getAttribute("name"), "value", v.getAttribute("value")));
         s.put("vorteile", vt);
         Object hv = call(hew, "getHswVorteile");
-        Set<String> vm = new TreeSet<>();
         Object kat = call(hv, "getMoegliche");
-        for (Object v : (Iterable<?>) call(kat, "getListe")) vm.add(v.toString());
-        s.put("vorteileMoeglich", vm);
+        s.put("vorteileMoeglich", vorteilInfos(l, (Iterable<?>) call(kat, "getListe")));
 
         Object sfw = call(hew, "getSf");
         Set<String> userSf = new TreeSet<>();
@@ -518,13 +554,13 @@ public final class Creation {
 
     /** Lädt einen Entwurf wie die Oberfläche der Jar: Laden, dann Phase direkt auf "Haupt" (ohne Neuberechnung). */
     private static Object load(ClassLoader l, String xml) throws Exception {
-        if (!xml.contains("Erschaffungszwischenstand")) throw new IllegalArgumentException("Kein Erschaffungsentwurf");
+        if (!xml.contains("Erschaffungszwischenstand")) throw new IllegalArgumentException("Dieser Entwurf ist beschädigt und lässt sich nicht öffnen. Bitte einen neuen Helden anlegen.");
         Path f = Files.createTempFile("entwurf", ".xml");
         try {
             Files.writeString(f, xml);
             Object hew = newHew(l);
             Object ld = l.loadClass(W + "Laden").getConstructors()[0].newInstance(hew, f.toString());
-            if ((Boolean) call(ld, "isLadeFehler")) throw new IllegalArgumentException("Entwurf konnte nicht geladen werden");
+            if ((Boolean) call(ld, "isLadeFehler")) throw new IllegalArgumentException("Die helden.jar kann diesen Entwurf nicht laden. Bitte einen neuen Helden anlegen oder dem Meister Bescheid geben.");
             Class<?> ph = l.loadClass(W + "HEW2$PHASEN");
             for (Field fd : hew.getClass().getFields()) if (fd.getType() == ph) for (Object c : ph.getEnumConstants()) if (c.toString().equals("Haupt")) fd.set(hew, c);
             return hew;
@@ -576,7 +612,7 @@ public final class Creation {
     }
 
     private static String addVorteil(String xml, String name, String value) throws Exception {
-        if (name.isBlank()) throw new IllegalArgumentException("Vorteil fehlt");
+        if (name.isBlank()) throw new IllegalArgumentException("Diesen Vor- oder Nachteil hat der Held nicht (mehr).");
         var d = parse(xml);
         org.w3c.dom.Element vt = vorteilListe(d);
         org.w3c.dom.Element e = d.createElement("vorteil");
@@ -599,7 +635,7 @@ public final class Creation {
         org.w3c.dom.Element t = byName(held, "talent", name);
         if (t == null) {
             org.w3c.dom.Element liste = Heroes.first(held, "talentliste");
-            if (liste == null) throw new IllegalArgumentException("Talentliste fehlt im Entwurf");
+            if (liste == null) throw new IllegalArgumentException("Im Entwurf fehlt die Talentliste. Bitte Herkunft neu wählen.");
             t = d.createElement("talent");
             t.setAttribute("name", name);
             liste.appendChild(t);

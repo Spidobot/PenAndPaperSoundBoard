@@ -25,6 +25,8 @@ public final class Db {
                     + "bg TEXT, approval INTEGER, status TEXT DEFAULT 'entwurf', updated TEXT)");
             // Zusatzinfos: was nicht in die Backgroundstory passt (Prinzipientreue, Geiz, Eitelkeit genauer beschrieben …)
             try { s.execute("ALTER TABLE hero ADD COLUMN extra TEXT"); } catch (SQLException alreadyThere) { }
+            // zu welcher Helden-Datei eine Freigabe gehört (gelöschte Helden -> Freigaben ausblenden)
+            try { s.execute("ALTER TABLE approval ADD COLUMN file TEXT"); } catch (SQLException alreadyThere) { }
             try { s.execute("ALTER TABLE draft ADD COLUMN extra TEXT"); } catch (SQLException alreadyThere) { }
             s.execute("CREATE TABLE IF NOT EXISTS approval_item(id INTEGER PRIMARY KEY AUTOINCREMENT, approval INTEGER, kind TEXT, text TEXT, status TEXT, comment TEXT)");
         }

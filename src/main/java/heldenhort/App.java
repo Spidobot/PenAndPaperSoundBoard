@@ -31,7 +31,8 @@ public final class App {
         Heroes heroes = new Heroes(db, data.resolve("helden"));
         // per FTP abgelegte Helden: vermerkte Meistergenehmigungen landen ebenfalls unter „Freigaben“
         heroes.onFtp = (file, h) -> {
-            int n = approvalFromXml(db, mail, str(h.get("name")), "FTP", null, h);
+            int n = approvalFromXml(db, mail, file, str(h.get("name")), "FTP", null, h);
+            if (n == 0 && autoUebernehmen(db)) db.exec("UPDATE hero SET status='übernommen' WHERE file=?", file);
             if (n > 0) mail.notifyMeister("Freigabe nötig: " + h.get("name"), "Im per FTP abgelegten Helden „" + h.get("name") + "“ (" + file + ") sind " + n + " Punkt(e) mit Meistergenehmigung vermerkt. Siehe „Freigaben“.");
         };
         Advance advance = new Advance(db, heroes, jar, accounts, mail);
@@ -50,6 +51,14 @@ public final class App {
             a.get("/api/public", ctx -> ctx.json(Map.of("impressum", db.get("impressum", "").isBlank() ? IMPRESSUM : db.get("impressum", ""))));
             a.exception(IllegalArgumentException.class, (e, ctx) -> ctx.status(400).json(Map.of("error", e.getMessage())));
             a.exception(IllegalStateException.class, (e, ctx) -> ctx.status(409).json(Map.of("error", e.getMessage())));
+            // Alles Unerwartete: verständliche Meldung an den Browser (4xx, sonst ersetzt Cloudflare sie), Details ins Docker-Log
+            a.exception(Exception.class, (e, ctx) -> {
+                System.err.println("FEHLER bei " + ctx.method() + " " + ctx.path() + ": " + e);
+                e.printStackTrace();
+                ctx.status(422).json(Map.of("error", "Da ist auf dem Server etwas schiefgegangen (" + e.getClass().getSimpleName() + (e.getMessage() == null ? "" : ": " + e.getMessage()) + "). Bitte nochmal versuchen. Wenn es bleibt, dem Meister Bescheid geben, die Details stehen im Server-Log."));
+            });
+            a.exception(io.javalin.http.ContentTooLargeResponse.class, (e, ctx) -> ctx.status(413).json(Map.of("error", "Die Datei ist zu groß für eine einzelne Anfrage. Bitte Seite neu laden, große Dateien werden dann in Teilen hochgeladen.")));
+            a.error(404, ctx -> { if (ctx.path().startsWith("/api/") && ctx.result() == null) ctx.json(Map.of("error", "Diese Funktion gibt es auf dem Server nicht (mehr). Bitte die Seite neu laden (Strg+F5).")); });
             a.get("/audio/<path>", ctx -> {
                 Path p = sound.resolve(ctx.pathParam("path"));
                 Sound.serve(ctx, p);
@@ -67,7 +76,7 @@ public final class App {
         m.before(ctx -> {
             String p = ctx.path();
             if (p.equals("/login.html") || p.startsWith("/common/") || p.equals("/api/admin/login") || p.equals("/api/public") || admin(db, adminPw, ctx)) return;
-            if (p.startsWith("/api/") || p.startsWith("/audio/")) throw new UnauthorizedResponse("Bitte anmelden");
+            if (p.startsWith("/api/") || p.startsWith("/audio/")) throw new UnauthorizedResponse("Du bist nicht (mehr) angemeldet. Bitte neu anmelden.");
             ctx.redirect("/login.html");
             ctx.skipRemainingHandlers();
         });
@@ -76,7 +85,7 @@ public final class App {
             if (adminPw.isBlank()) throw new UnauthorizedResponse("ADMIN_PASSWORD ist im Container nicht gesetzt");
             if (!MessageDigest.isEqual(adminPw.getBytes(StandardCharsets.UTF_8), given.getBytes(StandardCharsets.UTF_8))) {
                 Thread.sleep(800);
-                throw new UnauthorizedResponse("Passwort falsch");
+                throw new UnauthorizedResponse("Das Meister-Passwort stimmt nicht.");
             }
             ctx.cookie(cookie(ctx, "hhm", adminToken(db, adminPw)));
             ctx.json(Map.of("ok", true));
@@ -89,7 +98,7 @@ public final class App {
             boolean ses = Sound.SESSION.equals(scene); // Rubrik Session: Datei nach Music/Session bzw. Sounds/Session, Eintrag in die gewählte Session
             String sid = ctx.formParam("sid");
             if (ses && (sid == null || !sid.matches("\\d{1,9}"))) throw new IllegalArgumentException("Erst oben eine Session auswählen");
-            if (!target.equals("Effects") && !ses && !Sound.SCENES.contains(scene)) throw new IllegalArgumentException("Szene unbekannt");
+            if (!target.equals("Effects") && !ses && !Sound.SCENES.contains(scene)) throw new IllegalArgumentException("Diese Soundboard-Rubrik gibt es nicht. Bitte Seite neu laden.");
             try { Files.createDirectories(dir); } catch (Exception e) { throw new IllegalStateException("Ordner " + dir + " kann nicht angelegt werden: keine Schreibrechte für den Container"); }
             if (!Files.isWritable(dir)) throw new IllegalStateException("Keine Schreibrechte auf " + dir + ". In Unraid den Container ohne --user starten oder die Rechte des Ordners anpassen.");
             List<String> saved = new ArrayList<>();
@@ -146,9 +155,9 @@ public final class App {
 
         m.get("/api/config", ctx -> {
             Map<String, Object> c = new LinkedHashMap<>();
-            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit", "greeting", "impressum"))
+            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit", "greeting", "impressum", "autoUebernehmen"))
             {
-                String def = k.equals("updateTime") ? "04:00" : k.equals("smtpPort") ? "587" : k.equals("steigerLimit") ? "0" : k.equals("greeting") ? GREETING : k.equals("impressum") ? IMPRESSUM : "";
+                String def = k.equals("autoUebernehmen") ? "1" : k.equals("updateTime") ? "04:00" : k.equals("smtpPort") ? "587" : k.equals("steigerLimit") ? "0" : k.equals("greeting") ? GREETING : k.equals("impressum") ? IMPRESSUM : "";
                 String v = db.get(k, def);
                 c.put(k, v.isBlank() && (k.equals("greeting") || k.equals("impressum")) ? def : v); // leer gespeichert = Vorlage zeigen
             }
@@ -161,7 +170,7 @@ public final class App {
             if (!String.valueOf(b.get("smtpPort")).matches("\\d{1,5}")) throw new IllegalArgumentException("SMTP-Port ist keine Zahl");
             if (!String.valueOf(b.get("steigerLimit")).matches("\\d{1,3}")) throw new IllegalArgumentException("Steigerungsgrenze ist keine Zahl (0 = keine Grenze)");
             if (!t.equals(db.get("updateTime", "04:00"))) db.put("jarLastDay", ""); // neue Uhrzeit gilt schon heute
-            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit", "greeting", "impressum"))
+            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit", "greeting", "impressum", "autoUebernehmen"))
                 db.put(k, String.valueOf(b.get(k) == null ? "" : b.get(k)).trim());
             ctx.json(Map.of("ok", true));
         });
@@ -240,7 +249,7 @@ public final class App {
         m.get("/api/sessions", ctx -> ctx.json(db.query("SELECT * FROM session ORDER BY id DESC")));
         m.post("/api/sessions", ctx -> {
             String name = String.valueOf(ctx.bodyAsClass(Map.class).get("name")).trim();
-            if (name.isEmpty() || name.equals("null")) throw new IllegalArgumentException("Name fehlt");
+            if (name.isEmpty() || name.equals("null")) throw new IllegalArgumentException("Bitte einen Namen eintragen.");
             ctx.json(Map.of("id", db.exec("INSERT INTO session(name,heroes,created) VALUES(?,?,?)", name, "[]", java.time.LocalDateTime.now().format(Heroes.TS))));
         });
         m.put("/api/sessions/{id}", ctx -> {
@@ -249,13 +258,13 @@ public final class App {
                 db.exec("UPDATE session SET heroes=? WHERE id=?", new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(h), ctx.pathParam("id"));
             if (b.get("name") != null) {
                 String name = String.valueOf(b.get("name")).trim();
-                if (name.isEmpty()) throw new IllegalArgumentException("Name fehlt");
+                if (name.isEmpty()) throw new IllegalArgumentException("Bitte einen Namen eintragen.");
                 db.exec("UPDATE session SET name=? WHERE id=?", name, ctx.pathParam("id"));
             }
             ctx.json(Map.of("ok", true));
         });
         m.delete("/api/sessions/{id}", ctx -> {
-            if (db.exec("DELETE FROM session WHERE id=?", ctx.pathParam("id")) == 0) throw new NotFoundResponse("Session unbekannt");
+            if (db.exec("DELETE FROM session WHERE id=?", ctx.pathParam("id")) == 0) throw new NotFoundResponse("Diese Session gibt es nicht mehr, vermutlich wurde sie gelöscht.");
             ctx.json(Map.of("ok", true));
         });
 
@@ -282,7 +291,7 @@ public final class App {
         m.post("/api/approvals/items/{id}", ctx -> {
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
             String st = String.valueOf(b.get("status")), c = b.get("comment") == null ? "" : String.valueOf(b.get("comment")).trim();
-            if (!List.of("freigegeben", "geändert", "abgelehnt").contains(st)) throw new IllegalArgumentException("Status unbekannt");
+            if (!List.of("freigegeben", "geändert", "abgelehnt").contains(st)) throw new IllegalArgumentException("Unbekannte Entscheidung. Bitte Seite neu laden.");
             if (st.equals("geändert") && c.isEmpty()) throw new IllegalArgumentException("Bei „geändert“ bitte im Kommentar schreiben, was geändert wurde");
             var kp = db.query("SELECT kind, payload, status, comment FROM approval_item WHERE id=?", ctx.pathParam("id"));
             if (!kp.isEmpty() && st.equals(kp.get(0).get("status")) && c.equals(str(kp.get(0).get("comment") == null ? "" : kp.get(0).get("comment"))))
@@ -299,9 +308,13 @@ public final class App {
             if (!kp.isEmpty() && "STEIG".equals(kp.get(0).get("kind"))) {
                 if (!"offen".equals(kp.get(0).get("status"))) throw new IllegalStateException("Über diese Steigerung ist schon entschieden");
                 if (st.equals("geändert")) throw new IllegalArgumentException("Steigerungen bitte freigeben oder ablehnen");
-                if (st.equals("freigegeben")) c = (c.isEmpty() ? "" : c + " · ") + "Steigerung " + advance.approved(str(kp.get(0).get("payload")));
+                if (st.equals("freigegeben")) c = (c.isEmpty() ? "" : c + " · ") + "Steigerung " + advance.approved(str(kp.get(0).get("payload")), str(db.query("SELECT text FROM approval_item WHERE id=?", ctx.pathParam("id")).get(0).get("text")));
             }
             db.exec("UPDATE approval_item SET status=?, comment=? WHERE id=?", st, c, ctx.pathParam("id"));
+            var ap = db.query("SELECT a.id, a.file FROM approval a JOIN approval_item i ON i.approval=a.id WHERE i.id=?", ctx.pathParam("id"));
+            if (!ap.isEmpty() && ap.get(0).get("file") != null && autoUebernehmen(db) && !"DEL".equals(kp.get(0).get("kind"))
+                    && db.query("SELECT 1 FROM approval_item WHERE approval=? AND status='offen' AND kind='MG'", ap.get(0).get("id")).isEmpty())
+                db.exec("UPDATE hero SET status='übernommen' WHERE file=? AND status='neu'", ap.get(0).get("file"));
             var it = db.query("SELECT a.hero, a.account, i.text FROM approval_item i JOIN approval a ON a.id=i.approval WHERE i.id=?", ctx.pathParam("id"));
             if (!it.isEmpty() && it.get(0).get("account") != null)
                 mail.notify(accounts.email(it.get(0).get("account")), "Freigabe: " + it.get(0).get("hero"),
@@ -313,7 +326,7 @@ public final class App {
         s.before(ctx -> {
             String p = ctx.path();
             if ((p.startsWith("/api/") || p.startsWith("/audio/")) && !p.equals("/api/login") && !p.equals("/api/account/confirm") && !p.equals("/api/public") && accounts.current(ctx) == null)
-                throw new UnauthorizedResponse("Bitte anmelden");
+                throw new UnauthorizedResponse("Du bist nicht (mehr) angemeldet. Bitte neu anmelden.");
         });
         s.post("/api/login", ctx -> {
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
@@ -407,7 +420,7 @@ public final class App {
         });
         s.get("/api/drafts/{id}/talentkosten", ctx -> {
             var d = draft(db, accounts, ctx);
-            if (d.get("xml") == null) throw new IllegalStateException("Erst Herkunft und Profession wählen");
+            if (d.get("xml") == null) throw new IllegalStateException("Erst Herkunft und Profession festlegen, dann lassen sich Kosten berechnen.");
             String only = ctx.queryParam("nur");
             ctx.json(creation.talentCosts((String) d.get("xml"), only == null || only.isBlank() ? null : new HashSet<>(Arrays.asList(only.split("\\|")))));
         });
@@ -420,14 +433,14 @@ public final class App {
         });
         s.get("/api/drafts/{id}/check", ctx -> { // Prüfung wie beim Senden (inkl. Punkte, die erst beim Abschließen entstehen)
             var d = draft(db, accounts, ctx);
-            if (d.get("xml") == null) throw new IllegalStateException("Der Held ist noch nicht so weit");
+            if (d.get("xml") == null) throw new IllegalStateException("Der Held ist noch nicht so weit: erst Herkunft und Profession festlegen.");
             ctx.json(Map.of("hinweise", creation.finish((String) d.get("xml"), str(d.get("name"))).get("hinweise")));
         });
         s.post("/api/drafts/{id}/approval", ctx -> {
             var d = draft(db, accounts, ctx);
             var a = accounts.current(ctx);
             List<String> mg = mgHints(creation, d);
-            if (mg.isEmpty()) throw new IllegalArgumentException("Es gibt nichts freizugeben");
+            if (mg.isEmpty()) throw new IllegalArgumentException("Die Regelprüfung meldet nichts, was der Meister genehmigen müsste. Du kannst direkt senden.");
             long id = db.exec("INSERT INTO approval(hero,player,created,account) VALUES(?,?,?,?)", d.get("name"), a.get("name"), now(), a.get("id"));
             for (String t : mg) db.exec("INSERT INTO approval_item(approval,kind,text,status,comment) VALUES(?,?,?,?,?)", id, "MG", t, "offen", "");
             db.exec("UPDATE draft SET approval=? WHERE id=?", id, d.get("id"));
@@ -444,8 +457,8 @@ public final class App {
         s.post("/api/drafts/{id}/send", ctx -> {
             var d = draft(db, accounts, ctx);
             var a = accounts.current(ctx);
-            if (d.get("xml") == null) throw new IllegalStateException("Der Held ist noch nicht fertig");
-            if ("gesendet".equals(d.get("status"))) throw new IllegalStateException("Schon gesendet");
+            if (d.get("xml") == null) throw new IllegalStateException("Der Held ist noch nicht fertig: erst Herkunft, Profession und Werte festlegen.");
+            if ("gesendet".equals(d.get("status"))) throw new IllegalStateException("Dieser Held ist schon beim Meister.");
             String bg = str(d.get("bg"));
             var f = creation.finish((String) d.get("xml"), str(d.get("name")));
             List<String> fehler = new ArrayList<>(), mg = new ArrayList<>();
@@ -459,6 +472,8 @@ public final class App {
             }
             String file = heroes.save(str(d.get("name")), str(a.get("name")), ((Number) a.get("id")).longValue(), ((String) f.get("xml")).getBytes(StandardCharsets.UTF_8), bg);
             db.exec("UPDATE hero SET extra=? WHERE file=?", str(d.get("extra")), file);
+            if (d.get("approval") != null) db.exec("UPDATE approval SET file=? WHERE id=?", file, d.get("approval"));
+            if (autoUebernehmen(db)) db.exec("UPDATE hero SET status='übernommen' WHERE file=?", file); // alle Punkte sind schon genehmigt
             db.exec("UPDATE draft SET status='gesendet', updated=? WHERE id=?", now(), d.get("id"));
             mail.notifyMeister("Neuer Held: " + d.get("name"), a.get("name") + " hat den Helden „" + d.get("name") + "“ geschickt.\nDatei: " + heroes.dir().resolve(file));
             ctx.json(Map.of("file", file));
@@ -477,7 +492,11 @@ public final class App {
         s.get("/api/myheroes", ctx -> {
             Object id = accounts.current(ctx).get("id");
             List<Map<String, Object>> out = new ArrayList<>();
-            for (var h : heroes.list()) if (Objects.equals(String.valueOf(h.get("account")), String.valueOf(id))) out.add(h);
+            for (var h : heroes.list()) if (Objects.equals(String.valueOf(h.get("account")), String.valueOf(id))) {
+                var del = db.query("SELECT id FROM approval_item WHERE kind='DEL' AND payload=? AND status='offen'", h.get("file"));
+                if (!del.isEmpty()) h.put("delAnfrage", del.get(0).get("id"));
+                out.add(h);
+            }
             ctx.json(out);
         });
 
@@ -519,32 +538,54 @@ public final class App {
             }
             if (!db.query("SELECT 1 FROM approval_item WHERE kind='DEL' AND payload=? AND status='offen'", file).isEmpty())
                 throw new IllegalStateException("Löschen ist schon beim Meister angefragt");
-            long id = db.exec("INSERT INTO approval(hero,player,created,account) VALUES(?,?,?,?)", name, a.get("name"), now(), a.get("id"));
+            long id = db.exec("INSERT INTO approval(hero,player,created,account,file) VALUES(?,?,?,?,?)", name, a.get("name"), now(), a.get("id"), file);
             db.exec("INSERT INTO approval_item(approval,kind,text,status,comment,payload) VALUES(?,?,?,?,?,?)", id, "DEL", "Held „" + name + "“ löschen", "offen", "", file);
             mail.notifyMeister("Löschanfrage: " + name, a.get("name") + " möchte den Helden „" + name + "“ löschen. Freigeben oder ablehnen unter „Freigaben“.");
             ctx.json(Map.of("done", "angefragt"));
+        });
+        s.post("/api/myheroes/{file}/anfrage/{item}/zurueck", ctx -> {
+            String file = advance.own(ctx.pathParam("file"), ctx);
+            var a = accounts.current(ctx);
+            var it = db.query("SELECT i.id, i.text, i.status, i.kind FROM approval_item i JOIN approval ap ON ap.id=i.approval WHERE i.id=? AND ap.account=? AND (ap.file=? OR i.payload LIKE ?)",
+                    ctx.pathParam("item"), a.get("id"), file, "%" + file + "%");
+            if (it.isEmpty()) throw new NotFoundResponse("Diese Anfrage gibt es nicht (mehr).");
+            if (!"offen".equals(it.get(0).get("status"))) throw new IllegalStateException("Der Meister hat schon entschieden: " + it.get(0).get("status"));
+            db.exec("UPDATE approval_item SET status='zurückgezogen', comment='vom Spieler zurückgezogen' WHERE id=?", ctx.pathParam("item"));
+            mail.notifyMeister("Anfrage zurückgezogen: " + it.get(0).get("text"), a.get("name") + " hat die Anfrage „" + it.get(0).get("text") + "“ zurückgezogen.");
+            ctx.json(Map.of("ok", true));
         });
         s.post("/api/myheroes/upload", ctx -> { // nur mit Erlaubnis vom Meister
             var a = accounts.current(ctx);
             if (!"1".equals(String.valueOf(accounts.get(((Number) a.get("id")).longValue()).get("can_upload"))))
                 throw new ForbiddenResponse("Hochladen hat dir der Meister nicht freigeschaltet");
             var f = ctx.uploadedFile("file");
-            if (f == null) throw new IllegalArgumentException("Keine Datei");
-            if (f.size() > 5_000_000) throw new IllegalArgumentException("Datei zu groß");
+            if (f == null) throw new IllegalArgumentException("Es wurde keine Datei mitgeschickt. Bitte eine XML-Datei auswählen.");
+            if (f.size() > 5_000_000) throw new IllegalArgumentException("Die Datei ist größer als 5 MB. Eine Helden-XML ist normalerweise viel kleiner, ist es die richtige Datei?");
             byte[] xml = f.content().readAllBytes();
             Map<String, Object> h;
             try { h = Heroes.parse(xml); } catch (Exception e) { throw new IllegalArgumentException("Keine lesbare Helden-XML: " + e.getMessage()); }
             String name = str(h.get("name"));
-            if (name.isEmpty()) throw new IllegalArgumentException("In der XML steht kein Heldenname");
+            if (name.isEmpty()) throw new IllegalArgumentException("In der XML steht kein Heldenname. Ist das wirklich ein Held aus der Helden-Software?");
             Path tmp = Files.createTempFile("upload", ".xml");
             try { Files.write(tmp, xml); advance.probe(tmp); }
             catch (Exception e) { throw new IllegalArgumentException("Die helden.jar kann diesen Helden nicht laden: " + e.getMessage()); }
             finally { Files.deleteIfExists(tmp); }
             String file = heroes.save(name, str(a.get("name")), ((Number) a.get("id")).longValue(), xml, "");
-            int mgs = approvalFromXml(db, mail, name, str(a.get("name")), a.get("id"), h);
+            int mgs = approvalFromXml(db, mail, file, name, str(a.get("name")), a.get("id"), h);
+            if (mgs == 0 && autoUebernehmen(db)) db.exec("UPDATE hero SET status='übernommen' WHERE file=?", file);
             mail.notifyMeister("Held hochgeladen: " + name, a.get("name") + " hat den Helden „" + name + "“ als XML hochgeladen.\nDatei: " + heroes.dir().resolve(file)
                     + (mgs > 0 ? "\n\n" + mgs + " Punkt(e) brauchen deine Meistergenehmigung, siehe „Freigaben“." : ""));
             ctx.json(Map.of("file", file));
+        });
+
+        // Regel-Info zu Vor-/Nachteilen/SF: eigener Text des Meisters (die helden.jar liefert keine Beschreibungen)
+        for (Javalin a : List.of(m, s)) a.get("/api/regelinfo", ctx -> ctx.json(Map.of("name", str(ctx.queryParam("name")), "text", db.get("regelinfo:" + str(ctx.queryParam("name")), ""))));
+        m.put("/api/regelinfo", ctx -> {
+            Map<?, ?> b = ctx.bodyAsClass(Map.class);
+            String n = str(b.get("name"));
+            if (n.isEmpty()) throw new IllegalArgumentException("Bitte einen Namen angeben.");
+            db.put("regelinfo:" + n, cleanBg(b.get("text")));
+            ctx.json(Map.of("ok", true));
         });
 
         new Polls(db, mail, accounts).routes(m, s);
@@ -608,13 +649,16 @@ Icons: Icons8 (icons8.com).""";
      * Legt für eine hochgeladene/abgelegte XML eine Freigabe-Anfrage an: ein Punkt je in der XML vermerkter Meistergenehmigung.
      * Liefert die Anzahl der Punkte (0 = nichts zu genehmigen, dann wird auch nichts angelegt).
      */
-    static int approvalFromXml(Db db, Mail mail, String hero, String player, Object account, Map<String, Object> parsed) {
+    static int approvalFromXml(Db db, Mail mail, String file, String hero, String player, Object account, Map<String, Object> parsed) {
         List<?> mg = parsed.get("meistergenehmigung") instanceof List<?> l ? l : List.of();
         if (mg.isEmpty()) return 0;
-        long id = db.exec("INSERT INTO approval(hero,player,created,account) VALUES(?,?,?,?)", hero, player, now(), account);
+        long id = db.exec("INSERT INTO approval(hero,player,created,account,file) VALUES(?,?,?,?,?)", hero, player, now(), account, file);
         for (Object t : mg) db.exec("INSERT INTO approval_item(approval,kind,text,status,comment) VALUES(?,?,?,?,?)", id, "MG", str(t), "offen", "");
         return mg.size();
     }
+
+    /** Helden automatisch übernehmen, sobald nichts mehr zu genehmigen ist (Konfiguration, Standard: an). */
+    static boolean autoUebernehmen(Db db) { return !"0".equals(db.get("autoUebernehmen", "1")); }
 
     static String extra(Db db, String file) {
         var r = db.query("SELECT extra FROM hero WHERE file=?", file);
@@ -650,7 +694,7 @@ Icons: Icons8 (icons8.com).""";
     /** Entwurf des angemeldeten Kontos, sonst 404. */
     static Map<String, Object> draft(Db db, Accounts accounts, Context ctx) {
         var r = db.query("SELECT * FROM draft WHERE id=? AND account=?", ctx.pathParam("id"), me(accounts, ctx));
-        if (r.isEmpty()) throw new NotFoundResponse("Entwurf unbekannt");
+        if (r.isEmpty()) throw new NotFoundResponse("Diesen Entwurf gibt es nicht mehr (gelöscht oder schon gesendet).");
         return r.get(0);
     }
 
@@ -677,7 +721,9 @@ Icons: Icons8 (icons8.com).""";
     }
 
     static List<Map<String, Object>> approvals(Db db, Long id) {
-        var list = id == null ? db.query("SELECT * FROM approval ORDER BY id DESC") : db.query("SELECT * FROM approval WHERE id=?", id);
+        var list = id == null
+                ? db.query("SELECT * FROM approval a WHERE (a.file IS NOT NULL AND a.file IN (SELECT file FROM hero)) OR (a.file IS NULL AND a.id IN (SELECT approval FROM draft WHERE approval IS NOT NULL)) ORDER BY id DESC")
+                : db.query("SELECT * FROM approval WHERE id=?", id);
         for (var a : list) a.put("items", db.query("SELECT id,kind,text,status,comment FROM approval_item WHERE approval=? ORDER BY id", a.get("id")));
         return list;
     }

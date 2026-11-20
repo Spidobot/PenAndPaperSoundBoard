@@ -130,3 +130,32 @@ function liveEvents(url,onMsg,onStatus=()=>{},query=()=>''){let lastOk=Date.now(
   document.addEventListener('visibilitychange',()=>{if(!stopped&&!document.hidden)poll()});
   poll();
   return {close(){stopped=true;clearInterval(pt)}}}
+
+/** Info-Fenster zu Vor-/Nachteilen/Sonderfertigkeiten. Die helden.jar liefert keine Regeltexte; gezeigt werden
+ *  Art/Kosten, der eigene Text des Meisters und eine Suche in der Wiki Aventurica. editable = Meister darf Text pflegen. */
+async function regelInfo(name,info,editable){let d=document.getElementById('riDlg');
+  if(!d){d=document.createElement('dialog');d.id='riDlg';d.className='sheetdlg';d.style.maxWidth='640px';document.body.append(d);
+    d.addEventListener('click',e=>{if(e.target===d||e.target.closest('[data-x]'))d.close()})}
+  d.innerHTML=`<div class="spread sheethead"><h2>${esc(name)}</h2><button class="btn sm xclose" type="button" data-x aria-label="Schließen">✕</button></div>
+    ${info?`<p><b>Kosten:</b> ${esc(info)}</p>`:''}
+    <h3>Regeltechnisch und im Spiel</h3><div id="riText" class="small">lädt …</div>
+    <p class="small"><a href="https://de.wiki-aventurica.de/wiki/Spezial:Suche?search=${encodeURIComponent(name.replace(/\s*\(.*$/,'').replace(/[:\[].*$/,'').trim())}" target="_blank" rel="noopener">In der Wiki Aventurica nachschlagen ↗</a></p>`;
+  d.showModal();let r={text:''};try{r=await api('/api/regelinfo?name='+encodeURIComponent(name))}catch(e){}
+  const box=d.querySelector('#riText');
+  if(editable){box.innerHTML='<p class="mut">Eigener Text für alle Spieler (was es regeltechnisch bewirkt und was es im Spiel bedeutet):</p><div id="riEd"></div>';
+    bgEditor(box.querySelector('#riEd'),r.text,async html=>{await api('/api/regelinfo',{method:'PUT',body:{name,text:html}})},'Text')}
+  else box.innerHTML=r.text||'<span class="mut">Der Meister hat dazu noch nichts eingetragen. Die helden.jar bringt keine Regeltexte mit, schau in die Wiki Aventurica.</span>'}
+
+/* Zahlenfelder bekommen links ein rotes − und rechts ein grünes + (statt der winzigen Pfeile).
+   Gilt automatisch für jedes Zahlenfeld, auch für später eingefügte. Ein Klick löst dieselben Ereignisse aus wie Tippen. */
+function stepperize(root){(root||document).querySelectorAll('input[type=number]:not([data-nostep])').forEach(inp=>{
+  if(inp.parentElement&&inp.parentElement.classList.contains('stepper'))return;
+  const w=document.createElement('span');w.className='stepper';inp.before(w);
+  const mk=(cls,txt,d)=>{const b=document.createElement('button');b.type='button';b.className='step '+cls;b.textContent=txt;b.tabIndex=-1;
+    b.setAttribute('aria-label',(d>0?'Plus':'Minus')+' 1');
+    b.onclick=()=>{if(inp.disabled)return;const st=+inp.step||1,min=inp.min!==''?+inp.min:-Infinity,max=inp.max!==''?+inp.max:Infinity;
+      const v=Math.min(max,Math.max(min,(+inp.value||0)+d*st));if(v===+inp.value)return;inp.value=v;
+      inp.dispatchEvent(new Event('input',{bubbles:true}));inp.dispatchEvent(new Event('change',{bubbles:true}))};return b};
+  w.append(mk('minus','−',-1),inp,mk('plus','+',1))})}
+new MutationObserver(()=>stepperize()).observe(document.documentElement,{childList:true,subtree:true});
+addEventListener('DOMContentLoaded',()=>stepperize());

@@ -137,6 +137,19 @@ public final class Advance {
         s.put("se", se);
         s.put("limit", Integer.parseInt(db.get("steigerLimit", "0")));
         s.put("seitAussenden", counts(file));
+        s.put("rueck", zuruecknehmbar(file));
+        // überholte Anfragen schließen (Wert schon erreicht, z. B. doppelt angefragt)
+        for (var it : db.query("SELECT id, payload FROM approval_item WHERE kind='STEIG' AND status='offen' AND payload LIKE ?", "%\"file\":\"" + file.replace("\"", "") + "\"%")) {
+            try {
+                Map<?, ?> p = App.JSON.readValue(App.str(it.get("payload")), Map.class);
+                if (!(p.get("nach") instanceof Number n)) continue;
+                String tg = App.str(p.get("target"));
+                Integer cur = null;
+                if ("eigenschaft".equals(p.get("kind"))) { for (Map<String, Object> e : eig) if (tg.equals(e.get("name"))) cur = (Integer) e.get("base"); }
+                else for (Map<String, Object> tt : tal) if (tg.equals(tt.get("name"))) cur = (Integer) tt.get("value");
+                if (cur != null && cur >= n.intValue()) db.exec("UPDATE approval_item SET status='überholt', comment=? WHERE id=?", "erledigt: " + tg + " steht schon auf " + cur, it.get("id"));
+            } catch (Exception ignored) { }
+        }
         s.put("offen", db.query("SELECT i.id, i.text, i.status FROM approval_item i JOIN approval a ON a.id=i.approval WHERE i.kind='STEIG' AND i.payload LIKE ? AND i.status='offen'", "%\"file\":\"" + file.replace("\"", "") + "\"%"));
         return s;
     }
@@ -155,6 +168,11 @@ public final class Advance {
 
     /** Eine Stufe steigern. force = Meister hat freigegeben (Grenze ignorieren). */
     synchronized Map<String, Object> steigern(String file, String kind, String target, boolean useSe, boolean force, Object account) throws Exception {
+        return steigern(file, kind, target, useSe, force, account, null);
+    }
+
+    /** erwartet = Zielwert laut Anfrage; passt er nicht mehr (Wert schon erreicht), ist die Anfrage überholt. */
+    synchronized Map<String, Object> steigern(String file, String kind, String target, boolean useSe, boolean force, Object account, Integer erwartet) throws Exception {
         Document d = read(file);
         Element held = (Element) d.getElementsByTagName("held").item(0);
         Element el = null;
@@ -169,12 +187,13 @@ public final class Advance {
             von = Heroes.num(el.getAttribute("value")); nach = von + 1;
             max = (int) Math.ceil(Heroes.num(el.getAttribute("startwert")) * 1.5);
             col = "H";
-            if (useSe) throw new IllegalArgumentException("Spezielle Erfahrungen gelten für Talente");
+            if (useSe) throw new IllegalArgumentException("Spezielle Erfahrungen gelten nur für Talente, nicht für Eigenschaften.");
         } else {
             von = Heroes.num(el.getAttribute("value")); nach = von + 1;
             max = ((List<Map<String, Object>>) st.get("talente")).stream().filter(t -> t.get("name").equals(target)).map(t -> (Integer) t.getOrDefault("max", 99)).findFirst().orElse(99);
             col = column(file, target);
         }
+        if (erwartet != null && nach != erwartet) throw new IllegalStateException("überholt, " + target + " steht schon auf " + von);
         if (nach > max) throw new IllegalArgumentException(target + " ist schon am Maximum (" + max + ")");
         Long seId = null;
         if (useSe) {
@@ -186,14 +205,18 @@ public final class Advance {
         int frei = (Integer) st.get("freieAp");
         if (cost > frei) throw new IllegalArgumentException("Zu wenig AP: " + target + " auf " + nach + " kostet " + cost + " AP, frei sind " + frei);
 
+        // dieselbe Fertigkeit schon beim Meister angefragt? Dann keine zweite Anfrage
+        if (!force && !db.query("SELECT 1 FROM approval_item WHERE kind='STEIG' AND status='offen' AND payload LIKE ? AND payload LIKE ?",
+                "%\"file\":\"" + file + "\"%", "%\"target\":\"" + target + "\"%").isEmpty())
+            throw new IllegalStateException(target + " ist schon beim Meister angefragt. Warte auf seine Entscheidung oder zieh die Anfrage zurück.");
         int limit = (Integer) st.get("limit");
         int schon = ((Map<String, Integer>) st.get("seitAussenden")).getOrDefault(target, 0);
         if (!force && limit > 0 && schon >= limit) {
             // Freigabe anfragen statt steigern
             var acc = accounts.get(((Number) account).longValue());
-            long aid = db.exec("INSERT INTO approval(hero,player,created,account) VALUES(?,?,?,?)", st.get("name"), acc.get("name"), App.now(), account);
+            long aid = db.exec("INSERT INTO approval(hero,player,created,account,file) VALUES(?,?,?,?,?)", st.get("name"), acc.get("name"), App.now(), account, file);
             String text = target + " von " + von + " auf " + nach + " (" + (schon + 1) + ". Steigerung seit dem letzten Aussenden, " + cost + " AP" + (useSe ? ", mit SE" : "") + ")";
-            String payload = App.JSON.writeValueAsString(Map.of("file", file, "kind", kind, "target", target, "se", useSe, "account", account));
+            String payload = App.JSON.writeValueAsString(Map.of("file", file, "kind", kind, "target", target, "se", useSe, "account", account, "nach", nach));
             db.exec("INSERT INTO approval_item(approval,kind,text,status,comment,payload) VALUES(?,?,?,?,?,?)", aid, "STEIG", text, "offen", "", payload);
             mail.notifyMeister("Steigerung braucht Freigabe: " + st.get("name"), acc.get("name") + " möchte steigern: " + text + "\n\nGrenze laut Konfiguration: " + limit + "x.\nFreigeben unter „Freigaben“.");
             return Map.of("pending", true, "text", text);
@@ -208,6 +231,41 @@ public final class Advance {
         if (seId != null) db.exec("UPDATE se SET used=? WHERE id=?", App.now(), seId);
         db.exec("INSERT INTO steig(file,kind,target,von,nach,cost,se,at) VALUES(?,?,?,?,?,?,?,?)", file, kind, target, von, nach, cost, useSe ? 1 : 0, App.now());
         return Map.of("ok", true, "cost", cost);
+    }
+
+    /** Letzte Steigerung einer Fertigkeit seit dem letzten Aussenden zurücknehmen (AP und ggf. SE gibt es zurück). */
+    synchronized Map<String, Object> rueckgaengig(String file, String target) throws Exception {
+        var last = db.query("SELECT MAX(sent) s FROM award WHERE file=? AND sent IS NOT NULL", file);
+        String since = last.isEmpty() || last.get(0).get("s") == null ? "" : String.valueOf(last.get(0).get("s"));
+        var r = db.query("SELECT * FROM steig WHERE file=? AND target=? AND at>=? ORDER BY id DESC LIMIT 1", file, target, since);
+        if (r.isEmpty()) throw new IllegalStateException(target + " wurde seit dem letzten Aussenden nicht gesteigert, da gibt es nichts zurückzunehmen.");
+        var s = r.get(0);
+        int von = ((Number) s.get("von")).intValue(), nach = ((Number) s.get("nach")).intValue(), cost = ((Number) s.get("cost")).intValue();
+        Document d = read(file);
+        Element held = (Element) d.getElementsByTagName("held").item(0), el = null;
+        String tag = "eigenschaft".equals(s.get("kind")) ? "eigenschaft" : "talent";
+        for (Element e : Heroes.all(held, tag)) if (e.getAttribute("name").equals(target) && (!tag.equals("talent") || e.hasAttribute("value"))) el = e;
+        if (el == null || Heroes.num(el.getAttribute("value")) != nach)
+            throw new IllegalStateException(target + " hat sich inzwischen geändert (z. B. vom Meister), Zurücknehmen geht hier nicht mehr.");
+        el.setAttribute("value", String.valueOf(von));
+        int frei = Heroes.num(Heroes.attr(Heroes.first(held, "freieabenteuerpunkte"), "value"));
+        setFreieAp(d, held, frei + cost);
+        ereignis(d, held, tag.equals("eigenschaft") ? "EIGENSCHAFTEN" : "TALENT", target + ": zurückgenommen", nach, von, "-" + cost + " AP (Rücknahme)");
+        write(file, d);
+        if (((Number) s.get("se")).intValue() == 1)
+            db.exec("UPDATE se SET used=NULL WHERE id=(SELECT id FROM se WHERE file=? AND target=? AND used IS NOT NULL ORDER BY used DESC LIMIT 1)", file, target);
+        db.exec("DELETE FROM steig WHERE id=?", s.get("id"));
+        return Map.of("ok", true, "cost", cost);
+    }
+
+    /** Was sich seit dem letzten Aussenden zurücknehmen lässt: Fertigkeit -> AP, die es zurückgibt. */
+    Map<String, Integer> zuruecknehmbar(String file) {
+        var last = db.query("SELECT MAX(sent) s FROM award WHERE file=? AND sent IS NOT NULL", file);
+        String since = last.isEmpty() || last.get(0).get("s") == null ? "" : String.valueOf(last.get(0).get("s"));
+        Map<String, Integer> m = new HashMap<>();
+        for (var r : db.query("SELECT target, cost FROM steig WHERE file=? AND at>=? ORDER BY id", file, since))
+            m.put(String.valueOf(r.get("target")), ((Number) r.get("cost")).intValue());
+        return m;
     }
 
     // ------------------------------------------------------------------ Aussenden
@@ -307,13 +365,13 @@ public final class Advance {
         m.post("/api/awards", ctx -> {
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
             List<?> list = (List<?>) b.get("awards");
-            if (list == null || list.isEmpty()) throw new IllegalArgumentException("Nichts vorzumerken");
+            if (list == null || list.isEmpty()) throw new IllegalArgumentException("Es ist nichts eingetragen: AP oder eine Spezielle Erfahrung angeben.");
             for (Object o : list) {
                 Map<?, ?> a = (Map<?, ?>) o;
                 String file = App.str(a.get("file"));
                 heroes.file(file);
                 int ap = a.get("ap") instanceof Number n ? n.intValue() : 0;
-                if (ap < 0 || ap > 100000) throw new IllegalArgumentException("AP ungültig");
+                if (ap < 0 || ap > 100000) throw new IllegalArgumentException("AP bitte als ganze Zahl zwischen 0 und 100000 eintragen.");
                 List<?> se = a.get("se") instanceof List<?> l ? l : List.of();
                 if (ap == 0 && se.isEmpty()) continue;
                 db.exec("INSERT INTO award(file,ap,se,note,created) VALUES(?,?,?,?,?)", file, ap, App.JSON.writeValueAsString(se), App.str(b.get("note")), App.now());
@@ -337,22 +395,28 @@ public final class Advance {
 
         // Spieler: eigener Held
         s.get("/api/myheroes/{file}/advance", ctx -> ctx.json(state(own(ctx.pathParam("file"), ctx))));
+        s.post("/api/myheroes/{file}/rueckgaengig", ctx -> {
+            String file = own(ctx.pathParam("file"), ctx);
+            ctx.json(rueckgaengig(file, App.str(ctx.bodyAsClass(Map.class).get("target"))));
+        });
         s.post("/api/myheroes/{file}/steigern", ctx -> {
             String file = own(ctx.pathParam("file"), ctx);
             if (!"übernommen".equals(db.query("SELECT status FROM hero WHERE file=?", file).get(0).get("status")))
                 throw new IllegalStateException("Steigern geht erst, wenn der Meister den Helden übernommen hat");
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
             String kind = App.str(b.get("kind"));
-            if (!List.of("talent", "eigenschaft").contains(kind)) throw new IllegalArgumentException("Art unbekannt");
+            if (!List.of("talent", "eigenschaft").contains(kind)) throw new IllegalArgumentException("Unbekannte Art der Steigerung. Bitte Seite neu laden.");
             ctx.json(steigern(file, kind, App.str(b.get("target")), Boolean.TRUE.equals(b.get("se")), false, accounts.current(ctx).get("id")));
         });
     }
 
     /** Wird bei Freigabe einer Steigerung aufgerufen. */
-    String approved(String payload) {
+    String approved(String payload, String text) {
         try {
             Map<?, ?> p = App.JSON.readValue(payload, Map.class);
-            var r = steigern(App.str(p.get("file")), App.str(p.get("kind")), App.str(p.get("target")), Boolean.TRUE.equals(p.get("se")), true, p.get("account"));
+            Integer nach = p.get("nach") instanceof Number n ? n.intValue() : null;
+            if (nach == null) { var m = java.util.regex.Pattern.compile(" auf (-?\\d+)").matcher(text == null ? "" : text); if (m.find()) nach = Integer.parseInt(m.group(1)); } // ältere Anfragen
+            var r = steigern(App.str(p.get("file")), App.str(p.get("kind")), App.str(p.get("target")), Boolean.TRUE.equals(p.get("se")), true, p.get("account"), nach);
             return "ausgeführt (" + r.get("cost") + " AP)";
         } catch (Exception e) { return "nicht ausgeführt: " + e.getMessage(); }
     }
@@ -360,7 +424,7 @@ public final class Advance {
     String own(String file, io.javalin.http.Context ctx) {
         Object me = accounts.current(ctx).get("id");
         var r = db.query("SELECT file FROM hero WHERE file=? AND account=?", file, me);
-        if (r.isEmpty()) throw new NotFoundResponse("Held unbekannt");
+        if (r.isEmpty()) throw new NotFoundResponse("Dieser Held wurde gelöscht oder gehört nicht mehr zu deinem Konto.");
         heroes.file(file);
         return file;
     }

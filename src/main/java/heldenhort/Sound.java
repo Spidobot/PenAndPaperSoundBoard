@@ -71,7 +71,7 @@ public final class Sound {
     /** sid = gewählte Session (aus „Sessions“) für die Rubrik Session. */
     public Map<String, Object> library(String scene, String sid) throws Exception {
         if (SESSION.equals(scene)) return sessionLib(sid);
-        if (!SCENES.contains(scene)) throw new IllegalArgumentException("Szene unbekannt");
+        if (!SCENES.contains(scene)) throw new IllegalArgumentException("Diese Soundboard-Rubrik gibt es nicht. Bitte Seite neu laden.");
         Map<String, Object> c = libCache.get(scene);
         if (c == null) { c = scan(scene); libCache.put(scene, c); }
         else scanner.submit(() -> rescan(scene));
@@ -163,7 +163,7 @@ public final class Sound {
         String action = String.valueOf(c.get("action"));
         if (action.equals("scene")) {
             String s = String.valueOf(c.get("scene"));
-            if (!SCENES.contains(s) && !SESSION.equals(s)) throw new IllegalArgumentException("Szene unbekannt");
+            if (!SCENES.contains(s) && !SESSION.equals(s)) throw new IllegalArgumentException("Diese Soundboard-Rubrik gibt es nicht. Bitte Seite neu laden.");
             scene = s;
         } else if (action.equals("fxvolume")) {
             fxVolume = Math.max(0, Math.min(100, ((Number) c.get("value")).intValue()));
@@ -171,11 +171,11 @@ public final class Sound {
             berthaAt = Boolean.TRUE.equals(c.get("on")) ? System.currentTimeMillis() + 3_600_000 : 0;
         } else if (action.equals("fx")) {
             String f = FX.get(String.valueOf(c.get("key")));
-            if (f == null) throw new IllegalArgumentException("Effekt unbekannt");
+            if (f == null) throw new IllegalArgumentException("Diesen Effekt-Knopf gibt es nicht. Bitte Seite neu laden.");
             return fxEvent(fxUrl(f));
         } else {
             Channel k = ch.get(String.valueOf(c.get("ch")));
-            if (k == null) throw new IllegalArgumentException("Kanal unbekannt");
+            if (k == null) throw new IllegalArgumentException("Unbekannter Kanal (nur Musik oder Hintergrundgeräusche). Bitte Seite neu laden.");
             long now = System.currentTimeMillis();
             switch (action) {
                 case "pick" -> {
@@ -183,10 +183,10 @@ public final class Sound {
                     resolve(file); // prüft Pfad
                     k.file = file; k.offset = 0; k.since = now; k.playing = true;
                 }
-                case "play" -> { if (k.file == null) throw new IllegalArgumentException("Kein Titel gewählt"); if (!k.playing) { k.since = now; k.playing = true; } }
+                case "play" -> { if (k.file == null) throw new IllegalArgumentException("Es ist noch kein Titel gewählt. Erst einen Titel doppelt anklicken."); if (!k.playing) { k.since = now; k.playing = true; } }
                 case "pause" -> { k.offset = c.get("pos") instanceof Number n ? n.doubleValue() : k.pos(); k.playing = false; }
                 case "seek" -> {
-                    if (!(c.get("pos") instanceof Number n) || n.doubleValue() < 0) throw new IllegalArgumentException("Position fehlt");
+                    if (!(c.get("pos") instanceof Number n) || n.doubleValue() < 0) throw new IllegalArgumentException("Spulen ging nicht: keine gültige Position übermittelt.");
                     k.offset = n.doubleValue(); k.since = now;
                 }
                 case "stop" -> { k.offset = 0; k.playing = false; }
@@ -356,7 +356,7 @@ public final class Sound {
     public Path resolve(String rel) {
         Path p = root.resolve(rel).normalize();
         if (!p.startsWith(root.normalize()) || !p.toString().toLowerCase().endsWith(".mp3") || !Files.isRegularFile(p))
-            throw new IllegalArgumentException("Datei unbekannt");
+            throw new IllegalArgumentException("Diese Datei gibt es nicht mehr, vermutlich wurde sie gelöscht oder umbenannt. Bitte Seite neu laden.");
         return p;
     }
 

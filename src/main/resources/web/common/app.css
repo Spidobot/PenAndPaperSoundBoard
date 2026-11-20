@@ -251,3 +251,23 @@ table.zebra td{vertical-align:middle}
 html:has(dialog[open]){overflow:hidden}
 .sheethead{position:sticky;top:0;z-index:5;background:var(--bg);padding:14px 0 10px;border-bottom:1px solid var(--line);margin-bottom:10px}
 .xclose{font-size:1.1rem;line-height:1;padding:6px 12px}
+.pickrow{display:flex;align-items:stretch;border-bottom:1px solid var(--line)}
+.pickrow>[data-pv]{flex:1;border-bottom:0!important}
+.pickrow:nth-child(even){background:var(--panel2)}
+.picklist .pickrow button:nth-child(even){background:none}
+.ib.info{border:0;background:none;color:var(--acc);padding:0 12px;cursor:pointer;font-size:1rem}
+.zebra-rows .ctlgrid>div:nth-child(6n+4),.zebra-rows .ctlgrid>div:nth-child(6n+5),.zebra-rows .ctlgrid>div:nth-child(6n+6){background:var(--panel2)}
+.sticky-ap{align-items:center;justify-content:space-between}
+.btn:disabled,.btn[disabled]{opacity:.38;cursor:not-allowed;text-decoration:line-through;filter:grayscale(1)}
+tr[data-ok="0"] td{opacity:.6}
+tr.flash td{background:var(--acc-soft)!important;transition:background .3s}
+/* −/+ neben Zahlenfeldern */
+.stepper{display:inline-flex;align-items:stretch;gap:4px}
+.stepper input[type=number]{-moz-appearance:textfield;appearance:textfield;text-align:center;width:64px}
+.stepper input[type=number]::-webkit-inner-spin-button,.stepper input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.step{min-width:34px;min-height:34px;border:0;border-radius:6px;color:#fff;font-size:1.25rem;font-weight:700;line-height:1;cursor:pointer;display:inline-grid;place-items:center;padding:0 8px}
+.step.plus{background:#2f7d4f} /* Grün/Rot aus der Farbpalette (helle Variante), weiß lesbar in beiden Modi */
+.step.minus{background:#b03a32}
+.step:hover{filter:brightness(1.15)}
+.step:active{transform:scale(.94)}
+td .step.minus{margin-right:8px;vertical-align:middle}
