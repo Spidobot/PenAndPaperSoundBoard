@@ -82,10 +82,10 @@ class Player{
 
 /** Abstimmungs-Übersicht: Zeilen = Termine, Spalten = Personen. mine = eigene Konto-ID (Spieler), sonst null. */
 const SYM={ja:'✓',vielleicht:'?',nein:'✗'};
-function pollMatrix(p,mine,draftAns){
+function pollMatrix(p,mine,draftAns,meinName='Du'){
   const vote=(o,a)=>p.votes.find(v=>String(v.option)===String(o)&&String(v.account)===String(a));
   const others=p.voters.filter(v=>String(v.id)!==String(mine));
-  return `<div class="tw"><table><thead><tr><th>Termin</th>${mine!=null?'<th>Du</th>':''}${others.map(v=>`<th>${esc(v.name)}</th>`).join('')}<th>Summe</th></tr></thead><tbody>${p.options.map(o=>{
+  return `<div class="tw"><table><thead><tr><th>Termin</th>${mine!=null?`<th>${esc(meinName)}</th>`:''}${others.map(v=>`<th>${esc(v.name)}</th>`).join('')}<th>Summe</th></tr></thead><tbody>${p.options.map(o=>{
     const all=p.voters.map(v=>vote(o.id,v.id)).filter(Boolean),ja=all.filter(v=>v.answer==='ja').length,vi=all.filter(v=>v.answer==='vielleicht').length;
     const cur=draftAns&&draftAns[o.id]||(vote(o.id,mine)||{}).answer;
     return `<tr><td><b>${esc(o.label)}</b></td>${mine!=null?`<td><span class="ans" data-opt="${o.id}">${['ja','vielleicht','nein'].map(a=>`<button class="${a}" data-a="${a}" aria-pressed="${cur===a}">${{ja:'kann',vielleicht:'vielleicht',nein:'kann nicht'}[a]}</button>`).join('')}</span></td>`:''}

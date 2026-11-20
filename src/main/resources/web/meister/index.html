@@ -89,17 +89,24 @@
           <select id="qcat" style="width:auto" aria-label="Art"><option value="">Alle Arten</option></select></div></div>
         <datalist id="qlist"></datalist>
         <div class="chips" id="quick"></div>
-        <div class="tw"><table><thead><tr><th>Held</th><th>Treffer</th><th>Art</th><th>Wert</th><th style="width:18%"></th><th>Details</th></tr></thead><tbody id="rbody"></tbody></table></div>
+        <div class="row probebar"><label class="small" for="pmod"><b>Probe würfeln:</b> Erschwernis (+) / Erleichterung (−)</label><input type="number" id="pmod" value="0" style="width:80px" aria-label="Erschwernis der Probe">
+          <span class="small mut">Gewürfelte Zahlen je Würfel der Reihe nach eintragen (springt selbst weiter), das Ergebnis steht sofort daneben.</span><button class="btn sm" type="button" id="pclear">Würfel leeren</button></div>
+        <div class="tw"><table><thead><tr><th>Held</th><th>Treffer</th><th>Art</th><th>Wert</th><th style="width:14%"></th><th>Probe (W20 je Eigenschaft)</th><th>Details</th></tr></thead><tbody id="rbody"></tbody></table></div>
       </div>
       <div class="card" id="awardCard">
-        <div class="spread"><h3>Abenteuer abschließen: AP und Spezielle Erfahrungen</h3><span class="small mut">Wird erst beim Aussenden in die Helden geschrieben</span></div>
+        <div class="spread"><h3>Abenteuer abschließen: AP, Geld und Spezielle Erfahrungen</h3><span class="small mut">Wird erst beim Aussenden in die Helden geschrieben</span></div>
         <div class="grid2">
           <div class="field"><label class="label" for="awAp">AP für alle</label><input type="number" id="awAp" min="0" value="0"></div>
           <div class="field"><label class="label" for="awSe">SE für alle (Talent, Enter zum Hinzufügen)</label><input type="text" id="awSe" list="qlist" placeholder="z. B. Sinnenschärfe"></div>
           <div class="field"><label class="label" for="awNote">Anlass</label><input type="text" id="awNote" placeholder="z. B. Phileasson, Kapitel 3"></div>
+          <div class="field"><span class="label">Geld für alle (Mittelreich)</span><div class="row geld" style="flex-wrap:nowrap">
+            <label class="small">D <input type="number" id="awG-Dukat" min="0" value="0" aria-label="Dukaten für alle"></label>
+            <label class="small">S <input type="number" id="awG-Silbertaler" min="0" value="0" aria-label="Silbertaler für alle"></label>
+            <label class="small">H <input type="number" id="awG-Heller" min="0" value="0" aria-label="Heller für alle"></label>
+            <label class="small">K <input type="number" id="awG-Kreuzer" min="0" value="0" aria-label="Kreuzer für alle"></label></div></div>
         </div>
         <div class="chips" id="awSeAll"></div>
-        <div class="tw"><table><thead><tr><th>Held</th><th>AP</th><th>Spezielle Erfahrungen</th></tr></thead><tbody id="awRows"></tbody></table></div>
+        <div class="tw"><table><thead><tr><th>Held</th><th>AP</th><th title="Dukaten · Silbertaler · Heller · Kreuzer">Geld (D · S · H · K)</th><th>Spezielle Erfahrungen</th></tr></thead><tbody id="awRows"></tbody></table></div>
         <div class="row"><button class="btn pri" id="awAdd">Vormerken</button></div>
         <div id="awPending"></div>
       </div>
@@ -118,7 +125,7 @@
         <form class="row" id="accForm"><input type="text" id="accName" placeholder="Name" style="width:180px" aria-label="Name" autocomplete="off">
           <input type="text" id="accPw" placeholder="Startpasswort" style="width:240px" aria-label="Startpasswort" autocomplete="off">
           <button class="btn sm pri" type="submit">Anlegen</button></form></div>
-      <div class="card tw"><table><thead><tr><th>Name</th><th>Mail</th><th>Zuletzt da</th><th>Letzte Anmeldung</th><th>Helden</th><th>XML-Upload</th><th></th></tr></thead><tbody id="acctab"></tbody></table></div>
+      <div class="card tw"><table><thead><tr><th>Name</th><th>Mail</th><th>Zuletzt da</th><th>Letzte Anmeldung</th><th>Helden</th><th>XML-Upload</th><th title="Pärchen: stimmt bei Terminen auch für diese Person ab">Termine auch für</th><th></th></tr></thead><tbody id="acctab"></tbody></table></div>
       <p class="small mut">Spieler melden sich mit Name und Passwort an und können das Passwort selbst ändern. Die Mail-Adresse hinterlegen sie selbst; sie gilt erst nach Klick auf den Bestätigungslink.</p>
     </section>
 
@@ -507,37 +514,79 @@ function hits(h,q,cat){const r=[],ql=q.toLowerCase(),code=q.toUpperCase();
   return r}
 function renderSearch(){fillSuggest();
   const q=$('#q').value.trim(),cat=$('#qcat').value,hs=sessHeroes();
-  if(!hs.length){$('#rbody').innerHTML='<tr><td colspan="6" class="empty">Keine Helden in dieser Session.</td></tr>';return}
-  if(q.length<2&&!cat){$('#rbody').innerHTML='<tr><td colspan="6" class="empty">Mindestens 2 Zeichen eingeben oder eine Art wählen.</td></tr>';return}
+  if(!hs.length){$('#rbody').innerHTML='<tr><td colspan="7" class="empty">Keine Helden in dieser Session.</td></tr>';return}
+  if(q.length<2&&!cat){$('#rbody').innerHTML='<tr><td colspan="7" class="empty">Mindestens 2 Zeichen eingeben oder eine Art wählen.</td></tr>';return}
   const rows=[];hs.forEach(h=>{const r=hits(h,q.length<2?'':q,cat);if(!r.length)rows.push({h,k:null});r.forEach(x=>rows.push({h,...x}))});
   rows.sort((a,b)=>(b.v??-999)-(a.v??-999));const top=Math.max(...rows.map(r=>r.v??-999));
   const re=q.length>=2?new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','i'):null;
   const nm=h=>`<button class="link" data-sheet="${esc(h.file)}">${esc(h.name)}</button>`;
-  $('#rbody').innerHTML=rows.map(r=>r.k===null?`<tr><td>${nm(r.h)}</td><td colspan="5" class="mut">nicht vorhanden</td></tr>`
+  $('#rbody').innerHTML=rows.map(r=>r.k===null?`<tr><td>${nm(r.h)}</td><td colspan="6" class="mut">nicht vorhanden</td></tr>`
     :`<tr class="${r.v!==null&&r.v===top&&top>-999?'best':''}"><td>${nm(r.h)}</td><td>${re?esc(r.k).replace(re,'<mark>$1</mark>'):esc(r.k)}</td><td class="small mut">${esc(r.t)}</td>
-      <td class="mono">${r.raw===''||r.raw==null?'✓':esc(r.raw)}</td><td>${r.v!==null?`<div class="bar"><i style="width:${Math.max(0,Math.min(100,r.v/r.max*100))}%"></i></div>`:''}</td><td class="small mut">${esc(r.d)}</td></tr>`).join('')}
+      <td class="mono">${r.raw===''||r.raw==null?'✓':esc(r.raw)}</td><td>${r.v!==null?`<div class="bar"><i style="width:${Math.max(0,Math.min(100,r.v/r.max*100))}%"></i></div>`:''}</td><td>${probeZelle(r)}</td><td class="small mut">${esc(r.d)}</td></tr>`).join('');
+  $$('#rbody .probe').forEach(probeAuswerten)}
+
+/* ---------- Probe auswerten (DSA 4.1) ----------
+   Talent/Zauber: drei W20 gegen die drei Eigenschaften. Jeder Punkt über der Eigenschaft kostet einen Punkt aus TaW − Erschwernis.
+   Bleibt ≥ 0 übrig: gelungen, TaP* = Rest (höchstens TaW). Ist TaW − Erschwernis negativ, wird jede Eigenschaft um den Fehlbetrag gesenkt,
+   dann bleibt bei Erfolg 0 übrig. Zwei oder drei Einsen: gelungen mit vollem TaW (Glückswurf). Zwei oder drei Zwanziger: Patzer.
+   Eigenschaftsprobe: ein W20 ≤ Eigenschaft − Erschwernis; 1 gelingt immer, 20 misslingt immer. */
+const PKEY=r=>r.h.file+'|'+r.t+'|'+r.k;let PW={}; // gewürfelte Zahlen bleiben beim Neuaufbau der Liste stehen
+function probeEig(r){if(r.t==='Eigenschaft')return [r.k];const m=String(r.d||'').match(/\(\s*([A-Z]{2})\s*\/\s*([A-Z]{2})\s*\/\s*([A-Z]{2})\s*\)/);return m?[m[1],m[2],m[3]]:null}
+function probeZelle(r){const e=probeEig(r);if(!e||r.v===null)return '';const key=PKEY(r),w=PW[key]||[];
+  return `<div class="probe" data-pk="${esc(key)}" data-taw="${r.v}" data-eig="${e.map(k=>k+':'+(r.h.E[k]??'')).join(',')}" data-art="${r.t==='Eigenschaft'?'E':'T'}">
+    <span class="pw">${e.map((k,i)=>`<label title="${k} ${r.h.E[k]??'?'}"><span class="small mut">${k} ${r.h.E[k]??'?'}</span><input type="text" inputmode="numeric" maxlength="2" pattern="[0-9]*" autocomplete="off" data-nostep value="${esc(w[i]??'')}" data-pi="${i}" aria-label="Wurf für ${k}"></label>`).join('')}</span>
+    <span class="pres small" aria-live="polite"></span></div>`}
+function probe(taw,eig,w,mod,art){
+  if(w.some(x=>!(x>=1&&x<=20)))return null;
+  if(eig.some(e=>e==null||isNaN(e)))return {cls:'warn',text:'Eigenschaftswert fehlt im Heldenbogen'};
+  if(art==='E'){const ziel=eig[0]-mod;
+    if(w[0]===1)return {cls:'ok',text:'gelungen (1 gelingt immer)'};if(w[0]===20)return {cls:'bad',text:'misslungen (20 misslingt immer)'};
+    return w[0]<=ziel?{cls:'ok',text:`gelungen, ${ziel-w[0]} Punkte Luft`}:{cls:"bad",text:`misslungen, ${w[0]-ziel} ${w[0]-ziel===1?"Punkt":"Punkte"} zu hoch`}}
+  const einsen=w.filter(x=>x===1).length,zw=w.filter(x=>x===20).length;
+  if(zw>=2)return {cls:'bad',text:zw===3?'Dreifach-20: katastrophaler Patzer':'Doppel-20: Patzer'};
+  if(einsen>=2)return {cls:'ok',text:(einsen===3?'Dreifach-1: spektakulär gelungen':'Doppel-1: meisterhaft gelungen')+`, ${Math.max(0,taw)} TaP* (voller TaW)`};
+  let p=taw-mod;
+  if(p>=0){let rest=p;for(let i=0;i<3;i++)if(w[i]>eig[i])rest-=w[i]-eig[i];
+    return rest>=0?{cls:'ok',text:`gelungen, ${Math.min(rest,Math.max(taw,0))} TaP* übrig`+(rest===0?' (knapp)':'')}:{cls:'bad',text:`misslungen, ${-rest} ${-rest===1?"Punkt":"Punkte"} gefehlt`}}
+  const zu=w.map((x,i)=>x-(eig[i]+p)).filter(x=>x>0);
+  return zu.length?{cls:'bad',text:`misslungen (TaW−Erschwernis ${p}: jede Eigenschaft um ${-p} gesenkt), ${zu.reduce((a,b)=>a+b,0)} Punkte gefehlt`}
+    :{cls:'ok',text:`gelungen trotz negativem Rest (${p}), 0 TaP* übrig`}}
+function probeAuswerten(box){const w=[...box.querySelectorAll('input')].map(i=>i.value===''?NaN:+i.value);PW[box.dataset.pk]=w.map(x=>isNaN(x)?'':x);
+  const eig=box.dataset.eig.split(',').map(x=>{const v=x.split(':')[1];return v===''?NaN:+v});
+  const r=probe(+box.dataset.taw,eig,w,+$('#pmod').value||0,box.dataset.art),out=box.querySelector('.pres');
+  out.className='pres small'+(r?' '+r.cls:'');out.textContent=r?r.text:''}
+$('#rbody').addEventListener('input',e=>{const i=e.target.closest('.probe input');if(!i)return;i.value=i.value.replace(/\D/g,'');
+  i.classList.toggle('falsch',i.value!==''&&!(+i.value>=1&&+i.value<=20));const box=i.closest('.probe');probeAuswerten(box);
+  // weiter zum nächsten Würfel: nach zweistelliger Zahl oder wenn keine zweite Ziffer mehr möglich ist (3–9)
+  if(i.value.length>=2||(+i.value>=3&&+i.value<=9)){const ins=[...box.querySelectorAll('input')],n=ins.indexOf(i);if(ins[n+1])ins[n+1].focus();else{const next=box.closest('tr').nextElementSibling;const f=next&&next.querySelector('.probe input');if(f)f.focus()}}});
+$('#pmod').oninput=()=>$$('#rbody .probe').forEach(probeAuswerten);
+$('#pclear').onclick=()=>{PW={};renderSearch();const f=$('#rbody .probe input');if(f)f.focus()};
 /* AP und SE vormerken */
-let awSe=[],awOv={};
+let awSe=[],awOv={};const MUENZ=['Dukat','Silbertaler','Heller','Kreuzer'],MKURZ={Dukat:'D',Silbertaler:'S',Heller:'H',Kreuzer:'K'};
+const geldKurz=g=>MUENZ.filter(m=>g&&g[m]>0).map(m=>g[m]+' '+MKURZ[m]).join(' ');
 function renderAward(){const hs=sessHeroes();
   $('#awSeAll').innerHTML=awSe.map((t,i)=>`<span class="chip">${esc(t)} <button class="link" data-awrm="${i}" aria-label="entfernen">✕</button></span>`).join('');
   $('#awRows').innerHTML=hs.map(h=>{const o=awOv[h.file]||{};const ap=o.ap??$('#awAp').value;const extra=o.se||[];
-    return `<tr><td>${esc(h.name)} <span class="small mut">${esc(h.player||'')}</span></td><td><input type="number" min="0" value="${esc(ap)}" data-awap="${esc(h.file)}" style="width:100px"></td>
+    const g=MUENZ.map(m=>`<input type="number" min="0" data-nostep value="${esc((o.geld||{})[m]??$('#awG-'+m).value)}" data-awg="${esc(h.file)}" data-m="${m}" aria-label="${m} für ${esc(h.name)}" title="${m}" style="width:64px">`).join('');
+    return `<tr><td>${esc(h.name)} <span class="small mut">${esc(h.player||'')}</span></td><td><input type="number" min="0" value="${esc(ap)}" data-awap="${esc(h.file)}" style="width:100px"></td><td><div class="row geld" style="flex-wrap:nowrap;gap:4px">${g}</div></td>
       <td><span class="small mut">${awSe.map(esc).join(', ')||'–'}</span>${extra.map((t,i)=>` <span class="chip">${esc(t)} <button class="link" data-awxr="${esc(h.file)}" data-i="${i}">✕</button></span>`).join('')}
-      <input type="text" list="qlist" placeholder="+ SE nur für diesen Helden" data-awse="${esc(h.file)}" style="width:200px"></td></tr>`}).join('')||'<tr><td colspan="3" class="empty">Keine Helden in dieser Session.</td></tr>';
+      <input type="text" list="qlist" placeholder="+ SE nur für diesen Helden" data-awse="${esc(h.file)}" style="width:200px"></td></tr>`}).join('')||'<tr><td colspan="4" class="empty">Keine Helden in dieser Session.</td></tr>';
   loadPending()}
 async function loadPending(){let ps;try{ps=await api('/api/awards')}catch(e){return}
-  $('#awPending').innerHTML=ps.length?`<h3 style="margin-top:12px">Vorgemerkt</h3><div class="tw"><table><tbody>${ps.map(a=>{const h=heroes.find(x=>x.file===a.file);return `<tr><td>${esc(h?h.name:a.file)}</td><td class="mono">${a.ap} AP</td><td class="small">${JSON.parse(a.se).map(esc).join(', ')}</td><td class="small mut">${esc(a.note||'')}</td><td><button class="btn sm danger" data-awdel="${a.id}">✕</button></td></tr>`}).join('')}</tbody></table></div>
-    <div class="row"><button class="btn pri" id="awSend">Aussenden (${ps.length})</button><span class="small mut">Schreibt AP in die Helden-XML, schreibt SE gut und benachrichtigt die Spieler.</span></div>`:''}
+  $('#awPending').innerHTML=ps.length?`<h3 style="margin-top:12px">Vorgemerkt</h3><div class="tw"><table><tbody>${ps.map(a=>{const h=heroes.find(x=>x.file===a.file);return `<tr><td>${esc(h?h.name:a.file)}</td><td class="mono">${a.ap?a.ap+' AP':''}${a.geld?` <span title="Dukaten/Silbertaler/Heller/Kreuzer">${esc(geldKurz(JSON.parse(a.geld)))}</span>`:''}</td><td class="small">${JSON.parse(a.se).map(esc).join(', ')}</td><td class="small mut">${esc(a.note||'')}</td><td><button class="btn sm danger" data-awdel="${a.id}">✕</button></td></tr>`}).join('')}</tbody></table></div>
+    <div class="row"><button class="btn pri" id="awSend">Aussenden (${ps.length})</button><span class="small mut">Schreibt AP und Geld in die Helden-XML, schreibt SE gut und benachrichtigt die Spieler.</span></div>`:''}
 $('#awSe').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const v=e.target.value.trim();if(v&&!awSe.includes(v))awSe.push(v);e.target.value='';renderAward()}});
 $('#awAp').oninput=()=>{awOv={...Object.fromEntries(Object.entries(awOv).map(([k,v])=>[k,{...v,ap:undefined}]))};renderAward()};
-$('#awardCard').addEventListener('change',e=>{const t=e.target;if(t.dataset.awap){(awOv[t.dataset.awap]=awOv[t.dataset.awap]||{}).ap=t.value}});
+$('#awardCard').addEventListener('change',e=>{const t=e.target;if(t.dataset.awap){(awOv[t.dataset.awap]=awOv[t.dataset.awap]||{}).ap=t.value}
+  if(t.dataset.awg){const o=awOv[t.dataset.awg]=awOv[t.dataset.awg]||{};(o.geld=o.geld||{})[t.dataset.m]=t.value}});
+MUENZ.forEach(m=>$('#awG-'+m).oninput=()=>{for(const k in awOv)if(awOv[k].geld)delete awOv[k].geld[m];renderAward()});
 $('#awardCard').addEventListener('keydown',e=>{const t=e.target;if(t.dataset.awse&&e.key==='Enter'){e.preventDefault();const v=t.value.trim();if(!v)return;const o=awOv[t.dataset.awse]=awOv[t.dataset.awse]||{};(o.se=o.se||[]).push(v);renderAward()}});
 $('#awardCard').addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;
   if(b.dataset.awrm){awSe.splice(+b.dataset.awrm,1);renderAward()}
   if(b.dataset.awxr){awOv[b.dataset.awxr].se.splice(+b.dataset.i,1);renderAward()}
   if(b.dataset.awdel){await api('/api/awards/'+b.dataset.awdel,{method:'DELETE'}).catch(x=>toastErr(x.message));loadPending()}
-  if(b.id==='awAdd'){const list=sessHeroes().map(h=>{const o=awOv[h.file]||{};return {file:h.file,ap:+(o.ap??$('#awAp').value)||0,se:[...awSe,...(o.se||[])]}});
-    try{await api('/api/awards',{method:'POST',body:{awards:list,note:$('#awNote').value}});awOv={};awSe=[];$('#awAp').value=0;toast('Vorgemerkt. Mit „Aussenden“ geht es an die Helden.');renderAward()}catch(x){toastErr(x.message)}}
+  if(b.id==='awAdd'){const list=sessHeroes().map(h=>{const o=awOv[h.file]||{};return {file:h.file,ap:+(o.ap??$('#awAp').value)||0,se:[...awSe,...(o.se||[])],geld:Object.fromEntries(MUENZ.map(m=>[m,+((o.geld||{})[m]??$('#awG-'+m).value)||0]))}});
+    try{await api('/api/awards',{method:'POST',body:{awards:list,note:$('#awNote').value}});awOv={};awSe=[];$('#awAp').value=0;MUENZ.forEach(m=>$('#awG-'+m).value=0);toast('Vorgemerkt. Mit „Aussenden“ geht es an die Helden.');renderAward()}catch(x){toastErr(x.message)}}
   if(b.id==='awSend'){if(b.dataset.ask!=='1'){b.dataset.ask='1';b.textContent='Wirklich aussenden?';return}
     try{const r=await api('/api/awards/send',{method:'POST'});toast('Ausgesendet: '+r.done.join(' · '));renderAward()}catch(x){toastErr(x.message)}}});
 
@@ -603,8 +652,8 @@ function renderAccounts(){
     const act=accConfirm===a.id?`<span class="small">Konto löschen? Helden bleiben erhalten.</span><button class="btn sm danger" data-adel="${a.id}">Ja, löschen</button><button class="btn sm" data-ano>Nein</button>`
       :accPwOpen===a.id?`<input type="text" id="apw-${a.id}" placeholder="neues Passwort" style="width:180px" aria-label="Neues Passwort"><button class="btn sm pri" data-apwset="${a.id}">Setzen</button><button class="btn sm" data-ano>Abbrechen</button>`
       :`<button class="btn sm" data-apw="${a.id}">Passwort setzen</button><button class="btn sm danger" data-aask="${a.id}">Löschen</button>`;
-    return `<tr><td><b>${esc(a.name)}</b></td><td class="small">${mail}</td><td class="mono small">${esc(a.last_seen||'noch nie')}</td><td class="mono small" title="Angelegt ${esc(a.created||'')}">${esc(a.last_login||'noch nie')}</td><td>${n}</td><td><label class="small" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" data-aup="${a.id}"${a.can_upload==1?' checked':''}> darf</label></td><td><div class="row" style="flex-wrap:nowrap">${act}</div></td></tr>`}).join('')
-    ||'<tr><td colspan="7" class="empty">Noch keine Spieler. Oben anlegen.</td></tr>'}
+    return `<tr><td><b>${esc(a.name)}</b></td><td class="small">${mail}</td><td class="mono small">${esc(a.last_seen||'noch nie')}</td><td class="mono small" title="Angelegt ${esc(a.created||'')}">${esc(a.last_login||'noch nie')}</td><td>${n}</td><td><label class="small" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" data-aup="${a.id}"${a.can_upload==1?' checked':''}> darf</label></td><td><select class="votefor" data-avf="${a.id}" aria-label="${esc(a.name)} stimmt bei Terminen auch ab für" title="Pärchen: stimmt bei Terminen auch für diese Person ab"><option value="">niemanden</option>${accts.filter(x=>x.id!==a.id).map(x=>`<option value="${x.id}"${String(a.vote_for)===String(x.id)?' selected':''}>${esc(x.name)}</option>`).join('')}</select></td><td><div class="row" style="flex-wrap:nowrap">${act}</div></td></tr>`}).join('')
+    ||'<tr><td colspan="8" class="empty">Noch keine Spieler. Oben anlegen.</td></tr>'}
 $('#accForm').onsubmit=async e=>{e.preventDefault();
   try{await api('/api/accounts',{method:'POST',body:{name:$('#accName').value,password:$('#accPw').value}});toast('Spieler angelegt. Name und Startpasswort weitergeben.');$('#accName').value='';$('#accPw').value='';loadAccounts()}catch(x){toastErr(x.message)}};
 $('#acctab').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
@@ -613,6 +662,9 @@ $('#acctab').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
   else if(b.dataset.ano!==undefined){accConfirm=accPwOpen=null;renderAccounts()}
   else if(b.dataset.adel){try{await api('/api/accounts/'+b.dataset.adel,{method:'DELETE'});accConfirm=null;toast('Konto gelöscht');loadAccounts()}catch(x){toastErr(x.message)}}
   else if(b.dataset.apwset){try{await api('/api/accounts/'+b.dataset.apwset+'/password',{method:'POST',body:{password:$('#apw-'+b.dataset.apwset).value}});accPwOpen=null;toast('Passwort gesetzt, alte Anmeldungen sind abgemeldet');renderAccounts()}catch(x){toastErr(x.message)}}};
+$('#acctab').addEventListener('change',async e=>{const v=e.target.closest('[data-avf]');if(!v)return;const a=accts.find(x=>String(x.id)===v.dataset.avf),alt=a.vote_for;
+  try{await api('/api/accounts/'+v.dataset.avf+'/votefor',{method:'POST',body:{for:v.value?+v.value:null}});a.vote_for=v.value?+v.value:null;
+    toast(v.value?a.name+' stimmt bei Terminen jetzt auch für '+v.selectedOptions[0].textContent+' ab':a.name+' stimmt bei Terminen nur noch für sich selbst ab')}catch(x){toastErr(x.message);v.value=alt||''}});
 $('#acctab').addEventListener('change',async e=>{const c=e.target.closest('[data-aup]');if(!c)return;
   try{await api('/api/accounts/'+c.dataset.aup+'/upload',{method:'POST',body:{on:c.checked}});toast(c.checked?'Darf jetzt Helden-XML hochladen':'Hochladen gesperrt')}catch(x){toastErr(x.message);c.checked=!c.checked}});
 document.addEventListener('change',async e=>{const s=e.target.closest('select.owner');if(!s)return;

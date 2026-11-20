@@ -22,12 +22,13 @@ public final class Accounts {
         db.exec("CREATE TABLE IF NOT EXISTS account(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE COLLATE NOCASE, pw TEXT, "
                 + "tokver INTEGER DEFAULT 0, email TEXT, email_pending TEXT, email_token TEXT, created TEXT)");
         try { db.exec("ALTER TABLE account ADD COLUMN can_upload INTEGER DEFAULT 0"); } catch (RuntimeException alreadyThere) { }
+        try { db.exec("ALTER TABLE account ADD COLUMN vote_for INTEGER"); } catch (RuntimeException alreadyThere) { } // stimmt bei Terminen auch für dieses Konto ab
         try { db.exec("ALTER TABLE account ADD COLUMN last_login TEXT"); } catch (RuntimeException alreadyThere) { }
         try { db.exec("ALTER TABLE account ADD COLUMN last_seen TEXT"); } catch (RuntimeException alreadyThere) { }
     }
 
     public List<Map<String, Object>> list() {
-        return db.query("SELECT id,name,email,email_pending,created,can_upload,last_login,last_seen FROM account ORDER BY name COLLATE NOCASE");
+        return db.query("SELECT id,name,email,email_pending,created,can_upload,vote_for,last_login,last_seen FROM account ORDER BY name COLLATE NOCASE");
     }
 
     public long create(String name, String pw) {

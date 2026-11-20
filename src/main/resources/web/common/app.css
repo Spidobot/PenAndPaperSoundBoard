@@ -311,3 +311,25 @@ tr.geplant td{background:var(--acc-soft)}
 .tiles>.tile{flex:0 1 320px;min-width:260px}
 
 .picklist .hinw{display:block;color:var(--warn);font-size:.85rem;margin-top:2px}
+
+/* Kachel: roter Punkt (offene Stimme) und Ton-Knopf direkt auf der Kachel */
+.tile{position:relative}
+.tile .dot{position:absolute;top:14px;right:14px;width:16px;height:16px;border-radius:50%;background:#d93a2b;box-shadow:0 0 0 3px var(--panel),0 0 10px rgba(217,58,43,.7);animation:dotpuls 2s ease-in-out infinite}
+@keyframes dotpuls{50%{transform:scale(1.15)}}
+@media (prefers-reduced-motion:reduce){.tile .dot{animation:none}}
+div.tile[data-go]{cursor:pointer}
+.tile .tplay{justify-self:start;margin-top:4px}
+
+.geld input{width:64px}
+.geld label{display:inline-flex;gap:4px;align-items:center}
+
+/* Probe auswerten (Meister-Suche) */
+.probebar{align-items:center;gap:8px;margin:6px 0}
+.probe{display:grid;gap:4px;min-width:190px}
+.probe .pw{display:flex;gap:6px}
+.probe label{display:grid;gap:1px;text-align:center}
+.probe input{width:52px;text-align:center;font-family:var(--f-mono,monospace);padding:4px}
+.probe .pres.ok{color:var(--ok,#2e8b57);font-weight:600}
+.probe .pres.bad{color:#d93a2b;font-weight:600}
+.probe .pres.warn{color:var(--warn)}
+.probe input.falsch{border-color:#d93a2b;color:#d93a2b}

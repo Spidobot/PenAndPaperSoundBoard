@@ -45,6 +45,7 @@ public final class Advance {
     public Advance(Db db, Heroes heroes, HeldenJar jar, Accounts accounts, Mail mail) {
         this.db = db; this.heroes = heroes; this.jar = jar; this.accounts = accounts; this.mail = mail;
         db.exec("CREATE TABLE IF NOT EXISTS award(id INTEGER PRIMARY KEY AUTOINCREMENT, file TEXT, ap INTEGER, se TEXT, note TEXT, created TEXT, sent TEXT)");
+        try { db.exec("ALTER TABLE award ADD COLUMN geld TEXT"); } catch (RuntimeException alreadyThere) { } // {"Dukat":1,"Silbertaler":5,…}
         db.exec("CREATE TABLE IF NOT EXISTS se(id INTEGER PRIMARY KEY AUTOINCREMENT, file TEXT, target TEXT, granted TEXT, used TEXT)");
         db.exec("CREATE TABLE IF NOT EXISTS steig(id INTEGER PRIMARY KEY AUTOINCREMENT, file TEXT, kind TEXT, target TEXT, von INTEGER, nach INTEGER, cost INTEGER, se INTEGER, at TEXT)");
         try { db.exec("ALTER TABLE approval_item ADD COLUMN payload TEXT"); } catch (RuntimeException alreadyThere) { }
@@ -293,15 +294,64 @@ public final class Advance {
                 ereignis(d, held, "AP", App.str(a.get("note")).isEmpty() ? "Abenteuerpunkte" : App.str(a.get("note")), alt, alt + ap, ap + " AP");
                 write(file, d);
             }
+            Map<String, Integer> geld = geld(a.get("geld"));
+            if (!geld.isEmpty()) { geldGutschreiben(d, held, geld); write(file, d); }
             for (Object t : se) db.exec("INSERT INTO se(file,target,granted) VALUES(?,?,?)", file, App.str(t), now);
             db.exec("UPDATE award SET sent=? WHERE id=?", now, a.get("id"));
             String who = accounts.email(db.query("SELECT account FROM hero WHERE file=?", file).stream().findFirst().map(r -> r.get("account")).orElse(null));
-            mail.notify(who, "Neue Abenteuerpunkte für " + held.getAttribute("name"),
-                    "Der Meister hat " + held.getAttribute("name") + " " + ap + " AP gegeben" + (se.isEmpty() ? "" : " und Spezielle Erfahrungen in " + String.join(", ", se.stream().map(String::valueOf).toList()))
-                            + ".\n\nSteigern kannst du unter „Meine Helden“.");
-            done.add(held.getAttribute("name") + ": " + ap + " AP" + (se.isEmpty() ? "" : ", SE " + se));
+            List<String> teile = new ArrayList<>();
+            if (ap != 0) teile.add(ap + " AP");
+            if (!se.isEmpty()) teile.add("Spezielle Erfahrungen in " + String.join(", ", se.stream().map(String::valueOf).toList()));
+            if (!geld.isEmpty()) teile.add(geldText(geld));
+            String was = teile.size() <= 1 ? String.join("", teile) : String.join(", ", teile.subList(0, teile.size() - 1)) + " und " + teile.get(teile.size() - 1);
+            mail.notify(who, (ap != 0 ? "Neue Abenteuerpunkte für " : "Belohnung für ") + held.getAttribute("name"),
+                    "Der Meister hat " + held.getAttribute("name") + " " + was + " gegeben."
+                            + (ap != 0 || !se.isEmpty() ? "\n\nSteigern kannst du unter „Meine Helden“." : "") + (geld.isEmpty() ? "" : "\nDas Geld steht schon in der Geldbörse des Helden."));
+            done.add(held.getAttribute("name") + ": " + String.join(", ", teile));
         }
         return done;
+    }
+
+    // ------------------------------------------------------------------ Geld (Mittelreich: 1 Dukat = 10 Silbertaler = 100 Heller = 1000 Kreuzer)
+
+    static final List<String> MUENZEN = List.of("Dukat", "Silbertaler", "Heller", "Kreuzer");
+    private static final Map<String, String[]> MEHRZAHL = Map.of("Dukat", new String[]{"Dukat", "Dukaten"}, "Silbertaler", new String[]{"Silbertaler", "Silbertaler"},
+            "Heller", new String[]{"Heller", "Heller"}, "Kreuzer", new String[]{"Kreuzer", "Kreuzer"});
+
+    /** Geld aus der Vormerkung (JSON) bzw. aus der Anfrage; nur positive ganze Zahlen der vier Münzen. */
+    static Map<String, Integer> geld(Object o) {
+        Map<String, Integer> out = new LinkedHashMap<>();
+        Map<?, ?> m;
+        try { m = o instanceof Map<?, ?> x ? x : o == null || App.str(o).isEmpty() ? Map.of() : App.JSON.readValue(App.str(o), Map.class); }
+        catch (Exception e) { return out; }
+        for (String k : MUENZEN) {
+            int n = m.get(k) instanceof Number z ? z.intValue() : 0;
+            if (n < 0 || n > 1_000_000) throw new IllegalArgumentException(k + ": bitte eine ganze Zahl zwischen 0 und 1000000.");
+            if (n > 0) out.put(k, n);
+        }
+        return out;
+    }
+
+    static String geldText(Map<String, Integer> g) {
+        List<String> t = new ArrayList<>();
+        g.forEach((k, n) -> t.add(n + " " + MEHRZAHL.get(k)[n == 1 ? 0 : 1]));
+        return String.join(", ", t);
+    }
+
+    /** Münzen in die Geldbörse (<geldboerse><muenze anzahl name waehrung="Mittelreich"/>), wie die Helden-Software sie speichert. */
+    private static void geldGutschreiben(Document d, Element held, Map<String, Integer> g) {
+        Element boerse = Heroes.first(held, "geldboerse");
+        if (boerse == null) { boerse = d.createElement("geldboerse"); held.appendChild(boerse); }
+        for (var en : g.entrySet()) {
+            Element mz = null;
+            var nl = boerse.getElementsByTagName("muenze");
+            for (int i = 0; i < nl.getLength(); i++) {
+                Element e = (Element) nl.item(i);
+                if (en.getKey().equals(e.getAttribute("name")) && "Mittelreich".equals(e.getAttribute("waehrung"))) mz = e;
+            }
+            if (mz == null) { mz = d.createElement("muenze"); mz.setAttribute("name", en.getKey()); mz.setAttribute("waehrung", "Mittelreich"); mz.setAttribute("anzahl", "0"); boerse.appendChild(mz); }
+            mz.setAttribute("anzahl", String.valueOf(Heroes.num(mz.getAttribute("anzahl")) + en.getValue()));
+        }
     }
 
     // ------------------------------------------------------------------ XML
@@ -367,7 +417,8 @@ public final class Advance {
         m.post("/api/awards", ctx -> {
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
             List<?> list = (List<?>) b.get("awards");
-            if (list == null || list.isEmpty()) throw new IllegalArgumentException("Es ist nichts eingetragen: AP oder eine Spezielle Erfahrung angeben.");
+            if (list == null || list.isEmpty()) throw new IllegalArgumentException("Es ist nichts eingetragen: AP, Geld oder eine Spezielle Erfahrung angeben.");
+            int eingetragen = 0;
             for (Object o : list) {
                 Map<?, ?> a = (Map<?, ?>) o;
                 String file = App.str(a.get("file"));
@@ -375,9 +426,13 @@ public final class Advance {
                 int ap = a.get("ap") instanceof Number n ? n.intValue() : 0;
                 if (ap < 0 || ap > 100000) throw new IllegalArgumentException("AP bitte als ganze Zahl zwischen 0 und 100000 eintragen.");
                 List<?> se = a.get("se") instanceof List<?> l ? l : List.of();
-                if (ap == 0 && se.isEmpty()) continue;
-                db.exec("INSERT INTO award(file,ap,se,note,created) VALUES(?,?,?,?,?)", file, ap, App.JSON.writeValueAsString(se), App.str(b.get("note")), App.now());
+                Map<String, Integer> geld = geld(a.get("geld"));
+                if (ap == 0 && se.isEmpty() && geld.isEmpty()) continue;
+                db.exec("INSERT INTO award(file,ap,se,note,created,geld) VALUES(?,?,?,?,?,?)", file, ap, App.JSON.writeValueAsString(se), App.str(b.get("note")), App.now(),
+                        geld.isEmpty() ? null : App.JSON.writeValueAsString(geld));
+                eingetragen++;
             }
+            if (eingetragen == 0) throw new IllegalArgumentException("Bei keinem Helden ist etwas eingetragen: AP, Geld oder eine Spezielle Erfahrung angeben.");
             ctx.json(Map.of("ok", true));
         });
         m.delete("/api/awards/{id}", ctx -> { db.exec("DELETE FROM award WHERE id=? AND sent IS NULL", ctx.pathParam("id")); ctx.json(Map.of("ok", true)); });

@@ -233,6 +233,15 @@ public final class App {
             db.exec("UPDATE hero SET background=? WHERE file=?", cleanBg(ctx.bodyAsClass(Map.class).get("bg")), ctx.pathParam("file"));
             ctx.json(Map.of("ok", true));
         });
+        m.post("/api/accounts/{id}/votefor", ctx -> { // Pärchen: dieses Konto stimmt bei Terminen auch für ein anderes ab
+            long id = Long.parseLong(ctx.pathParam("id"));
+            Object f = ctx.bodyAsClass(Map.class).get("for");
+            Long fuer = f instanceof Number n ? n.longValue() : null;
+            if (fuer != null && fuer == id) throw new IllegalArgumentException("Ein Konto kann nicht für sich selbst zusätzlich abstimmen.");
+            if (fuer != null && db.query("SELECT 1 FROM account WHERE id=?", fuer).isEmpty()) throw new IllegalArgumentException("Dieses Konto gibt es nicht mehr.");
+            db.exec("UPDATE account SET vote_for=? WHERE id=?", fuer, id);
+            ctx.json(Map.of("ok", true));
+        });
         m.post("/api/accounts/{id}/upload", ctx -> {
             db.exec("UPDATE account SET can_upload=? WHERE id=?", Boolean.TRUE.equals(ctx.bodyAsClass(Map.class).get("on")) ? 1 : 0, Long.parseLong(ctx.pathParam("id")));
             ctx.json(Map.of("ok", true));

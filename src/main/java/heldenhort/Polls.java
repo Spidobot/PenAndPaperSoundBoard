@@ -24,6 +24,14 @@ public final class Polls {
         db.exec("CREATE TABLE IF NOT EXISTS poll_vote(poll INTEGER, option INTEGER, account INTEGER, answer TEXT, at TEXT, PRIMARY KEY(option, account))");
     }
 
+    /** Für wen dieses Konto abstimmen darf: sich selbst und den vom Meister eingetragenen Partner (vote_for). */
+    Set<String> darfFuer(Object me) {
+        Set<String> s = new HashSet<>(List.of(String.valueOf(me)));
+        var r = db.query("SELECT vote_for FROM account WHERE id=?", me);
+        if (!r.isEmpty() && r.get(0).get("vote_for") != null) s.add(String.valueOf(r.get(0).get("vote_for")));
+        return s;
+    }
+
     /** Konten, die abstimmen sollen. */
     List<Map<String, Object>> voters(Object session) {
         if (session == null) return db.query("SELECT id,name FROM account ORDER BY name COLLATE NOCASE");
@@ -127,13 +135,22 @@ public final class Polls {
             ctx.contentType("text/calendar; charset=UTF-8").result(ics);
         });
 
-        // --- Spieler: offene Abstimmungen, bei denen das Konto abstimmen soll
+        // --- Spieler: offene Abstimmungen, bei denen das Konto abstimmen soll (selbst oder für den eingetragenen Partner)
         spieler.get("/api/polls", ctx -> {
             Object me = accounts.current(ctx).get("id");
+            Set<String> ich = darfFuer(me);
             List<Map<String, Object>> out = new ArrayList<>();
             for (var p : db.query("SELECT * FROM poll WHERE closed=0 OR fixed IS NOT NULL ORDER BY id DESC LIMIT 30")) {
                 var f = full(p);
-                if (((List<?>) f.get("voters")).stream().anyMatch(v -> Objects.equals(String.valueOf(((Map<?, ?>) v).get("id")), String.valueOf(me)))) out.add(f);
+                List<Map<String, Object>> fuer = new ArrayList<>();
+                for (Object v : (List<?>) f.get("voters")) {
+                    Map<?, ?> vm = (Map<?, ?>) v;
+                    if (ich.contains(String.valueOf(vm.get("id")))) fuer.add(Map.of("id", vm.get("id"), "name", vm.get("name"), "selbst", String.valueOf(vm.get("id")).equals(String.valueOf(me))));
+                }
+                if (fuer.isEmpty()) continue;
+                fuer.sort(Comparator.comparing(x -> !Boolean.TRUE.equals(x.get("selbst")))); // erst die eigene Stimme, dann die für den Partner
+                f.put("fuer", fuer);
+                out.add(f);
             }
             ctx.json(out);
         });
@@ -142,9 +159,13 @@ public final class Polls {
             var p = db.query("SELECT * FROM poll WHERE id=? AND closed=0", ctx.pathParam("id"));
             if (p.isEmpty()) throw new NotFoundResponse("Abstimmung unbekannt oder geschlossen");
             var f = full(p.get(0));
-            if (((List<?>) f.get("voters")).stream().noneMatch(v -> Objects.equals(String.valueOf(((Map<?, ?>) v).get("id")), String.valueOf(a.get("id")))))
-                throw new IllegalArgumentException("Du bist bei dieser Abstimmung nicht dabei");
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
+            Object wer = b.get("fuer") instanceof Number n ? (Object) n.longValue() : a.get("id");
+            if (!darfFuer(a.get("id")).contains(String.valueOf(wer)))
+                throw new IllegalArgumentException("Für dieses Konto darfst du nicht abstimmen. Das stellt der Meister unter Spieler ein.");
+            if (((List<?>) f.get("voters")).stream().noneMatch(v -> Objects.equals(String.valueOf(((Map<?, ?>) v).get("id")), String.valueOf(wer))))
+                throw new IllegalArgumentException(String.valueOf(wer).equals(String.valueOf(a.get("id"))) ? "Du bist bei dieser Abstimmung nicht dabei" : "Dein Partner ist bei dieser Abstimmung nicht dabei");
+            String werName = String.valueOf(db.query("SELECT name FROM account WHERE id=?", wer).get(0).get("name"));
             Map<?, ?> answers = b.get("answers") instanceof Map<?, ?> m ? m : Map.of();
             Set<String> optionIds = new HashSet<>();
             for (Object o : (List<?>) f.get("options")) optionIds.add(String.valueOf(((Map<?, ?>) o).get("id")));
@@ -153,11 +174,12 @@ public final class Polls {
                 String opt = String.valueOf(e.getKey()), ans = App.str(e.getValue());
                 if (!optionIds.contains(opt) || !ANSWERS.contains(ans)) throw new IllegalArgumentException("Ungültige Stimme");
                 db.exec("INSERT INTO poll_vote(poll,option,account,answer,at) VALUES(?,?,?,?,?) ON CONFLICT(option,account) DO UPDATE SET answer=excluded.answer, at=excluded.at",
-                        p.get(0).get("id"), Long.parseLong(opt), a.get("id"), ans, App.now());
+                        p.get(0).get("id"), Long.parseLong(opt), wer, ans, App.now());
                 for (Object o : (List<?>) f.get("options")) if (String.valueOf(((Map<?, ?>) o).get("id")).equals(opt)) lines.add(((Map<?, ?>) o).get("label") + ": " + ans);
             }
             String title = String.valueOf(p.get(0).get("title"));
-            mail.notifyMeister("Termin: " + a.get("name") + " hat abgestimmt", "Abstimmung „" + title + "“\n\n" + String.join("\n", lines));
+            String wie = werName.equals(String.valueOf(a.get("name"))) ? werName : werName + " (abgestimmt von " + a.get("name") + ")";
+            mail.notifyMeister("Termin: " + wie + " hat abgestimmt", "Abstimmung „" + title + "“\n\n" + String.join("\n", lines));
             // Alle Stimmen da? (jede Person hat zu jedem Termin abgestimmt) -> einmal melden
             var now = full(p.get(0));
             int need = ((List<?>) now.get("voters")).size() * ((List<?>) now.get("options")).size();

@@ -52,8 +52,9 @@ html,body{margin:0}
     <div class="spread" style="margin-bottom:18px"><div style="display:grid;gap:4px"><span class="smalllogo"><img src="/common/d20.svg" alt="" width="22" height="22"> Heldenhort</span><h1 id="greet"></h1></div><details class="gear"><summary aria-label="Einstellungen" title="Konto und Abmelden">&#9881;&#xFE0E;</summary><div class="gearmenu"><button type="button" data-go="s-konto">Konto (Passwort, Mail)</button><button type="button" id="logout">Abmelden</button></div></details></div>
     <div class="tiles">
       <button class="tile" data-go="s-mine"><span class="ico">⚔</span><h2>Meine Helden</h2><span class="mut">Deine Helden ansehen, neue Helden erstellen und angefangene weiterbauen.</span></button>
-      <button class="tile" data-go="s-stream"><span class="ico">♪</span><h2>Soundstream</h2><span class="mut">Musik und Geräusche vom Spieltisch. Du regelst nur deine Lautstärke.</span></button>
-      <button class="tile" data-go="s-termine"><span class="ico">⧗</span><h2>Termine</h2><span class="mut">Abstimmen, wann die nächste Runde stattfindet.</span></button>
+      <div class="tile" data-go="s-stream" role="button" tabindex="0"><span class="ico">♪</span><h2>Soundstream</h2><span class="mut">Musik und Geräusche vom Spieltisch. Du regelst nur deine Lautstärke.</span>
+        <button type="button" class="btn pri tplay" id="tplay" aria-pressed="false" aria-label="Ton einschalten">▶ Ton an</button></div>
+      <button class="tile" data-go="s-termine"><span class="ico">⧗</span><h2>Termine</h2><span class="mut">Abstimmen, wann die nächste Runde stattfindet.</span><span class="dot" id="pollDot" hidden title="Hier fehlt noch deine Stimme" aria-label="Hier fehlt noch deine Stimme"></span></button>
     </div>
   </div>
 
@@ -128,7 +129,7 @@ let me=null;
 function show(v){if(v==='s-drafts')v='s-mine'; // Heldenerstellung steckt jetzt in „Meine Helden“
   ({'s-mine':'#mineList','s-termine':'#pollList'})[v]&&($(({'s-mine':'#mineList','s-termine':'#pollList'})[v]).innerHTML='<p class="mut">lädt …</p>');
   if(v==='s-mine'){$('#mineSheet').hidden=true}
-  VIEWS.forEach(x=>$('#'+x).hidden=x!==v);({'s-mine':()=>{loadMine();loadDrafts()},'s-konto':loadKonto,'s-termine':loadPolls})[v]?.();window.scrollTo(0,0)}
+  VIEWS.forEach(x=>$('#'+x).hidden=x!==v);({'s-home':pollPunkt,'s-mine':()=>{loadMine();loadDrafts()},'s-konto':loadKonto,'s-termine':loadPolls})[v]?.();window.scrollTo(0,0)}
 function go(v){if(location.hash.slice(1)===v)guard(v);else location.hash=v}
 addEventListener('hashchange',()=>guard(location.hash.slice(1)||'s-home'));
 async function guard(v){
@@ -137,7 +138,8 @@ async function guard(v){
   if(v.startsWith('d-')){openDraft(+v.slice(2));return}
   show(VIEWS.includes(v)||v==='s-drafts'?v:'s-home')}
 addEventListener('hh401',()=>{me=null;show('s-login')});
-document.addEventListener('click',e=>{const b=e.target.closest('[data-go]');if(b)go(b.dataset.go)});
+document.addEventListener('click',e=>{if(e.target.closest('.tplay'))return;const b=e.target.closest('[data-go]');if(b)go(b.dataset.go)});
+document.addEventListener('keydown',e=>{const t=e.target.closest('div.tile[data-go]');if(t&&e.target===t&&(e.key==='Enter'||e.key===' ')){e.preventDefault();go(t.dataset.go)}});
 
 /* ---------- Login / Konto ---------- */
 $('#lname').value=LS.get('hh-name','');
@@ -511,18 +513,25 @@ $('#mineList').onclick=e=>{if(e.target.closest('[data-hdel]'))return;const a=e.t
 
 /* ---------- Termine ---------- */
 let polls=[],pdraft={};
-async function loadPolls(){try{polls=await api('/api/polls')}catch(e){return toastErr(e.message)}renderPolls()}
+async function loadPolls(){try{polls=await api('/api/polls')}catch(e){return toastErr(e.message)}renderPolls();setPunkt()}
+/** Offen = Abstimmung läuft, und für dich (oder deinen Partner) fehlt bei mindestens einem Termin die Stimme */
+function offeneStimmen(){return polls.filter(p=>!p.fixed&&!p.closed).flatMap(p=>(p.fuer||[]).filter(w=>p.options.some(o=>!p.votes.some(v=>String(v.option)===String(o.id)&&String(v.account)===String(w.id)))).map(w=>({p,w})))}
+function setPunkt(){const o=offeneStimmen(),d=$('#pollDot');d.hidden=!o.length;
+  if(o.length){const t='Noch nicht abgestimmt: '+o.map(x=>`„${x.p.title}“${x.w.selbst?'':' (für '+x.w.name+')'}`).join(', ');d.title=t;d.setAttribute('aria-label',t)}}
+async function pollPunkt(){if(!me||document.hidden)return;try{polls=await api('/api/polls')}catch(e){return}setPunkt()}
+setInterval(pollPunkt,60000);
 function renderPolls(){const myId=me&&me.id;
   $('#pollList').innerHTML=polls.map(p=>`<div class="card" data-poll="${p.id}"><h3>${esc(p.title)}</h3>${p.note?`<p class="small mut">${esc(p.note)}</p>`:''}
     ${p.fixed?`<p><span class="pill ok">Termin steht</span> <b>${esc(fmtTermin((p.options.find(o=>o.id===p.fixed)||{}).label||''))}</b>, ${p.fixed_hours} Stunden. Die Einladung kommt per Mail, falls du eine bestätigte Adresse hast. <a class="btn" href="/api/polls/${p.id}/ics" download="termin.ics">📅 In meinen Kalender</a></p>`
-      :`${pollMatrix({...p,options:p.options.map(o=>({...o,label:fmtTermin(o.label)}))},myId,pdraft[p.id])}
-    <div class="row"><button class="btn pri" data-save="${p.id}">Stimme speichern</button><span class="small mut">Du kannst deine Stimme jederzeit ändern.</span></div>`}</div>`).join('')
+      :(p.fuer||[{id:myId,selbst:true}]).map(w=>`<div data-wer="${w.id}">${w.selbst?'':`<h4 style="margin:14px 0 4px">Für ${esc(w.name)} abstimmen</h4>`}${pollMatrix({...p,options:p.options.map(o=>({...o,label:fmtTermin(o.label)}))},w.id,pdraft[p.id+':'+w.id],w.selbst?'Du':w.name)}
+    <div class="row"><button class="btn pri" data-save="${p.id}">${w.selbst?'Stimme speichern':'Stimme für '+esc(w.name)+' speichern'}</button><span class="small mut">${w.selbst?'Du kannst deine Stimme jederzeit ändern.':'Der Meister hat eingestellt, dass du auch für '+esc(w.name)+' abstimmen darfst.'}</span></div></div>`).join('')}</div>`).join('')
     ||'<p class="mut">Gerade keine offene Abstimmung für dich.</p>'}
 $('#pollList').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
   const card=b.closest('[data-poll]'),pid=card&&card.dataset.poll;
-  if(b.dataset.a){const opt=b.closest('[data-opt]').dataset.opt;(pdraft[pid]=pdraft[pid]||{})[opt]=b.dataset.a;renderPolls()}
-  if(b.dataset.save){const ans=pdraft[pid]||{};if(!Object.keys(ans).length)return toast('Erst bei den Terminen „kann“, „vielleicht“ oder „kann nicht“ wählen');
-    try{await api('/api/polls/'+pid+'/vote',{method:'POST',body:{answers:ans}});delete pdraft[pid];toast('Gespeichert');loadPolls()}catch(x){toastErr(x.message)}}};
+  const wer=b.closest('[data-wer]')&&b.closest('[data-wer]').dataset.wer,key=pid+':'+wer;
+  if(b.dataset.a){const opt=b.closest('[data-opt]').dataset.opt;(pdraft[key]=pdraft[key]||{})[opt]=b.dataset.a;renderPolls()}
+  if(b.dataset.save){const ans=pdraft[key]||{};if(!Object.keys(ans).length)return toast('Erst bei den Terminen „kann“, „vielleicht“ oder „kann nicht“ wählen');
+    try{await api('/api/polls/'+pid+'/vote',{method:'POST',body:{answers:ans,fuer:+wer}});delete pdraft[key];toast('Gespeichert');loadPolls()}catch(x){toastErr(x.message)}}};
 
 /* ---------- Soundstream ---------- */
 const pl=new Player();let es=null;
@@ -533,8 +542,13 @@ function startStream(){pl.enabled=true;if(es)return;
 function stopStream(){pl.enabled=false;if(es){es.close();es=null}pl.stop()} // Ton aus = Stream trennen; beim Einschalten wieder live
 function sstat(m){$('#pstat').textContent=(m.ch.music.playing||m.ch.bg.playing)?'Verbunden. Du hörst den Spieltisch.':'Verbunden. Gerade ist es still.'}
 pl.onFxError=(file,why)=>toast('Effekt konnte nicht abgespielt werden: '+why);
-$('#pplay').onclick=()=>{pl.unlock();const on=$('#pplay').getAttribute('aria-pressed')!=='true';$('#pplay').setAttribute('aria-pressed',on);$('#pplay').textContent=on?'❚❚':'▶';
-  if(on)startStream();else{stopStream();$('#pstat').textContent='Ton aus.'}};
+/* Ton an/aus: großer Knopf im Soundstream und kleiner Knopf direkt auf der Kachel, beide immer im gleichen Zustand */
+function tonUmschalten(){pl.unlock();const on=$('#pplay').getAttribute('aria-pressed')!=='true';
+  $('#pplay').setAttribute('aria-pressed',on);$('#pplay').textContent=on?'❚❚':'▶';
+  $('#tplay').setAttribute('aria-pressed',on);$('#tplay').textContent=on?'❚❚ Ton aus':'▶ Ton an';$('#tplay').setAttribute('aria-label',on?'Ton ausschalten':'Ton einschalten');
+  if(on)startStream();else{stopStream();$('#pstat').textContent='Ton aus.'}}
+$('#pplay').onclick=tonUmschalten;
+$('#tplay').onclick=e=>{e.stopPropagation();tonUmschalten()};
 $('#pvol').oninput=e=>{pl.setMaster(e.target.value/100);LS.set('hh-vol',+e.target.value)};
 setInterval(()=>{const on=pl.enabled&&Object.values(pl.a).some(a=>!a.paused);$$('#wave i').forEach(i=>i.style.height=(on?4+Math.random()*30*($('#pvol').value/100):4)+'px')},200);
 
