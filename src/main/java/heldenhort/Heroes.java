@@ -144,6 +144,9 @@ public final class Heroes {
         List<String> sf = new ArrayList<>();
         for (Element s : all(held, "sonderfertigkeit")) sf.add(s.getAttribute("name"));
         h.put("SF", sf);
+        Map<String, String> zb = new LinkedHashMap<>(); // Zauber → ZfW (für die Regelzusammenfassung)
+        for (Element z : all(held, "zauber")) if (!z.getAttribute("name").isBlank()) zb.putIfAbsent(z.getAttribute("name"), z.getAttribute("value"));
+        h.put("Z", zb);
         // Meldungen der Regelprüfung, die die helden.jar als Ereignis in den Helden schreibt
         List<String> mg = new ArrayList<>();
         for (Element e : all(held, "ereignis")) {

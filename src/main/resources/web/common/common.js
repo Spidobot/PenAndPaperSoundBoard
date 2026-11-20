@@ -106,7 +106,7 @@ function bgEditor(root,html,save,label='Backgroundstory'){
 /** PDF-Knopf mit Haken „Backgroundstory anhängen“. base = .../{file} */
 function pdfLink(base,id){return `<span class="row" style="gap:6px;flex-wrap:nowrap"><a class="btn sm" data-pdf="${base}" data-pdfbg="${id}" href="${base}/pdf">PDF</a>
   <label class="small" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="${id}" checked> Backgroundstory &amp; Zusatzinfos anhängen</label>
-  <label class="small" style="display:inline-flex;gap:4px;align-items:center" title="Was die eigenen Vor- und Nachteile, Sonderfertigkeiten und Manöver laut Regelwerk bewirken"><input type="checkbox" id="${id}r" checked> Regelzusammenfassung anhängen</label></span>`}
+  <label class="small" style="display:inline-flex;gap:4px;align-items:center" title="Was die eigenen Vor- und Nachteile, Sonderfertigkeiten, Manöver, Liturgien und Zauber laut Regelwerk bewirken"><input type="checkbox" id="${id}r" checked> Regelzusammenfassung anhängen</label></span>`}
 document.addEventListener('click',e=>{const a=e.target.closest('a[data-pdf]');if(!a)return;
   const c=document.getElementById(a.dataset.pdfbg),r=document.getElementById(a.dataset.pdfbg+'r'),q=[];
   if(c&&c.checked)q.push('bg=1');if(r&&r.checked)q.push('regeln=1');

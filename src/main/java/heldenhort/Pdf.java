@@ -36,7 +36,7 @@ public final class Pdf {
         return heldenbogen(jar, heroXml, title, backgroundHtml, extraHtml, bild, null);
     }
 
-    /** regelnHtml = Regelzusammenfassung der Vor-/Nachteile und SF (aus /data/regeln), wird hinten angehängt. */
+    /** regelnHtml = Regelzusammenfassung der Vor-/Nachteile, SF und Zauber (aus /data/regeln), wird hinten angehängt. */
     public static byte[] heldenbogen(HeldenJar jar, Path heroXml, String title, String backgroundHtml, String extraHtml, Path bild, String regelnHtml) throws Exception {
         if (bild != null && java.nio.file.Files.exists(bild)) {
             String xml = java.nio.file.Files.readString(heroXml, java.nio.charset.StandardCharsets.UTF_8);

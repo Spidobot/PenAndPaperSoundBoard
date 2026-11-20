@@ -711,12 +711,13 @@ Icons: Icons8 (icons8.com).""";
         return r.isEmpty() ? "" : str(r.get(0).get("background"));
     }
 
-    /** Vor-/Nachteile und Sonderfertigkeiten eines Helden: Name → Wert (Wert leer, wenn keiner). */
+    /** Vor-/Nachteile, Sonderfertigkeiten (inkl. Manöver, Rituale, Liturgien) und Zauber eines Helden: Name → Wert. */
     @SuppressWarnings("unchecked")
     static Map<String, String> regelNamen(Map<String, Object> h) {
         Map<String, String> out = new LinkedHashMap<>();
         for (Map<String, String> v : (List<Map<String, String>>) h.get("V")) out.putIfAbsent(v.get("name"), str(v.get("value")));
         for (String sf : (List<String>) h.get("SF")) out.putIfAbsent(sf, "");
+        ((Map<String, String>) h.getOrDefault("Z", Map.of())).forEach((z, w) -> out.putIfAbsent(z, w.isBlank() ? "" : "ZfW " + w));
         return out;
     }
 

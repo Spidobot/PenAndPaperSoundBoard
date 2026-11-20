@@ -61,7 +61,7 @@ final class Regeln {
         return out;
     }
 
-    private static final List<String> ART = List.of("Vorteil", "Nachteil", "Sonderfertigkeit", "Ritual", "Liturgie");
+    private static final List<String> ART = List.of("Vorteil", "Nachteil", "Sonderfertigkeit", "Ritual", "Liturgie", "Zauber");
 
     /**
      * Regelzusammenfassung als HTML für Vor-/Nachteile und Sonderfertigkeiten (inkl. Manöver, Rituale, Liturgien).
@@ -118,7 +118,7 @@ final class Regeln {
     private static String mehrzahl(String art) {
         return switch (art == null ? "" : art) {
             case "Vorteil" -> "Vorteile"; case "Nachteil" -> "Nachteile"; case "Sonderfertigkeit" -> "Sonderfertigkeiten und Manöver";
-            case "Ritual" -> "Rituale"; case "Liturgie" -> "Liturgien"; default -> "Sonstiges";
+            case "Ritual" -> "Rituale"; case "Liturgie" -> "Liturgien"; case "Zauber" -> "Zauber"; default -> "Sonstiges";
         };
     }
 
