@@ -191,7 +191,7 @@ public final class App {
             }
         });
 
-        m.get("/api/heroes", ctx -> ctx.json(heroes.list()));
+        m.get("/api/heroes", ctx -> { var l = heroes.list(); l.forEach(h -> waffenPruefen(h, regeln)); ctx.json(l); });
         m.get("/api/heroes/{file}/xml", ctx -> {
             Path p = heroes.file(ctx.pathParam("file"));
             ctx.header("Content-Disposition", "attachment; filename=\"" + p.getFileName() + "\"");
@@ -437,6 +437,7 @@ public final class App {
             for (Object o : ops) if (o instanceof Map<?, ?> op && "name".equals(op.get("op")) && !str(op.get("value")).isEmpty())
                 db.exec("UPDATE draft SET name=? WHERE id=?", str(op.get("value")), d.get("id"));
             db.exec("UPDATE draft SET xml=?, updated=? WHERE id=?", r.remove("draft"), now(), d.get("id"));
+            regeln.voraussetzungen(r); // wo die helden.jar keine Voraussetzung kennt: Regelwerk als Ersatz
             ctx.json(r);
         });
         s.put("/api/drafts/{id}/bg", ctx -> {
@@ -523,6 +524,7 @@ public final class App {
             Object id = accounts.current(ctx).get("id");
             List<Map<String, Object>> out = new ArrayList<>();
             for (var h : heroes.list()) if (Objects.equals(String.valueOf(h.get("account")), String.valueOf(id))) {
+                waffenPruefen(h, regeln);
                 var del = db.query("SELECT id FROM approval_item WHERE kind='DEL' AND payload=? AND status='offen'", h.get("file"));
                 if (!del.isEmpty()) h.put("delAnfrage", del.get(0).get("id"));
                 out.add(h);
@@ -745,6 +747,33 @@ Icons: Icons8 (icons8.com).""";
     }
 
     static final String TIERART = "Tierart: ", WESEN = "Wesen: ";
+
+    /**
+     * Waffen ohne erlernte Kampftechnik: Hinweis mit den ersatzweise verwendbaren Fertigkeiten aus dem Regelwerk.
+     * Führen darf man die Waffe trotzdem, aber nur über eine verwandte Kampftechnik und deutlich erschwert.
+     */
+    @SuppressWarnings("unchecked")
+    static void waffenPruefen(Map<String, Object> h, Regeln regeln) {
+        if (!(h.get("waffen") instanceof List<?> l)) return;
+        Map<String, Integer> taw = h.get("T") instanceof Map<?, ?> t ? (Map<String, Integer>) t : Map.of();
+        for (Object o : l) {
+            Map<String, Object> w = (Map<String, Object>) o;
+            String talent = str(w.get("talent"));
+            String ersatz = "";
+            for (Regeln.Eintrag e : regeln.suche(talent, List.of("Talent"))) {
+                var mt = java.util.regex.Pattern.compile("Ersatzweise\\s+verwendbare\\s+Fertigkeit(?:en)?\\s*:?\\s*(.*?)(?=Mit diesem Talent|Mögliche Man|Besonderheiten|$)", java.util.regex.Pattern.DOTALL)
+                        .matcher(e.text().replaceAll("<[^>]+>", " ").replaceAll("\\s+", " "));
+                if (mt.find()) { ersatz = mt.group(1).trim().replaceAll("[;,.\\s]+$", ""); w.put("quelle", e.quelle()); break; }
+            }
+            if (!ersatz.isEmpty()) w.put("ersatz", ersatz);
+            if (w.get("taw") == null) {
+                // ersatzweise Kampftechnik, die der Held hat (höchster TaW)
+                String best = null; int bw = Integer.MIN_VALUE;
+                for (String x : ersatz.split("\\s*,\\s*")) { Integer v = taw.get(x.trim()); if (v != null && v > bw) { bw = v; best = x.trim(); } }
+                w.put("fehlt", "Kampftechnik „" + talent + "“ nicht erlernt" + (best != null ? ": nur über „" + best + "“ (TaW " + bw + ") und deutlich erschwert" : ersatz.isEmpty() ? "" : ": keine der ersatzweisen Fertigkeiten (" + ersatz + ") erlernt, nur mit massiver Erschwernis"));
+            }
+        }
+    }
 
     /**
      * Regelzusammenfassung für Helden samt Begleitern. Begleiter (Tier, Vertrauter, Dämon …) stehen in einer eigenen

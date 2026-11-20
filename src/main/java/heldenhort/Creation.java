@@ -161,7 +161,9 @@ public final class Creation {
      * Die GP stehen in der Jar nur in einem verschleierten Feld (GP × 100, Vorteile negativ). Das Feld wird nicht über
      * seinen Namen gesucht, sondern über diese Eigenschaft; findet sich keins, fehlen die GP eben (kein Absturz bei Jar-Updates).
      */
-    private static List<Map<String, Object>> vorteilInfos(ClassLoader l, Iterable<?> list) throws Exception {
+    private static List<Map<String, Object>> vorteilInfos(ClassLoader l, Iterable<?> list) throws Exception { return vorteilInfos(l, list, null); }
+
+    private static List<Map<String, Object>> vorteilInfos(ClassLoader l, Iterable<?> list, Object tester) throws Exception {
         List<Object> items = new ArrayList<>();
         for (Object v : list) items.add(v);
         java.lang.reflect.Constructor<?> dpc = l.loadClass("helden.plugin.datenplugin.impl.DatenPluginVorteilImpl").getConstructors()[0];
@@ -174,6 +176,8 @@ public final class Creation {
                 if (mm.getParameterCount() != 0 || mm.getReturnType() != int.class || mm.getName().equals("hashCode")) continue;
                 try { int x = (Integer) mm.invoke(v); if (x != 0 && x % 25 == 0 && Math.abs(x) >= 25 && Math.abs(x) <= 10000) { m.put("gp", Math.abs(x) / 100.0); break; } } catch (Exception ignored) { }
             }
+            List<String> fehlt = fehlendeVoraussetzungen(tester, v);
+            if (fehlt == null) m.put("ungeprueft", true); else if (!fehlt.isEmpty()) m.put("fehlt", fehlt);
             out.add(m);
         }
         out.sort(Comparator.comparing(m -> m.get("name").toString()));
@@ -486,7 +490,7 @@ public final class Creation {
         s.put("vorteile", vt);
         Object hv = call(hew, "getHswVorteile");
         Object kat = call(hv, "getMoegliche");
-        s.put("vorteileMoeglich", vorteilInfos(l, (Iterable<?>) call(kat, "getListe")));
+        s.put("vorteileMoeglich", vorteilInfos(l, (Iterable<?>) call(kat, "getListe"), bedingungsTester(l, hew)));
 
         Object sfw = call(hew, "getSf");
         Set<String> userSf = new TreeSet<>();
@@ -499,10 +503,14 @@ public final class Creation {
         }
         s.put("sf", sf);
         List<Map<String, Object>> sfm = new ArrayList<>();
+        Object tester = bedingungsTester(l, hew);
         for (Object x : (Iterable<?>) call(sfw, "getMoeglicheSonderfertigkeiten")) {
             List<String> kas = new ArrayList<>();
             for (Object ka : (List<?>) call(sfw, "getMoeglicheKostenArten", x)) kas.add(ka.toString());
-            sfm.add(Map.of("name", x.toString(), "ap", call(x, "getKosten"), "kostenarten", kas));
+            Map<String, Object> m = new LinkedHashMap<>(Map.of("name", x.toString(), "ap", call(x, "getKosten"), "kostenarten", kas));
+            List<String> fehlt = fehlendeVoraussetzungen(tester, x);
+            if (fehlt == null) m.put("ungeprueft", true); else if (!fehlt.isEmpty()) m.put("fehlt", fehlt);
+            sfm.add(m);
         }
         s.put("sfMoeglich", sfm);
 
@@ -525,6 +533,93 @@ public final class Creation {
         s.put("talenteAktivierbar", List.of(call(tal, "getAnzahlAktivierterTalente"), call(tal, "getErlaubteAnzahlAktivierterTalente")));
         s.put("hinweise", hints(hew));
         return s;
+    }
+
+    // ------------------------------------------------------------------ Voraussetzungen (BedingungsTester der helden.jar)
+
+    /** Prüfer der helden.jar für Voraussetzungen, gebunden an den Helden im Werkzeug; null, wenn die Jar ihn nicht (mehr) hat. */
+    static Object bedingungsTester(ClassLoader l, Object hew) {
+        try {
+            Class<?> heldC = l.loadClass("helden.framework.held.o0oO");
+            Object held = null;
+            for (Class<?> c = hew.getClass(); c != null && held == null; c = c.getSuperclass())
+                for (Method m : c.getDeclaredMethods())
+                    if (m.getParameterCount() == 0 && heldC.isAssignableFrom(m.getReturnType())) { m.setAccessible(true); held = m.invoke(hew); if (held != null) break; }
+            if (held == null) return null;
+            return l.loadClass("helden.framework.held.C.floatsuper").getConstructor(heldC).newInstance(held);
+        } catch (Throwable e) { System.err.println("Voraussetzungs-Prüfer nicht verfügbar: " + e); return null; }
+    }
+
+    /**
+     * Nicht erfüllte Voraussetzungen eines Elements (SF, Vorteil …), so wie die helden.jar sie formuliert.
+     * Leer = erfüllt; null = die Jar kennt keine Voraussetzung (dann prüft das Regelwerk als Ersatz, siehe Regeln.voraussetzungen).
+     */
+    @SuppressWarnings("unchecked")
+    static List<String> fehlendeVoraussetzungen(Object tester, Object element) {
+        if (tester == null || element == null) return null;
+        try {
+            Class<?> bvC = tester.getClass().getClassLoader().loadClass("helden.framework.bedingungen.BedingungsVerknuepfung");
+            Object bed = null;
+            for (Class<?> c = element.getClass(); c != null && bed == null; c = c.getSuperclass())
+                for (Method m : c.getDeclaredMethods())
+                    if (m.getParameterCount() == 0 && bvC.isAssignableFrom(m.getReturnType()) && !java.lang.reflect.Modifier.isStatic(m.getModifiers())) {
+                        m.setAccessible(true); bed = m.invoke(element); if (bed != null) break;
+                    }
+            if (bed == null || (Boolean) bvC.getMethod("isEmpty").invoke(bed)) return null; // Jar kennt keine Voraussetzung → Regelwerk prüft
+            Class<?> abC = tester.getClass().getClassLoader().loadClass("helden.framework.bedingungen.AbstraktBedingung");
+            List<Method> leaf = new ArrayList<>();
+            for (Method m : tester.getClass().getMethods())
+                if (m.getReturnType() == boolean.class && m.getParameterCount() == 1 && m.getParameterTypes()[0] == abC && !java.lang.reflect.Modifier.isStatic(m.getModifiers())) leaf.add(m);
+            if (DEBUG_BED) {
+                StringBuilder sb = new StringBuilder();
+                for (Object b : (List<?>) bvC.getMethod("getBedingungen").invoke(bed)) {
+                    sb.append("\n   ").append(b.getClass().getSimpleName()).append(" ").append(b);
+                    for (Method m : leaf) sb.append(" | ").append(m.invoke(tester, b));
+                }
+                System.err.println("Voraussetzung " + element + " [" + bvC.getMethod("getVerknuepfungsArt").invoke(bed) + "]" + sb);
+            }
+            // Gesamturteil der Jar zuerst: MOEGLICH = nichts fehlt (Enum-Name ist lesbar)
+            for (Method m : tester.getClass().getMethods())
+                if (m.getParameterCount() == 3 && m.getParameterTypes()[0] == bvC && m.getParameterTypes()[1] == ArrayList.class) {
+                    Object erg = m.invoke(tester, bed, new ArrayList<String>(), new ArrayList<String>());
+                    if (String.valueOf(erg).toUpperCase(Locale.ROOT).startsWith("MOEGLICH")) return List.of();
+                    break;
+                }
+            List<String> f = fehlend(tester, bed, bvC, leaf);
+            return f.isEmpty() ? List.of("Voraussetzungen laut helden.jar noch nicht erfüllt") : f;
+        } catch (Throwable e) { if (DEBUG_BED) System.err.println("Voraussetzung " + element + ": " + e); }
+        return null;
+    }
+
+    static boolean DEBUG_BED = Boolean.getBoolean("heldenhort.debugBedingungen");
+
+    /** Bedingungsbaum auswerten: UND = alle nicht erfüllten Teile, ODER = „eins von …“, wenn keiner erfüllt ist. */
+    private static List<String> fehlend(Object tester, Object node, Class<?> bvC, List<Method> leaf) throws Exception {
+        if (bvC.isInstance(node)) {
+            String art = String.valueOf(bvC.getMethod("getVerknuepfungsArt").invoke(node)).toUpperCase(Locale.ROOT);
+            List<List<String>> teile = new ArrayList<>();
+            for (Object b : (List<?>) bvC.getMethod("getBedingungen").invoke(node)) teile.add(fehlend(tester, b, bvC, leaf));
+            if (art.contains("OR") || art.contains("ODER")) {
+                if (teile.stream().anyMatch(List::isEmpty)) return List.of();
+                List<String> alle = new ArrayList<>();
+                teile.forEach(alle::addAll);
+                return alle.size() == 1 ? alle : List.of("eins von: " + String.join(" oder ", alle));
+            }
+            List<String> out = new ArrayList<>();
+            teile.forEach(out::addAll);
+            return out;
+        }
+        if (leaf.isEmpty()) return List.of();
+        // Zwei Prüfmethoden der Jar (Reihenfolge nicht fest): offen nur, wenn keine den Punkt als erfüllt meldet
+        boolean ok = false;
+        for (Method m : leaf) ok |= (Boolean) m.invoke(tester, node);
+        return ok ? List.of() : List.of(lesbar(String.valueOf(node)));
+    }
+
+    /** „Gewandtheit>=12“ → „Gewandtheit mindestens 12“, „(A ODER B)“ → „A oder B“ */
+    static String lesbar(String b) {
+        return b.trim().replaceAll("^\\((.*)\\)$", "$1").replace(">=", " mindestens ").replace("<=", " höchstens ")
+                .replace(" ODER ", " oder ").replace(" UND ", " und ").replaceAll("\\s+", " ").trim();
     }
 
     private static List<Map<String, String>> hints(Object hew) throws Exception {

@@ -149,6 +149,17 @@ public final class Heroes {
         for (Element z : all(held, "zauber")) if (!z.getAttribute("name").isBlank()) zb.putIfAbsent(z.getAttribute("name"), z.getAttribute("value"));
         h.put("Z", zb);
         h.put("W", begleiter(held)); // Tiere, Vertraute, Dämonen … getrennt vom Helden
+        // Geführte Waffen mit ihrer Kampftechnik und dem TaW des Helden (null = Kampftechnik nicht erlernt)
+        List<Map<String, Object>> waffen = new ArrayList<>();
+        Set<String> schon = new HashSet<>();
+        for (Element w : all(held, "heldenausruestung")) {
+            String waffe = w.getAttribute("waffenname").trim(), talent = w.getAttribute("talent").trim();
+            if (waffe.isEmpty() || talent.isEmpty() || !schon.add(waffe + "|" + talent)) continue;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("waffe", waffe); m.put("talent", talent); m.put("taw", tal.get(talent));
+            waffen.add(m);
+        }
+        h.put("waffen", waffen);
         // Meldungen der Regelprüfung, die die helden.jar als Ereignis in den Helden schreibt
         // Aufbau: text="Meistergenehmigung notwendig", obj="<worum es geht>", time=<Zeitstempel>, version=…
         List<String> mg = new ArrayList<>();

@@ -104,7 +104,81 @@ final class Regeln {
         return diff + (a.length - i) + (b.length - j);
     }
 
-    private static final List<String> ART = List.of("Tier", "Wesen", "Vorteil", "Nachteil", "Sonderfertigkeit", "Tierfähigkeit", "Talent", "Ritual", "Liturgie", "Zauber");
+    // ------------------------------------------------------------------ Voraussetzungen aus dem Regelwerk (Ersatz für die Jar)
+
+    private static final Map<String, String> EIG = Map.of("MU", "Mut", "KL", "Klugheit", "IN", "Intuition", "CH", "Charisma",
+            "FF", "Fingerfertigkeit", "GE", "Gewandtheit", "KO", "Konstitution", "KK", "Körperkraft");
+
+    /**
+     * Für Einträge, zu denen die helden.jar keine Voraussetzung kennt („ungeprueft“): Voraussetzungen aus dem Regeltext lesen
+     * und prüfen, was sich sicher prüfen lässt (Eigenschaften, Sonderfertigkeiten). Die Jar hat immer Vorrang, sie ist das gepatchte Regelwerk.
+     * Ergänzt im Erstellungs-Zustand: fehlt (nicht erfüllt), voraussetzung (Originaltext), quelle.
+     */
+    @SuppressWarnings("unchecked")
+    void voraussetzungen(Map<String, Object> zustand) {
+        try {
+            laden();
+            if (alle.isEmpty()) return;
+            Map<String, Integer> eig = new HashMap<>();
+            for (Object o : (List<?>) zustand.getOrDefault("eigenschaften", List.of()))
+                if (o instanceof Map<?, ?> m && m.get("value") instanceof Number n) eig.put(String.valueOf(m.get("name")), n.intValue());
+            Set<String> hat = new HashSet<>();
+            for (Object o : (List<?>) zustand.getOrDefault("sf", List.of())) if (o instanceof Map<?, ?> m) hat.add(norm(String.valueOf(m.get("name"))));
+            for (Object o : (List<?>) zustand.getOrDefault("vorteile", List.of())) if (o instanceof Map<?, ?> m) hat.add(norm(String.valueOf(m.get("name"))));
+            for (String liste : List.of("sfMoeglich", "vorteileMoeglich"))
+                for (Object o : (List<?>) zustand.getOrDefault(liste, List.of())) {
+                    if (!(o instanceof Map<?, ?> raw) || !Boolean.TRUE.equals(raw.get("ungeprueft"))) continue;
+                    Map<String, Object> m = (Map<String, Object>) raw;
+                    String name = String.valueOf(m.get("name"));
+                    for (Eintrag e : suche(name)) {
+                        java.util.regex.Matcher mt = java.util.regex.Pattern.compile("<b>\\s*Voraussetzung(?:en)?\\s*:?\\s*</b>(.*?)(?=<b>[^<]{2,40}:|</p>|$)", java.util.regex.Pattern.DOTALL).matcher(e.text());
+                        if (!mt.find()) continue;
+                        String html = mt.group(1), text = html.replaceAll("<[^>]+>", "").replaceAll("\\s+", " ").trim().replaceAll("[;,.]\\s*$", "");
+                        if (text.isEmpty()) continue;
+                        m.put("voraussetzung", text);
+                        m.put("quelle", e.quelle());
+                        List<String> fehlt = pruefe(html, text, eig, hat);
+                        if (!fehlt.isEmpty()) m.put("fehlt", fehlt);
+                        break;
+                    }
+                }
+        } catch (Exception e) { System.err.println("Voraussetzungen aus dem Regelwerk: " + e); }
+    }
+
+    /** Prüft Eigenschaftswerte („GE 12“, „IN und GE je 12“, „KL, IN je 13“) und genannte SF/Vorteile (kursiv, „A oder B“). */
+    private List<String> pruefe(String html, String text, Map<String, Integer> eig, Set<String> hat) {
+        List<String> fehlt = new ArrayList<>();
+        java.util.regex.Matcher a = java.util.regex.Pattern.compile("((?:MU|KL|IN|CH|FF|GE|KO|KK)(?:\\s*(?:,|und|/)\\s*(?:MU|KL|IN|CH|FF|GE|KO|KK))*)\\s*(?:je\\s*|mindestens\\s*|von\\s*)?(\\d{1,2})\\b").matcher(text);
+        while (a.find()) {
+            int min = Integer.parseInt(a.group(2));
+            for (String k : a.group(1).split("\\s*(?:,|und|/)\\s*")) {
+                Integer v = eig.get(EIG.get(k.trim()));
+                if (v != null && v < min) fehlt.add(EIG.get(k.trim()) + " mindestens " + min + " (hat " + v + ")");
+            }
+        }
+        // Sonderfertigkeiten/Vorteile stehen im Regeltext kursiv; „oder“ zwischen zwei kursiven Namen = eins davon genügt
+        java.util.regex.Matcher s = java.util.regex.Pattern.compile("<i>([^<]{3,60})</i>(\\s*oder\\s*<i>([^<]{3,60})</i>)?").matcher(html);
+        while (s.find()) {
+            String x = s.group(1).trim(), y = s.group(3) == null ? null : s.group(3).trim();
+            if (!istSf(x) && (y == null || !istSf(y))) continue; // nur echte SF/Vorteile prüfen, sonst lieber nichts sperren
+            boolean ok = hatSf(hat, x) || (y != null && hatSf(hat, y));
+            if (!ok) fehlt.add("Sonderfertigkeit " + x + (y == null ? "" : " oder " + y));
+        }
+        return fehlt;
+    }
+
+    private boolean istSf(String name) {
+        return exakt.getOrDefault(norm(name), List.of()).stream().anyMatch(e -> List.of("Sonderfertigkeit", "Vorteil", "Nachteil").contains(e.art()));
+    }
+
+    private static boolean hatSf(Set<String> hat, String name) {
+        String n = norm(ohneKlammern(name));
+        if (n.isEmpty()) return true; // nichts Prüfbares
+        for (String h : hat) if (h.equals(n) || h.startsWith(n + " ") || n.startsWith(h + " ")) return true;
+        return false;
+    }
+
+    private static final List<String> ART =List.of("Tier", "Wesen", "Vorteil", "Nachteil", "Sonderfertigkeit", "Tierfähigkeit", "Talent", "Ritual", "Liturgie", "Zauber");
 
     /**
      * Regelzusammenfassung als HTML für Vor-/Nachteile und Sonderfertigkeiten (inkl. Manöver, Rituale, Liturgien).

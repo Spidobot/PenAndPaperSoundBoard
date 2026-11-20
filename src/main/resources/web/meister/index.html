@@ -564,7 +564,7 @@ function sheetHtml(h,dialog){const s=h.sheet||{basis:{},sections:[],notizen:[]};
     <dl class="kv">${Object.entries(basis).filter(([k,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
     <div class="attr">${ATTR.map(k=>`<div class="a"><span class="label">${k}</span><b>${h.E&&h.E[k]!=null?h.E[k]:'–'}</b></div>`).join('')}</div>
     ${h.meistergenehmigung&&h.meistergenehmigung.length?`<div class="note"><b>Meistergenehmigung laut XML:</b><ul class="small">${h.meistergenehmigung.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
-    ${s.sections.map(sec=>`<details open class="sec"><summary><b>${esc(sec.title)}</b> <span class="mut small">${sec.rows.length}</span></summary>
+    ${waffenBox(h)}${s.sections.map(sec=>`<details open class="sec"><summary><b>${esc(sec.title)}</b> <span class="mut small">${sec.rows.length}</span></summary>
       <div class="tw"><table class="small"><tbody>${sec.rows.map(r=>`<tr data-txt="${esc((r.name+' '+r.value+' '+r.details).toLowerCase())}"><td><b>${esc(r.name)}</b>${/vorteil|nachteil|sonderfertig|zauber|talent/i.test(sec.title)?` <button type="button" class="ib info" data-rim="${esc(r.name)}" title="Was bedeutet das? (Text pflegen)" aria-label="Info zu ${esc(r.name)}">ⓘ</button>`:''}</td><td class="mono">${esc(r.value)}</td><td class="mut">${esc(r.details)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')||'<p class="mut">Keine Werte in der XML gefunden.</p>'}
     ${s.notizen&&s.notizen.length?`<details open class="sec"><summary><b>Notizen</b></summary><ul class="small">${s.notizen.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></details>`:''}
     <details open class="sec"><summary><b>Backgroundstory</b></summary><div class="bgview"></div></details>

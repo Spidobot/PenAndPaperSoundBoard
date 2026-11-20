@@ -20,6 +20,10 @@ async function api(path,opt={}){
   return data;
 }
 const mmss=s=>!isFinite(s)?'--:--':String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0');
+/** Geführte Waffen mit Kampftechnik: grün = erlernt, rot = nicht erlernt (nur ersatzweise und erschwert, laut Regelwerk) */
+function waffenBox(h){const w=h.waffen||[];if(!w.length)return'';
+  return `<details open class="sec"><summary><b>Waffen und Kampftechniken</b> <span class="mut small">${w.length}</span></summary><ul class="waffen">${w.map(x=>`<li class="${x.fehlt?'nein':'ja'}"><b>${esc(x.waffe)}</b> · ${esc(x.talent)}${x.taw!=null?` (TaW ${x.taw})`:''}
+    ${x.fehlt?`<div class="fehlt">${esc(x.fehlt)}</div>`:''}${x.ersatz?`<div class="small mut">Ersatzweise verwendbar: ${esc(x.ersatz)}${x.quelle?' · '+esc(x.quelle):''}</div>`:''}</li>`).join('')}</ul></details>`}
 /** Gesamt-AP lesbar, z. B. „5.000 AP“ */
 const fmtAp=ap=>ap!=null&&ap!==''?Number(ap).toLocaleString('de-AT')+' AP':'– AP';
 const ICON=k=>`/common/icons/${k}.png`;

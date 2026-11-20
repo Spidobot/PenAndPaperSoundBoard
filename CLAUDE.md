@@ -12,9 +12,14 @@ Push auf `main` baut per GitHub Actions das Image auf ghcr.io.
 - Fehler an den Browser als 4xx mit verständlichem deutschem Text (Cloudflare ersetzt 5xx).
 
 ## Regeltexte (ⓘ-Knöpfe, Regelzusammenfassung)
-- Texte liegen nur in `/data/regeln/*.json` (per FTP), nie im Repo. `Regeln.java` lädt sie bei Änderung neu und ordnet Namen der helden.jar unscharf zu.
+- Texte liegen nur in `/data/regeln/regeln-*.json` (aufgeteilt nach Art, per FTP), nie im Repo. `Regeln.java` lädt sie bei Änderung neu und ordnet Namen der helden.jar unscharf zu.
 - Quellen: WdH, WdS (SF, Talente, Kampftechniken), WdZ (Rituale, Wesen/Dämonen), WdG, Liber Cantiones (Zauber), Zoo-Botanica (Tier-Fähigkeiten, Bestiarium), Tractatus Contra Daemones (Dämonen samt Spielwerten). Gleiche Texte aus mehreren Büchern werden zusammengelegt. Erzeugt aus den PDFs mit `_DSA/Heldenhort-Regeln/regeltexte_erzeugen.py` (bewusst außerhalb des Repos). Buchkosten werden entfernt, Kosten kommen aus der helden.jar.
 - Meister-Text hat Vorrang vor dem Regeltext. Helden-PDF: Haken „Regelzusammenfassung anhängen“ (standardmäßig an, inkl. Zauber). Session: Knopf „Regelzusammenfassung“ (jede Regel einmal, mit Helden). Begleiter (gegenstand/Wesen im XML) als eigene Rubrik ab neuer Seite; Heroes.all() überspringt Wesen, damit Begleiterwerte nie beim Helden landen.
+
+## Voraussetzungen (Heldenerstellung)
+- Jar zuerst: `Creation.bedingungsTester` (helden.framework.held.C.floatsuper = BedingungsTester); Gesamturteil MOEGLICH/UNKLAR, Einzelpunkte über den Bedingungsbaum. Nicht erfüllt → `fehlt`, gesperrt in der Auswahlliste (rot).
+- Kennt die Jar keine Bedingung (`ungeprueft`): `Regeln.voraussetzungen` liest „Voraussetzungen:“ aus dem Regeltext und prüft Eigenschaften und kursive SF/Vorteile.
+- Waffen: `App.waffenPruefen` – Kampftechnik nicht erlernt → roter Hinweis mit ersatzweisen Fertigkeiten aus WdS.
 
 ## Mails und Freigaben
 - Freigaben: eine Mail je Held, erst wenn alle Punkte entschieden sind (30 s Pause für Korrekturen), mit Begründungen.

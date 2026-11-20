@@ -296,3 +296,12 @@ tr.geplant td{background:var(--acc-soft)}
 .ib.info:hover,.ib.info:focus-visible{background:var(--acc-soft)}
 .picklist button[data-pv]{align-items:center;padding:8px 12px}
 .picklist button[data-pv]>span:first-child{white-space:normal}
+/* gesperrte Auswahl: ausgegraut, nicht klickbar, Grund in Rot */
+.pickrow.gesperrt>[data-pv]{cursor:not-allowed;color:var(--mut)}
+.pickrow.gesperrt>[data-pv]:disabled{opacity:1}
+.picklist .fehlt{display:block;color:var(--bad);font-size:.9rem;font-weight:600;margin-top:3px}
+.picklist .pickhead{padding:8px 12px;font-size:.8rem;font-weight:700;color:var(--bad);border-bottom:1px solid var(--line);background:var(--panel)}
+.waffen{list-style:none;padding:0;margin:6px 0;display:grid;gap:6px}
+.waffen li{padding:6px 10px;border-left:3px solid var(--ok);background:var(--panel2);border-radius:4px}
+.waffen li.nein{border-left-color:var(--bad)}
+.waffen .fehlt{color:var(--bad);font-size:.9rem}
