@@ -154,23 +154,27 @@ function liveEvents(url,onMsg,onStatus=()=>{},query=()=>''){let lastOk=Date.now(
 
 /** Info-Fenster zu Vor-/Nachteilen/Sonderfertigkeiten. Gezeigt werden Art/Kosten, der eigene Text des Meisters (hat Vorrang),
  *  die Regeltexte aus /data/regeln (per FTP abgelegt) und eine Suche in der Wiki Aventurica. editable = Meister darf Text pflegen. */
-async function regelInfo(name,info,editable){let d=document.getElementById('riDlg');
+/* ⓘ-Texte im Hintergrund vorladen: name → {text, regel}. Dann zeigt ein Klick sofort, ohne auf den Server zu warten. */
+const REGEL_CACHE={};
+function vorladenRegeln(namen,art){const fehlen=[...new Set(namen)].filter(n=>n&&!REGEL_CACHE[n]);if(!fehlen.length)return;
+  api('/api/regelinfo/vorladen',{method:'POST',body:{namen:fehlen,art:art||''}}).then(r=>Object.assign(REGEL_CACHE,r)).catch(()=>{})}
+async function regelInfo(name,info,editable,art){let d=document.getElementById('riDlg');
   if(!d){d=document.createElement('dialog');d.id='riDlg';d.className='sheetdlg';d.style.maxWidth='680px';document.body.append(d);
     d.addEventListener('click',e=>{if(e.target===d||e.target.closest('[data-x]'))d.close()})}
   d.innerHTML=`<div class="spread sheethead"><h2>${esc(name)}</h2><button class="btn sm xclose" type="button" data-x aria-label="Schließen">✕</button></div>
     ${info?`<p><b>Kosten:</b> ${esc(info)}</p>`:''}
     <div id="riText" class="small">lädt …</div>
     <p class="small"><a href="https://de.wiki-aventurica.de/wiki/Spezial:Suche?search=${encodeURIComponent(name.replace(/^[^:]*:\s*/,'').replace(/\s*\(.*$/,'').replace(/[\[].*$/,'').trim())}" target="_blank" rel="noopener">In der Wiki Aventurica nachschlagen ↗</a></p>`;
-  d.showModal();let r={text:'',regel:[]};try{r=await api('/api/regelinfo?name='+encodeURIComponent(name))}catch(e){}
+  d.showModal();let r=REGEL_CACHE[name]||{text:'',regel:[]};if(!REGEL_CACHE[name]){try{r=await api('/api/regelinfo?name='+encodeURIComponent(name)+(art?'&art='+encodeURIComponent(art):''));REGEL_CACHE[name]=r}catch(e){}}
   const box=d.querySelector('#riText'),regel=r.regel||[];
   // Regeltexte sind serverseitig bereinigt (jsoup Safelist)
   const rt=regel.map(e=>`<div class="ritext"><p class="mut"><b>${esc(e.name)}</b>${e.zusatz?' · '+esc(e.zusatz):''} · <span class="nob">${esc(e.art?e.art+', ':'')}${esc(e.quelle)}</span></p>${e.text}</div>`).join('');
   const meister=r.text&&r.text.replace(/<[^>]*>/g,'').trim();
   if(editable){box.innerHTML='<h3>Eigener Text</h3><p class="mut">Für alle Spieler, steht über dem Regeltext (was es regeltechnisch bewirkt und was es im Spiel bedeutet):</p><div id="riEd"></div>'
       +(rt?`<h3>Aus dem Regelwerk</h3>${rt}`:'<p class="mut">Kein Regeltext gefunden (Datei unter /data/regeln, siehe Konfiguration).</p>');
-    bgEditor(box.querySelector('#riEd'),r.text,async html=>{await api('/api/regelinfo',{method:'PUT',body:{name,text:html}})},'Text')}
+    bgEditor(box.querySelector('#riEd'),r.text,async html=>{await api('/api/regelinfo',{method:'PUT',body:{name,text:html}});REGEL_CACHE[name]={...r,text:html}},'Text')}
   else if(meister)box.innerHTML='<h3>Vom Meister</h3>'+r.text+(rt?`<details open><summary>Aus dem Regelwerk</summary>${rt}</details>`:'');
-  else box.innerHTML=rt?'<h3>Aus dem Regelwerk</h3>'+rt:'<span class="mut">Dazu gibt es noch keinen Text. Schau in die Wiki Aventurica.</span>'}
+  else box.innerHTML=rt?'<h3>Aus dem Regelwerk</h3>'+rt:`<span class="mut">Zu „${esc(name)}“ steht in den Regeldateien des Servers kein Text, und der Meister hat noch keinen eigenen eingetragen. Unten geht es zur Wiki Aventurica.</span>`}
 
 /* Zahlenfelder bekommen links ein rotes − und rechts ein grünes + (statt der winzigen Pfeile).
    Gilt automatisch für jedes Zahlenfeld, auch für später eingefügte. Ein Klick löst dieselben Ereignisse aus wie Tippen. */

@@ -12,7 +12,7 @@ Push auf `main` baut per GitHub Actions das Image auf ghcr.io.
 - Fehler an den Browser als 4xx mit verständlichem deutschem Text (Cloudflare ersetzt 5xx).
 
 ## Regeltexte (ⓘ-Knöpfe, Regelzusammenfassung)
-- Texte liegen nur in `/data/regeln/regeln-*.json` (aufgeteilt nach Art, per FTP), nie im Repo. `Regeln.java` lädt sie bei Änderung neu und ordnet Namen der helden.jar unscharf zu.
+- Texte liegen nur in `/data/regeln/regeln-*.json` (aufgeteilt nach Rubrik, per FTP), nie im Repo. Regeln liest eine Datei erst, wenn ihre Rubrik gebraucht wird (Regeln.TEIL_ART); ⓘ schickt ?art=, Seiten laden je Schritt/Bogen per /api/regelinfo/vorladen im Hintergrund vor. `Regeln.java` lädt sie bei Änderung neu und ordnet Namen der helden.jar unscharf zu.
 - Quellen: WdH, WdS (SF, Talente, Kampftechniken), WdZ (Rituale, Wesen/Dämonen), WdG, Liber Cantiones (Zauber), Zoo-Botanica (Tier-Fähigkeiten, Bestiarium), Tractatus Contra Daemones (Dämonen samt Spielwerten). Gleiche Texte aus mehreren Büchern werden zusammengelegt. Erzeugt aus den PDFs mit `_DSA/Heldenhort-Regeln/regeltexte_erzeugen.py` (bewusst außerhalb des Repos). Buchkosten werden entfernt, Kosten kommen aus der helden.jar.
 - Meister-Text hat Vorrang vor dem Regeltext. Helden-PDF: Haken „Regelzusammenfassung anhängen“ (standardmäßig an, inkl. Zauber). Session: Knopf „Regelzusammenfassung“ (jede Regel einmal, mit Helden). Begleiter (gegenstand/Wesen im XML) als eigene Rubrik ab neuer Seite; Heroes.all() überspringt Wesen, damit Begleiterwerte nie beim Helden landen.
 

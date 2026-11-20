@@ -613,12 +613,18 @@ public final class App {
 
         // Regel-Info zu Vor-/Nachteilen/SF: eigener Text des Meisters (die helden.jar liefert keine Beschreibungen)
         // Regeltexte aus /data/regeln/*.json (per FTP abgelegt, nie im Repo). Der Text des Meisters hat Vorrang und steht oben.
+        // ?art=Sonderfertigkeit,Ritual … : nur in den Dateien dieser Rubriken suchen (schneller); ohne Angabe in allen
         for (Javalin a : List.of(m, s)) a.get("/api/regelinfo", ctx -> {
             String n = str(ctx.queryParam("name"));
-            List<Map<String, Object>> rt = new ArrayList<>();
-            for (Regeln.Eintrag e : regeln.suche(n))
-                rt.add(Map.of("name", e.name(), "art", e.art(), "zusatz", e.zusatz(), "quelle", e.quelle(), "text", e.text()));
-            ctx.json(Map.of("name", n, "text", db.get("regelinfo:" + n, ""), "regel", rt));
+            ctx.json(regelInfo(db, regeln, n, str(ctx.queryParam("art"))));
+        });
+        // Vorladen: alle ⓘ-Texte einer Liste auf einmal (Schritt der Heldenerstellung, Heldenbogen), damit der Klick sofort zeigt
+        for (Javalin a : List.of(m, s)) a.post("/api/regelinfo/vorladen", ctx -> {
+            Map<?, ?> b = ctx.bodyAsClass(Map.class);
+            Map<String, Object> out = new LinkedHashMap<>();
+            if (b.get("namen") instanceof List<?> l)
+                for (Object o : l.subList(0, Math.min(l.size(), 800))) { String n = str(o); if (!n.isEmpty()) out.put(n, regelInfo(db, regeln, n, str(b.get("art")))); }
+            ctx.json(out);
         });
         m.get("/api/regeltexte", ctx -> ctx.json(regeln.status()));
         m.put("/api/regelinfo", ctx -> {
@@ -747,6 +753,14 @@ Icons: Icons8 (icons8.com).""";
     }
 
     static final String TIERART = "Tierart: ", WESEN = "Wesen: ";
+
+    /** ⓘ-Inhalt: eigener Text des Meisters (Vorrang) + Regeltexte; art = Rubriken mit Komma, leer = alle. */
+    static Map<String, Object> regelInfo(Db db, Regeln regeln, String n, String art) {
+        List<Map<String, Object>> rt = new ArrayList<>();
+        List<Regeln.Eintrag> l = art.isBlank() ? regeln.suche(n) : regeln.suche(n, List.of(art.split("\\s*,\\s*")));
+        for (Regeln.Eintrag e : l) rt.add(Map.of("name", e.name(), "art", e.art(), "zusatz", e.zusatz(), "quelle", e.quelle(), "text", e.text()));
+        return Map.of("name", n, "text", db.get("regelinfo:" + n, ""), "regel", rt);
+    }
 
     static final Set<String> ZWEIHAND = Set.of("Anderthalbhänder", "Zweihandschwerter/-säbel", "Zweihand-Hiebwaffen", "Zweihandflegel", "Infanteriewaffen", "Stäbe", "Kettenstäbe", "Lanzenreiten");
     static final Map<String, String> EIG_KURZ = Map.of("MU", "Mut", "KL", "Klugheit", "IN", "Intuition", "CH", "Charisma", "FF", "Fingerfertigkeit", "GE", "Gewandtheit", "KO", "Konstitution", "KK", "Körperkraft");

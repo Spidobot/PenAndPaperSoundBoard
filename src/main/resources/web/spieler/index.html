@@ -270,13 +270,17 @@ function ruleBox(){const F=(S.hinweise||[]).filter(h=>h.art==='F');return F.leng
 /* Auswahlliste zum Durchsehen und Anklicken. Gesperrte Einträge (Voraussetzungen fehlen) stehen ausgegraut darunter, mit Grund in Rot. */
 function pickList(id,items,label,open){const ok=items.filter(i=>!i.fehlt),zu=items.filter(i=>i.fehlt);
   const row=i=>`<div class="pickrow${i.fehlt?' gesperrt':''}"><button type="button" data-pick-to="${i.to}" data-pv="${esc(i.name)}"${i.fehlt?' disabled aria-disabled="true"':''}>
-      <span>${esc(i.name.replace(/\s*\(\)\s*$/,''))}${i.fehlt?`<span class="fehlt">Fehlt: ${i.fehlt.map(esc).join(' · ')}${i.quelle?` <span class="mut">(laut ${esc(i.quelle)})</span>`:''}</span>`:''}</span>${i.info?`<span class="mut small">${esc(i.info)}</span>`:''}</button>${i.ri?`<button type="button" class="ib info" data-ri="${esc(i.name)}" data-ri-info="${esc(i.info||'')}" aria-label="Was bedeutet ${esc(i.name)}?" title="Was bedeutet das?">ⓘ</button>`:''}</div>`;
+      <span>${esc(i.name.replace(/\s*\(\)\s*$/,''))}${i.fehlt?`<span class="fehlt">Fehlt: ${i.fehlt.map(esc).join(' · ')}${i.quelle?` <span class="mut">(laut ${esc(i.quelle)})</span>`:''}</span>`:''}</span>${i.info?`<span class="mut small">${esc(i.info)}</span>`:''}</button>${i.ri?`<button type="button" class="ib info" data-ri="${esc(i.name)}" data-ri-art="${esc(i.art||'')}" data-ri-info="${esc(i.info||'')}" aria-label="Was bedeutet ${esc(i.name)}?" title="Was bedeutet das?">ⓘ</button>`:''}</div>`;
   return `<details class="pick" open><summary>${label} (${ok.length} wählbar${zu.length?`, ${zu.length} noch gesperrt`:''})</summary>
   <input type="search" class="pickq" data-pl="${id}" placeholder="Liste filtern…" aria-label="${label} filtern">
   <div class="picklist" id="${id}">${ok.map(row).join('')}${zu.length?`<div class="pickhead">Noch gesperrt (bei jedem Eintrag steht in Rot, was genau fehlt)</div>${zu.map(row).join('')}`:''}</div></details>`}
+/* ⓘ-Texte des Schritts im Hintergrund vorladen (Vor-/Nachteile, Sonderfertigkeiten): Klick zeigt dann sofort */
+function vorladenSchritt(){try{if(!S)return;
+  vorladenRegeln([...(S.vorteileMoeglich||[]).map(v=>v.name),...(S.vorteile||[]).map(v=>v.name)],'Vorteil,Nachteil');
+  vorladenRegeln([...(S.sfMoeglich||[]).map(x=>x.name),...(S.sf||[]).map(x=>x.name)],'Sonderfertigkeit,Ritual,Liturgie,Tierfähigkeit')}catch(_){}}
 /** gesperrt-Prüfung vor dem Hinzufügen (auch beim Tippen in das Feld) */
 function gesperrt(liste,name){const x=(liste||[]).find(v=>v.name===name);return x&&x.fehlt?x:null}
-function renderStep(){LS.set('hh-step-'+D.id,step);
+function renderStep(){LS.set('hh-step-'+D.id,step);setTimeout(vorladenSchritt,0);
   $('#steps').innerHTML=STEPS.map((s,i)=>`<button data-st="${i}"${i===step?' aria-current="step"':''}>${i+1}. ${s}</button>`).join('')+`<button id="toRkp" class="small">↺ Herkunft neu wählen</button>`;
   const b=$('#stepbody');
   if(step===0)b.innerHTML=`<div class="spread"><h2>Eigenschaften</h2><div class="field" style="min-width:240px"><label class="label" for="hname">Name</label><input type="text" id="hname" value="${esc(D.name)}" maxlength="80"></div></div>
@@ -287,8 +291,8 @@ function renderStep(){LS.set('hh-step-'+D.id,step);
     <div class="row" style="flex-wrap:nowrap"><input type="text" id="vname" list="vlist" placeholder="Vorteil oder Nachteil (aus den Listen unten anklicken)" aria-label="Vorteil oder Nachteil"><input type="text" id="vval" placeholder="Wert/Stufe, falls nötig" style="width:200px" aria-label="Wert"><button class="btn pri" id="vadd">Hinzufügen</button></div>
     <datalist id="vlist">${S.vorteileMoeglich.map(v=>`<option value="${esc(v.name)}">`).join('')}</datalist>
     <div class="grid2" style="margin-top:10px">
-      <div><h3>Vorteile <span class="small mut">(kosten GP)</span></h3>${pickList('vpl',S.vorteileMoeglich.filter(v=>!v.nachteil).map(v=>({name:v.name,info:v.gp!=null?v.gp+' GP':'',to:'vname',ri:1,fehlt:v.fehlt,quelle:v.quelle})),'Wählbare Vorteile',true)}</div>
-      <div><h3>Nachteile <span class="small mut">(bringen GP)</span></h3>${pickList('npl',S.vorteileMoeglich.filter(v=>v.nachteil).map(v=>({name:v.name,info:v.gp!=null?'+'+v.gp+' GP':'',to:'vname',ri:1,fehlt:v.fehlt,quelle:v.quelle})),'Wählbare Nachteile',true)}</div>
+      <div><h3>Vorteile <span class="small mut">(kosten GP)</span></h3>${pickList('vpl',S.vorteileMoeglich.filter(v=>!v.nachteil).map(v=>({name:v.name,info:v.gp!=null?v.gp+' GP':'',to:'vname',ri:1,art:'Vorteil,Nachteil',fehlt:v.fehlt,quelle:v.quelle})),'Wählbare Vorteile',true)}</div>
+      <div><h3>Nachteile <span class="small mut">(bringen GP)</span></h3>${pickList('npl',S.vorteileMoeglich.filter(v=>v.nachteil).map(v=>({name:v.name,info:v.gp!=null?'+'+v.gp+' GP':'',to:'vname',ri:1,art:'Vorteil,Nachteil',fehlt:v.fehlt,quelle:v.quelle})),'Wählbare Nachteile',true)}</div>
     </div>
     <p class="small mut">Bei Nachteilen wie „Goldgier“ die Stufe als Wert angeben, bei „Herausragender Sinn“ z. B. „Gehör“.</p>`;
   if(step===2){const own=S.sf.filter(x=>x.eigene),fix=S.sf.filter(x=>!x.eigene);
@@ -296,7 +300,7 @@ function renderStep(){LS.set('hh-step-'+D.id,step);
     <div class="tw"><table><tbody>${own.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td><button class="btn sm danger" data-sdel="${esc(x.name)}">Entfernen</button></td></tr>`).join('')||'<tr><td class="empty">Noch keine eigenen gewählt.</td></tr>'}</tbody></table></div>
     <div class="row" style="flex-wrap:nowrap"><input type="text" id="sname" list="slist" placeholder="Sonderfertigkeit (${S.sfMoeglich.filter(x=>!x.fehlt).length} wählbar)" aria-label="Sonderfertigkeit"><select id="skart" style="width:auto" aria-label="Bezahlen mit"><option value="">Bezahlen mit…</option><option>GP</option><option>AP</option></select><button class="btn pri" id="sadd">Hinzufügen</button></div>
     <datalist id="slist">${S.sfMoeglich.map(x=>`<option value="${esc(x.name)}">${x.ap} AP</option>`).join('')}</datalist>
-    ${pickList('spl',S.sfMoeglich.map(x=>({name:x.name,info:x.ap+' AP',to:'sname',ri:1,fehlt:x.fehlt,quelle:x.quelle})),'Wählbare Sonderfertigkeiten')}
+    ${pickList('spl',S.sfMoeglich.map(x=>({name:x.name,info:x.ap+' AP',to:'sname',ri:1,art:'Sonderfertigkeit,Ritual,Liturgie,Tierfähigkeit',fehlt:x.fehlt,quelle:x.quelle})),'Wählbare Sonderfertigkeiten')}
     <details class="sec" open><summary class="small mut">Aus Rasse, Kultur und Profession (${fix.length})</summary><p class="small">${fix.map(x=>esc(x.name)).join(', ')}</p></details>`}
   if(step===3){b.innerHTML=`<div class="spread"><h2>Talente</h2><input type="search" id="tq" placeholder="Talent suchen…" style="width:220px" aria-label="Talent suchen"></div>
     ${ruleBox()}
@@ -361,7 +365,7 @@ $('#stepbody').addEventListener('change',e=>{const t=e.target;
 $('#stepbody').addEventListener('input',e=>{if(e.target.dataset.pl){const q=e.target.value.toLowerCase();$$('#'+e.target.dataset.pl+' .pickrow').forEach(x=>{const b=x.querySelector('[data-pv]');x.hidden=q&&!b.dataset.pv.toLowerCase().includes(q)});return}
   if(e.target.id==='tq'){const q=e.target.value.toLowerCase();$$('#tbody tr').forEach(r=>r.hidden=q&&!r.dataset.tn.includes(q))}});
 $('#stepbody').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
-  if(b.dataset.ri!==undefined){regelInfo(b.dataset.ri,b.dataset.riInfo,false);return}
+  if(b.dataset.ri!==undefined){regelInfo(b.dataset.ri,b.dataset.riInfo,false,b.dataset.riArt);return}
   if(b.dataset.pickTo){const i=$('#'+b.dataset.pickTo);i.value=b.dataset.pv;i.focus();$$('.picklist button.on').forEach(x=>x.classList.remove('on'));b.classList.add('on');
     if(b.dataset.pickTo==='vname')$('#vval').focus();return}
   if(b.id==='vadd'){const n=$('#vname').value.trim();if(!n)return toast('Vorteil oder Nachteil fehlt');const g=gesperrt(S.vorteileMoeglich,n);if(g)return toastErr(n+' geht noch nicht. Fehlt: '+g.fehlt.join(' · '));edit([{op:'vorteil+',name:n,value:$('#vval').value.trim()}])}

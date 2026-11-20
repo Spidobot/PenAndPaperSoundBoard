@@ -586,6 +586,8 @@ function fillSheet(root,h){root.querySelectorAll(".hbild").forEach(b=>bildEditor
       try{const r=await api('/api/heroes/'+encodeURIComponent(h.file)+'/ap',{method:'POST',body:{ap:v,note:root.querySelector('.sapn').value}});toast('Gutgeschrieben: '+r.done.join(' · '));sap.dataset.ask='';sap.textContent='Sofort gutschreiben';root.querySelector('.sapv').value='';loadHeroes()}catch(x){toastErr(x.message)}}
     if(e.target.closest('[data-take]')){try{await api('/api/heroes/'+encodeURIComponent(h.file)+'/accept',{method:'POST'});toast('Held übernommen');h.status='übernommen';loadHeroes()}catch(x){toastErr(x.message)}}}}
 function openSheet(file){const h=heroes.find(x=>x.file===file);if(!h)return;const d=$('#sheet');
+  // ⓘ-Texte des Bogens im Hintergrund vorladen
+  try{const sec=(h.sheet&&h.sheet.sections)||[];vorladenRegeln(sec.filter(x=>/vorteil|nachteil|sonderfertig|zauber|talent/i.test(x.title)).flatMap(x=>x.rows.map(r=>r.name)))}catch(_){}
   $('#sheetbody').innerHTML=sheetHtml(h,true);fillSheet($('#sheetbody'),h);if(!d.open)d.showModal();$('#sheetbody .sq').focus()}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-sheet]');if(b)openSheet(b.dataset.sheet);
   const i=e.target.closest('[data-rim]');if(i)regelInfo(i.dataset.rim,'',true)});

@@ -21,18 +21,36 @@ final class Regeln {
     record Eintrag(String name, List<String> namen, String art, String zusatz, String quelle, String text) {}
 
     private final Path dir;
-    private volatile List<Eintrag> alle = List.of();
-    private volatile Map<String, List<Eintrag>> exakt = Map.of();
+    // Aktueller Suchbereich (je Aufruf mit nimm(...) gesetzt; alle Zugriffe laufen synchronisiert)
+    private List<Eintrag> alle = List.of();
+    private Map<String, List<Eintrag>> exakt = Map.of();
     private volatile String stamp = "";
     private volatile String fehler = "";
+
+    /** Dateiname → Rubrik: regeln-sonderfertigkeiten.json gehört zu „Sonderfertigkeit“ usw. Unbekannte Dateien gelten für alle Rubriken. */
+    static final Map<String, String> TEIL_ART = Map.ofEntries(Map.entry("vorteile", "Vorteil"), Map.entry("nachteile", "Nachteil"),
+            Map.entry("sonderfertigkeiten", "Sonderfertigkeit"), Map.entry("talente", "Talent"), Map.entry("zauber", "Zauber"),
+            Map.entry("rituale", "Ritual"), Map.entry("liturgien", "Liturgie"), Map.entry("wesen-daemonen", "Wesen"),
+            Map.entry("tier-faehigkeiten", "Tierfähigkeit"), Map.entry("tierarten", "Tier"), Map.entry("waffen", "Waffe"),
+            Map.entry("schilde", "Schild"), Map.entry("ruestungen", "Rüstung"));
+    private record Datei(String stempel, List<Eintrag> eintraege) {}
+    private record Bereich(List<Eintrag> alle, Map<String, List<Eintrag>> exakt) {}
+    private final Map<Path, Datei> dateiCache = new HashMap<>();
+    private final Map<String, Bereich> bereiche = new HashMap<>();
+
+    static String artDerDatei(Path p) {
+        String n = p.getFileName().toString().toLowerCase(Locale.ROOT).replaceAll("\\.json$", "").replaceFirst("^regeln-", "");
+        return TEIL_ART.get(n);
+    }
 
     Regeln(Path dir) { this.dir = dir; }
 
     Path dir() { return dir; }
 
-    /** Alle passenden Einträge, bester Treffer zuerst (je Quelle höchstens einer). */
-    synchronized List<Eintrag> suche(String name) {
-        laden();
+    /** Alle passenden Einträge aus allen Rubriken, bester Treffer zuerst (je Quelle höchstens einer). */
+    synchronized List<Eintrag> suche(String name) { laden(); nimm(null); return sucheKern(name); }
+
+    private List<Eintrag> sucheKern(String name) {
         String n = norm(name);
         if (n.isEmpty() || alle.isEmpty()) return List.of();
         List<Eintrag> r = exakt.get(n);
@@ -115,10 +133,10 @@ final class Regeln {
      * Ergänzt im Erstellungs-Zustand: fehlt (nicht erfüllt), voraussetzung (Originaltext), quelle.
      */
     @SuppressWarnings("unchecked")
-    void voraussetzungen(Map<String, Object> zustand) {
+    synchronized void voraussetzungen(Map<String, Object> zustand) {
         try {
             laden();
-            if (alle.isEmpty()) return;
+            if (leer()) return;
             Map<String, Integer> eig = new HashMap<>();
             for (Object o : (List<?>) zustand.getOrDefault("eigenschaften", List.of()))
                 if (o instanceof Map<?, ?> m && m.get("value") instanceof Number n) eig.put(String.valueOf(m.get("name")), n.intValue());
@@ -130,7 +148,7 @@ final class Regeln {
                     if (!(o instanceof Map<?, ?> raw) || !Boolean.TRUE.equals(raw.get("ungeprueft"))) continue;
                     Map<String, Object> m = (Map<String, Object>) raw;
                     String name = String.valueOf(m.get("name"));
-                    for (Eintrag e : suche(name)) {
+                    for (Eintrag e : suche(name, List.of("Sonderfertigkeit", "Vorteil", "Nachteil", "Ritual", "Liturgie"))) {
                         java.util.regex.Matcher mt = java.util.regex.Pattern.compile("<b>\\s*Voraussetzung(?:en)?\\s*:?\\s*</b>(.*?)(?=<b>[^<]{2,40}:|</p>|$)", java.util.regex.Pattern.DOTALL).matcher(e.text());
                         if (!mt.find()) continue;
                         String html = mt.group(1), text = html.replaceAll("<[^>]+>", "").replaceAll("\\s+", " ").trim().replaceAll("[;,.]\\s*$", "");
@@ -168,6 +186,7 @@ final class Regeln {
     }
 
     private boolean istSf(String name) {
+        nimm(List.of("Sonderfertigkeit", "Vorteil", "Nachteil"));
         return exakt.getOrDefault(norm(name), List.of()).stream().anyMatch(e -> List.of("Sonderfertigkeit", "Vorteil", "Nachteil").contains(e.art()));
     }
 
@@ -188,8 +207,11 @@ final class Regeln {
     String zusammenfassung(Map<String, ? extends Map<String, String>> helden, boolean mitHelden) { return zusammenfassung(helden, mitHelden, this::suche); }
 
     /** Treffer bevorzugt aus diesen Arten (z. B. bei Begleitern Tier-Fähigkeiten statt der gleichnamigen Helden-SF). */
-    List<Eintrag> suche(String name, java.util.Collection<String> bevorzugt) {
-        List<Eintrag> l = suche(name);
+    synchronized List<Eintrag> suche(String name, java.util.Collection<String> bevorzugt) {
+        // erst nur in den Dateien dieser Rubriken suchen (schneller, keine Verwechslung), dann notfalls überall
+        laden(); nimm(bevorzugt);
+        List<Eintrag> l = sucheKern(name);
+        if (l.isEmpty()) { nimm(null); l = sucheKern(name); }
         List<Eintrag> b = l.stream().filter(e -> bevorzugt.contains(e.art())).toList();
         return b.isEmpty() ? l : b;
     }
@@ -206,6 +228,7 @@ final class Regeln {
             if (w == null || w.isBlank()) continue;
             java.util.regex.Pattern p = java.util.regex.Pattern.compile("(?U)\\b" + java.util.regex.Pattern.quote(w) + "\\w{0,2}\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
             Eintrag best = null; long max = 0;
+            nimm(List.of("Tier"));
             for (Eintrag e : alle) if ("Tier".equals(e.art())) {
                 long n = p.matcher(e.text()).results().count();
                 if (n > max) { max = n; best = e; }
@@ -273,10 +296,14 @@ final class Regeln {
 
     private static String esc(String s) { return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"); }
 
-    boolean leer() { laden(); return alle.isEmpty(); }
+    /** Gibt es überhaupt Regeldateien? (lädt nichts) */
+    boolean leer() {
+        try (Stream<Path> s = Files.isDirectory(dir) ? Files.list(dir) : Stream.empty()) { return s.noneMatch(p -> p.toString().endsWith(".json")); }
+        catch (Exception e) { return true; }
+    }
 
-    Map<String, Object> status() {
-        laden();
+    synchronized Map<String, Object> status() {
+        laden(); nimm(null);
         List<String> dateien = new ArrayList<>();
         try (Stream<Path> s = Files.isDirectory(dir) ? Files.list(dir) : Stream.empty()) {
             s.filter(p -> p.toString().endsWith(".json")).forEach(p -> dateien.add(p.getFileName().toString()));
@@ -286,39 +313,63 @@ final class Regeln {
         return Map.of("pfad", dir.toString(), "dateien", dateien, "anzahl", alle.size(), "proArt", proArt, "fehler", fehler);
     }
 
+    /** Verzeichnis prüfen: neue/geänderte/gelöschte Dateien → Suchbereiche neu bauen (Dateien selbst erst bei Bedarf). */
     private void laden() {
         String st = stempel();
         if (st.equals(stamp)) return;
-        List<Eintrag> neu = new ArrayList<>();
-        StringBuilder err = new StringBuilder();
-        ObjectMapper om = new ObjectMapper();
-        try (Stream<Path> s = Files.isDirectory(dir) ? Files.list(dir) : Stream.empty()) {
-            for (Path p : s.filter(p -> p.toString().endsWith(".json")).sorted().toList()) {
-                try {
-                    JsonNode root = om.readTree(p.toFile());
-                    JsonNode arr = root.isArray() ? root : root.path("eintraege");
-                    for (JsonNode e : arr) {
-                        String name = e.path("name").asText("").trim();
-                        if (name.isEmpty()) continue;
-                        List<String> namen = new ArrayList<>(List.of(name));
-                        for (JsonNode a : e.path("namen")) if (!a.asText("").isBlank()) namen.add(a.asText());
-                        neu.add(new Eintrag(name, namen, e.path("art").asText(""), e.path("zusatz").asText(""), e.path("quelle").asText(p.getFileName().toString()),
-                                Jsoup.clean(e.path("text").asText(""), Safelist.basic().addTags("h3", "h4", "table", "tr", "td", "th", "tbody", "thead"))));
-                    }
-                } catch (Exception ex) {
-                    err.append(p.getFileName()).append(": ").append(ex.getMessage()).append("\n");
+        stamp = st;
+        bereiche.clear();
+        dateiCache.keySet().removeIf(p -> !Files.exists(p));
+    }
+
+    /** Suchbereich setzen: nur die Dateien dieser Rubriken (null = alle). Dateien werden erst beim ersten Bedarf gelesen. */
+    private void nimm(java.util.Collection<String> arten) {
+        String key = arten == null ? "*" : String.join("|", new TreeSet<>(arten));
+        Bereich b = bereiche.get(key);
+        if (b == null) {
+            List<Eintrag> neu = new ArrayList<>();
+            StringBuilder err = new StringBuilder();
+            try (Stream<Path> s = Files.isDirectory(dir) ? Files.list(dir) : Stream.empty()) {
+                for (Path p : s.filter(p -> p.toString().endsWith(".json")).sorted().toList()) {
+                    String art = artDerDatei(p);
+                    if (arten != null && art != null && !arten.contains(art)) continue; // andere Rubrik: gar nicht erst lesen
+                    try { neu.addAll(datei(p)); }
+                    catch (Exception ex) { err.append(p.getFileName()).append(": ").append(ex.getMessage()).append("\n"); }
+                }
+            } catch (Exception ex) { err.append(ex.getMessage()); }
+            Map<String, List<Eintrag>> idx = new HashMap<>();
+            for (Eintrag e : neu) for (String a : e.namen()) {
+                for (String k : new LinkedHashSet<>(List.of(norm(a), norm(a.replaceAll("\\([^()]*\\)", " ")), norm(ohneKlammern(a)), norm(a).replace(" ", "")))) if (!k.isEmpty()) {
+                    List<Eintrag> l = idx.computeIfAbsent(k, x -> new ArrayList<>());
+                    if (!l.contains(e)) l.add(e);
                 }
             }
-        } catch (Exception ex) { err.append(ex.getMessage()); }
-        Map<String, List<Eintrag>> idx = new HashMap<>();
-        for (Eintrag e : neu) for (String a : e.namen()) {
-            for (String k : new LinkedHashSet<>(List.of(norm(a), norm(a.replaceAll("\\([^()]*\\)", " ")), norm(ohneKlammern(a)), norm(a).replace(" ", "")))) if (!k.isEmpty()) {
-                List<Eintrag> l = idx.computeIfAbsent(k, x -> new ArrayList<>());
-                if (!l.contains(e)) l.add(e);
-            }
+            if (arten == null) fehler = err.toString().trim();
+            b = new Bereich(neu, idx);
+            bereiche.put(key, b);
         }
-        alle = neu; exakt = idx; fehler = err.toString().trim(); stamp = st;
-        System.out.println("Regeltexte: " + neu.size() + " Einträge aus " + dir + (fehler.isEmpty() ? "" : " – Fehler: " + fehler));
+        alle = b.alle(); exakt = b.exakt();
+    }
+
+    /** Eine Datei lesen (aus dem Speicher, solange sie sich nicht geändert hat). */
+    private List<Eintrag> datei(Path p) throws Exception {
+        String st = Files.size(p) + ":" + Files.getLastModifiedTime(p).toMillis();
+        Datei d = dateiCache.get(p);
+        if (d != null && d.stempel().equals(st)) return d.eintraege();
+        List<Eintrag> neu = new ArrayList<>();
+        JsonNode root = new ObjectMapper().readTree(p.toFile());
+        JsonNode arr = root.isArray() ? root : root.path("eintraege");
+        for (JsonNode e : arr) {
+            String name = e.path("name").asText("").trim();
+            if (name.isEmpty()) continue;
+            List<String> namen = new ArrayList<>(List.of(name));
+            for (JsonNode a : e.path("namen")) if (!a.asText("").isBlank()) namen.add(a.asText());
+            neu.add(new Eintrag(name, namen, e.path("art").asText(""), e.path("zusatz").asText(""), e.path("quelle").asText(p.getFileName().toString()),
+                    Jsoup.clean(e.path("text").asText(""), Safelist.basic().addTags("h3", "h4", "table", "tr", "td", "th", "tbody", "thead"))));
+        }
+        dateiCache.put(p, new Datei(st, neu));
+        System.out.println("Regeltexte: " + p.getFileName() + " gelesen (" + neu.size() + " Einträge)");
+        return neu;
     }
 
     private String stempel() {
