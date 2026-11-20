@@ -6,7 +6,7 @@
 <title>Heldenhort</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119w">
+<link rel="stylesheet" href="/common/app.css?v=20261120a">
 <style>
 html,body{margin:0}
 .pl .inner{width:min(1200px,100%)}
@@ -121,7 +121,7 @@ html,body{margin:0}
 </div></div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119w"></script>
+<script src="/common/common.js?v=20261120a"></script>
 <script>
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const VIEWS=['s-login','s-home','s-drafts','s-create','s-mine','s-konto','s-stream','s-termine'];
@@ -262,7 +262,12 @@ function renderStep(){LS.set('hh-step-'+D.id,step);
       <button data-cmd="insertUnorderedList" title="Liste">• Liste</button><button data-cmd="insertOrderedList" title="Nummeriert">1. Liste</button>
       <button data-cmd="formatBlock" data-v="blockquote" title="Zitat">„Zitat“</button><button data-cmd="removeFormat" title="Formatierung entfernen">⌫ Format</button></div>
     <div class="ed" id="ed" contenteditable="true" data-ph="Woher kommt dein Held? Was treibt ihn an? Familie, Feinde, Geheimnisse…"></div></div>
-    <p class="small mut">Wird automatisch gespeichert.</p>`;
+    <p class="small mut">Wird automatisch gespeichert.</p>
+    <h3 style="margin-top:18px">Zusatzinfos <span class="small mut">(optional)</span></h3>
+    <p class="small mut">Was nicht in die Backgroundstory passt: Prinzipientreue, Geiz, Eitelkeit und Co. genauer beschrieben, Eigenheiten, Wünsche an den Meister …</p>
+    <div id="exw"></div>`;
+    {let te;bgEditor($('#exw'),D.extra||'',async html=>{D.extra=html;await api('/api/drafts/'+D.id+'/extra',{method:'PUT',body:{extra:html}})},'Zusatzinfos');
+     const ex=$('#exw .ed');ex.addEventListener('input',()=>{D.extra=ex.innerHTML;clearTimeout(te);te=setTimeout(()=>api('/api/drafts/'+D.id+'/extra',{method:'PUT',body:{extra:D.extra}}).then(()=>{$('#exw [data-bgst]').textContent='gespeichert'}).catch(x=>toastErr(x.message)),700)})}
     $('#ed').innerHTML=D.bg||'';let t;
     const upd=()=>{const n=$('#ed').textContent.trim().length;$('#bgst').textContent=n?`${n} Zeichen`:'optional, später unter „Meine Helden“ nachtragbar';$('#bgst').className='pill '+(n?'ok':'')};
     $('#ed').oninput=()=>{upd();D.bg=$('#ed').innerHTML;clearTimeout(t);t=setTimeout(()=>api('/api/drafts/'+D.id+'/bg',{method:'PUT',body:{bg:D.bg}}).catch(x=>toastErr(x.message)),700)};upd();
@@ -313,7 +318,7 @@ $('#stepbody').addEventListener('click',e=>{const b=e.target.closest('button');i
 let mine=[];
 async function loadMine(){try{[mine,me]=await Promise.all([api('/api/myheroes'),api('/api/me')])}catch(e){return toastErr(e.message)}$('#mineSheet').hidden=true;$('#upForm').hidden=!me.canUpload;
   $('#mineList').innerHTML=mine.map(h=>`<div class="item"><div><b>${esc(h.name)}</b> <span class="small mut">${esc(h.rasse)} · ${esc(h.profession)}</span><div class="small mut">beim Meister seit ${esc(h.received)}</div></div>
-    <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button><button class="btn sm" data-bg="${esc(h.file)}">Backgroundstory</button><a class="btn sm" href="/api/myheroes/${encodeURIComponent(h.file)}/xml">XML</a>${pdfLink('/api/myheroes/'+encodeURIComponent(h.file),'pdfbg-'+esc(h.file).replace(/\W/g,'_'))}${h.status==='neu'?'':`<button class="btn sm pri" data-adv="${esc(h.file)}">Steigern</button>`}</div></div>`).join('')
+    <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button><button class="btn sm" data-bg="${esc(h.file)}">Backgroundstory</button><button class="btn sm" data-ex="${esc(h.file)}">Zusatzinfos</button><a class="btn sm" href="/api/myheroes/${encodeURIComponent(h.file)}/xml">XML</a>${pdfLink('/api/myheroes/'+encodeURIComponent(h.file),'pdfbg-'+esc(h.file).replace(/\W/g,'_'))}${h.status==='neu'?'':`<button class="btn sm pri" data-adv="${esc(h.file)}">Steigern</button>`}</div></div>`).join('')
     ||'<p class="mut">Noch keine Helden beim Meister.</p>'}
 let advFile=null,advQ='';
 async function openAdvance(file){advFile=file;let s;try{s=await api('/api/myheroes/'+encodeURIComponent(file)+'/advance')}catch(e){return toastErr(e.message)}
@@ -340,6 +345,11 @@ $('#upForm').onsubmit=async e=>{e.preventDefault();const f=$('#upFile').files[0]
   try{const r=await fetch('/api/myheroes/upload',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||d.title||'Fehler '+r.status);
     toast('Hochgeladen. Der Meister ist informiert.');$('#upFile').value='';loadMine()}catch(x){toastErr(x.message)}};
 $('#mineList').onclick=e=>{const a=e.target.closest('[data-adv]');if(a){openAdvance(a.dataset.adv);$('#mineSheet').scrollIntoView({behavior:'smooth'});return}
+  const x=e.target.closest('[data-ex]');
+  if(x){const h=mine.find(y=>y.file===x.dataset.ex);$('#mineSheet').hidden=false;
+    $('#mineSheet').innerHTML=`<h2>${esc(h.name)}: Zusatzinfos</h2><p class="small mut">Was nicht in die Backgroundstory passt: Prinzipientreue, Geiz, Eitelkeit und Co. genauer beschrieben, Eigenheiten, Wünsche an den Meister …</p><div id="mineEx"></div>`;
+    bgEditor($('#mineEx'),h.extra,async html=>{await api('/api/myheroes/'+encodeURIComponent(h.file)+'/extra',{method:'PUT',body:{extra:html}});h.extra=html},'Zusatzinfos');
+    $('#mineSheet').scrollIntoView({behavior:'smooth'});return}
   const g=e.target.closest('[data-bg]');
   if(g){const h=mine.find(x=>x.file===g.dataset.bg);$('#mineSheet').hidden=false;
     $('#mineSheet').innerHTML=`<h2>${esc(h.name)}: Backgroundstory</h2><div id="mineBg"></div>`;

@@ -23,6 +23,9 @@ public final class Db {
             try { s.execute("ALTER TABLE approval ADD COLUMN account INTEGER"); } catch (SQLException alreadyThere) { }
             s.execute("CREATE TABLE IF NOT EXISTS draft(id INTEGER PRIMARY KEY AUTOINCREMENT, account INTEGER, name TEXT, input TEXT, xml TEXT, "
                     + "bg TEXT, approval INTEGER, status TEXT DEFAULT 'entwurf', updated TEXT)");
+            // Zusatzinfos: was nicht in die Backgroundstory passt (Prinzipientreue, Geiz, Eitelkeit genauer beschrieben …)
+            try { s.execute("ALTER TABLE hero ADD COLUMN extra TEXT"); } catch (SQLException alreadyThere) { }
+            try { s.execute("ALTER TABLE draft ADD COLUMN extra TEXT"); } catch (SQLException alreadyThere) { }
             s.execute("CREATE TABLE IF NOT EXISTS approval_item(id INTEGER PRIMARY KEY AUTOINCREMENT, approval INTEGER, kind TEXT, text TEXT, status TEXT, comment TEXT)");
         }
     }

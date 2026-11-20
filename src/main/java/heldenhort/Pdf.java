@@ -25,7 +25,9 @@ public final class Pdf {
     private static final float W = PDRectangle.A4.getWidth(), H = PDRectangle.A4.getHeight();
 
     /** Synchronisiert auf die Jar: deren Einstellungen sind statisch. */
-    public static byte[] heldenbogen(HeldenJar jar, Path heroXml, String title, String backgroundHtml) throws Exception {
+    public static byte[] heldenbogen(HeldenJar jar, Path heroXml, String title, String backgroundHtml) throws Exception { return heldenbogen(jar, heroXml, title, backgroundHtml, null); }
+
+    public static byte[] heldenbogen(HeldenJar jar, Path heroXml, String title, String backgroundHtml, String extraHtml) throws Exception {
         synchronized (jar) {
             ClassLoader l = jar.loader();
             ClassLoader old = Thread.currentThread().getContextClassLoader();
@@ -58,7 +60,8 @@ public final class Pdf {
                     if (r != Printable.PAGE_EXISTS) break;
                     addForm(doc, g);
                 }
-                if (backgroundHtml != null && !backgroundHtml.isBlank()) appendHtml(doc, title, backgroundHtml);
+                if (backgroundHtml != null && !backgroundHtml.isBlank()) appendHtml(doc, title + " – Backgroundstory", backgroundHtml);
+                if (extraHtml != null && !extraHtml.isBlank()) appendHtml(doc, title + " – Zusatzinfos", extraHtml);
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 doc.save(out);
                 return out.toByteArray();
@@ -76,7 +79,7 @@ public final class Pdf {
     private static void appendHtml(PDDocument doc, String title, String html) throws Exception {
         float margin = 50, width = W - 2 * margin, pageH = H - 2 * margin;
         JEditorPane ed = new JEditorPane("text/html", "<html><body style='font-family:serif;font-size:11pt'>"
-                + "<h2>" + escape(title) + " – Backgroundstory</h2>" + html + "</body></html>");
+                + "<h2>" + escape(title) + "</h2>" + html + "</body></html>");
         ed.setSize(new Dimension((int) width, Integer.MAX_VALUE / 4));
         int total = ed.getPreferredSize().height;
         ed.setSize(new Dimension((int) width, total));

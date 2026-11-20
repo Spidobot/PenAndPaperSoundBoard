@@ -192,9 +192,21 @@ public final class App {
                     z.putNextEntry(new java.util.zip.ZipEntry(base + "_Backgroundstory.txt"));
                     z.write(Jsoup.parse(bg).wholeText().trim().getBytes(StandardCharsets.UTF_8)); z.closeEntry();
                 }
+                String ex = extra(db, p.getFileName().toString());
+                if (!ex.isBlank()) {
+                    z.putNextEntry(new java.util.zip.ZipEntry(base + "_Zusatzinfos.html"));
+                    z.write(("<!doctype html><meta charset=\"utf-8\"><title>" + base + "</title>\n" + ex).getBytes(StandardCharsets.UTF_8)); z.closeEntry();
+                    z.putNextEntry(new java.util.zip.ZipEntry(base + "_Zusatzinfos.txt"));
+                    z.write(Jsoup.parse(ex).wholeText().trim().getBytes(StandardCharsets.UTF_8)); z.closeEntry();
+                }
             }
             ctx.header("Content-Disposition", "attachment; filename=\"" + base + ".zip\"");
             ctx.contentType("application/zip").result(bos.toByteArray());
+        });
+        m.put("/api/heroes/{file}/extra", ctx -> {
+            heroes.file(ctx.pathParam("file"));
+            db.exec("UPDATE hero SET extra=? WHERE file=?", cleanBg(ctx.bodyAsClass(Map.class).get("extra")), ctx.pathParam("file"));
+            ctx.json(Map.of("ok", true));
         });
         m.put("/api/heroes/{file}/bg", ctx -> {
             heroes.file(ctx.pathParam("file"));
@@ -328,6 +340,7 @@ public final class App {
         s.get("/api/drafts/{id}", ctx -> {
             var d = draft(db, accounts, ctx);
             Map<String, Object> out = new LinkedHashMap<>(Map.of("id", d.get("id"), "name", str(d.get("name")), "status", str(d.get("status")), "bg", str(d.get("bg"))));
+            out.put("extra", str(d.get("extra")));
             out.put("input", JSON.readValue(str(d.get("input")).isEmpty() ? "{}" : str(d.get("input")), Map.class));
             out.put("approval", d.get("approval"));
             out.put("haupt", d.get("xml") != null);
@@ -365,6 +378,13 @@ public final class App {
             String bg = cleanBg(ctx.bodyAsClass(Map.class).get("bg"));
             if (bg.length() > 200_000) throw new IllegalArgumentException("Backgroundstory zu lang");
             db.exec("UPDATE draft SET bg=?, updated=? WHERE id=?", bg, now(), d.get("id"));
+            ctx.json(Map.of("ok", true));
+        });
+        s.put("/api/drafts/{id}/extra", ctx -> {
+            var d = draft(db, accounts, ctx);
+            String ex = cleanBg(ctx.bodyAsClass(Map.class).get("extra"));
+            if (ex.length() > 200_000) throw new IllegalArgumentException("Zusatzinfos zu lang");
+            db.exec("UPDATE draft SET extra=?, updated=? WHERE id=?", ex, now(), d.get("id"));
             ctx.json(Map.of("ok", true));
         });
         s.get("/api/drafts/{id}/check", ctx -> { // Prüfung wie beim Senden (inkl. Punkte, die erst beim Abschließen entstehen)
@@ -407,6 +427,7 @@ public final class App {
                 for (String t : mg) if (!ok.contains(t)) throw new IllegalStateException("Noch nicht freigegeben: " + t);
             }
             String file = heroes.save(str(d.get("name")), str(a.get("name")), ((Number) a.get("id")).longValue(), ((String) f.get("xml")).getBytes(StandardCharsets.UTF_8), bg);
+            db.exec("UPDATE hero SET extra=? WHERE file=?", str(d.get("extra")), file);
             db.exec("UPDATE draft SET status='gesendet', updated=? WHERE id=?", now(), d.get("id"));
             mail.notifyMeister("Neuer Held: " + d.get("name"), a.get("name") + " hat den Helden „" + d.get("name") + "“ geschickt.\nDatei: " + heroes.dir().resolve(file));
             ctx.json(Map.of("file", file));
@@ -433,6 +454,15 @@ public final class App {
             db.exec("UPDATE hero SET background=? WHERE file=?", bg, file);
             if (first && !bg.isBlank())
                 mail.notifyMeister("Backgroundstory nachgetragen: " + file, accounts.current(ctx).get("name") + " hat die Backgroundstory zu " + file + " nachgetragen.");
+            ctx.json(Map.of("ok", true));
+        });
+        s.put("/api/myheroes/{file}/extra", ctx -> {
+            String file = advance.own(ctx.pathParam("file"), ctx);
+            String ex = cleanBg(ctx.bodyAsClass(Map.class).get("extra"));
+            boolean first = extra(db, file).isBlank();
+            db.exec("UPDATE hero SET extra=? WHERE file=?", ex, file);
+            if (first && !ex.isBlank())
+                mail.notifyMeister("Zusatzinfos nachgetragen: " + file, accounts.current(ctx).get("name") + " hat Zusatzinfos zu " + file + " nachgetragen.");
             ctx.json(Map.of("ok", true));
         });
         s.post("/api/myheroes/upload", ctx -> { // nur mit Erlaubnis vom Meister
@@ -513,6 +543,11 @@ Icons: Icons8 (icons8.com).""";
 
     static String cleanBg(Object o) { return Jsoup.clean(str(o), Safelist.basic().addTags("h3")); }
 
+    static String extra(Db db, String file) {
+        var r = db.query("SELECT extra FROM hero WHERE file=?", file);
+        return r.isEmpty() ? "" : str(r.get(0).get("extra"));
+    }
+
     static String background(Db db, String file) {
         var r = db.query("SELECT background FROM hero WHERE file=?", file);
         return r.isEmpty() ? "" : str(r.get(0).get("background"));
@@ -523,7 +558,8 @@ Icons: Icons8 (icons8.com).""";
         Path p = heroes.file(file);
         String name = str(Heroes.parse(Files.readAllBytes(p)).get("name"));
         byte[] pdf;
-        try { pdf = Pdf.heldenbogen(jar, p, name, "1".equals(ctx.queryParam("bg")) ? background(db, file) : null); }
+        boolean mit = "1".equals(ctx.queryParam("bg"));
+        try { pdf = Pdf.heldenbogen(jar, p, name, mit ? background(db, file) : null, mit ? extra(db, file) : null); }
         catch (Exception e) { // 4xx statt 5xx: Cloudflare ersetzt 5xx durch eine eigene Seite
             Throwable c = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null ? e.getCause() : e;
             throw new IllegalStateException("PDF nicht möglich: " + cause(c));

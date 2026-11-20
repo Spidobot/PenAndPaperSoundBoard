@@ -6,7 +6,7 @@
 <title>Heldenhort Meister</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="icon" href="/common/d20.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/common/app.css?v=20261119w">
+<link rel="stylesheet" href="/common/app.css?v=20261120a">
 <style>html,body{margin:0}</style>
 </head>
 <body>
@@ -174,7 +174,7 @@
 <dialog id="sheet" class="sheetdlg" aria-label="Heldenbogen"><div id="sheetbody"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
-<script src="/common/common.js?v=20261119w"></script>
+<script src="/common/common.js?v=20261120a"></script>
 <script>
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
@@ -525,7 +525,7 @@ function sheetHtml(h,dialog){const s=h.sheet||{basis:{},sections:[],notizen:[]};
   return `<div class="spread"><h2>${esc(h.name)}</h2><div class="row">
       <input type="search" class="sq" placeholder="Im Bogen suchen…" aria-label="Im Bogen suchen" style="width:220px">
       <a class="btn sm" href="/api/heroes/${encodeURIComponent(h.file)}/xml">XML</a>
-      <a class="btn sm" href="/api/heroes/${encodeURIComponent(h.file)}/zip" title="XML und Backgroundstory als ZIP">XML + Backgroundstory</a>
+      <a class="btn sm" href="/api/heroes/${encodeURIComponent(h.file)}/zip" title="XML, Backgroundstory und Zusatzinfos als ZIP">XML + Texte</a>
       ${pdfLink('/api/heroes/'+encodeURIComponent(h.file),'pdfbg-m'+(dialog?'d':'')) }
       ${h.status==='neu'?'<button class="btn sm pri" data-take>Übernehmen</button>':''}
       ${dialog?'<button class="btn sm" data-close>Schließen</button>':''}</div></div>
@@ -539,10 +539,12 @@ function sheetHtml(h,dialog){const s=h.sheet||{basis:{},sections:[],notizen:[]};
     ${s.sections.map(sec=>`<details open class="sec"><summary><b>${esc(sec.title)}</b> <span class="mut small">${sec.rows.length}</span></summary>
       <div class="tw"><table class="small"><tbody>${sec.rows.map(r=>`<tr data-txt="${esc((r.name+' '+r.value+' '+r.details).toLowerCase())}"><td><b>${esc(r.name)}</b></td><td class="mono">${esc(r.value)}</td><td class="mut">${esc(r.details)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')||'<p class="mut">Keine Werte in der XML gefunden.</p>'}
     ${s.notizen&&s.notizen.length?`<details open class="sec"><summary><b>Notizen</b></summary><ul class="small">${s.notizen.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></details>`:''}
-    <details open class="sec"><summary><b>Backgroundstory</b></summary><div class="bgview"></div></details>`}
+    <details open class="sec"><summary><b>Backgroundstory</b></summary><div class="bgview"></div></details>
+    <details open class="sec"><summary><b>Zusatzinfos</b> <span class="mut small">Prinzipientreue, Geiz, Eitelkeit … genauer beschrieben</span></summary><div class="exview"></div></details>`}
 function fillSheet(root,h){
   // Backgroundstory ist serverseitig bereinigt (jsoup Safelist)
   bgEditor(root.querySelector('.bgview'),h.background,async html=>{await api('/api/heroes/'+encodeURIComponent(h.file)+'/bg',{method:'PUT',body:{bg:html}});h.background=html});
+  bgEditor(root.querySelector('.exview'),h.extra,async html=>{await api('/api/heroes/'+encodeURIComponent(h.file)+'/extra',{method:'PUT',body:{extra:html}});h.extra=html},'Zusatzinfos');
   const sq=root.querySelector('.sq');sq.oninput=()=>{const q=sq.value.trim().toLowerCase();
     root.querySelectorAll('details.sec').forEach(d=>{let any=false;d.querySelectorAll('tr[data-txt]').forEach(tr=>{const ok=!q||tr.dataset.txt.includes(q);tr.hidden=!ok;any=any||ok});
       if(d.querySelector('tr[data-txt]'))d.hidden=!any;if(q&&any)d.open=true})};
