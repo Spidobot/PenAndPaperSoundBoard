@@ -291,3 +291,8 @@ tr.geplant td{background:var(--acc-soft)}
 .picklist button>span:first-child{flex:1 1 auto;min-width:0}
 .picklist button>span.mut{flex:0 0 auto;white-space:nowrap}
 .ed h1,.bgview h1{font-size:1.5em;margin:.5em 0 .25em}.ed h2,.bgview h2{font-size:1.25em;margin:.45em 0 .2em}.ed h3,.bgview h3{font-size:1.08em}
+/* ⓘ gut treffbar: groß, eigene Klickfläche (mind. 40×36 px), überall gleich (Listen, Heldenbogen) */
+.ib.info{font-size:1.45rem;line-height:1;min-width:40px;min-height:36px;padding:4px 10px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px}
+.ib.info:hover,.ib.info:focus-visible{background:var(--acc-soft)}
+.picklist button[data-pv]{align-items:center;padding:8px 12px}
+.picklist button[data-pv]>span:first-child{white-space:normal}

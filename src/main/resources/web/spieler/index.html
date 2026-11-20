@@ -269,7 +269,7 @@ function ruleBox(){const F=(S.hinweise||[]).filter(h=>h.art==='F');return F.leng
 /* Auswahlliste zum Durchsehen und Anklicken (statt nur Vorschläge beim Tippen) */
 function pickList(id,items,label,open){return `<details class="pick" ${open||items.length<=40?'open':''}><summary>${label} (${items.length})</summary>
   <input type="search" class="pickq" data-pl="${id}" placeholder="Liste filtern…" aria-label="${label} filtern">
-  <div class="picklist" id="${id}">${items.map(i=>`<div class="pickrow"><button type="button" data-pick-to="${i.to}" data-pv="${esc(i.name)}"><span>${esc(i.name)}</span>${i.info?`<span class="mut small">${esc(i.info)}</span>`:''}</button>${i.ri?`<button type="button" class="ib info" data-ri="${esc(i.name)}" data-ri-info="${esc(i.info||'')}" aria-label="Was bedeutet ${esc(i.name)}?" title="Was bedeutet das?">ⓘ</button>`:''}</div>`).join('')}</div></details>`}
+  <div class="picklist" id="${id}">${items.map(i=>`<div class="pickrow"><button type="button" data-pick-to="${i.to}" data-pv="${esc(i.name)}"><span>${esc(i.name.replace(/\s*\(\)\s*$/,''))}</span>${i.info?`<span class="mut small">${esc(i.info)}</span>`:''}</button>${i.ri?`<button type="button" class="ib info" data-ri="${esc(i.name)}" data-ri-info="${esc(i.info||'')}" aria-label="Was bedeutet ${esc(i.name)}?" title="Was bedeutet das?">ⓘ</button>`:''}</div>`).join('')}</div></details>`}
 function renderStep(){LS.set('hh-step-'+D.id,step);
   $('#steps').innerHTML=STEPS.map((s,i)=>`<button data-st="${i}"${i===step?' aria-current="step"':''}>${i+1}. ${s}</button>`).join('')+`<button id="toRkp" class="small">↺ Herkunft neu wählen</button>`;
   const b=$('#stepbody');
