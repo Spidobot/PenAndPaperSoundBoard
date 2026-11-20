@@ -153,10 +153,11 @@ public final class Sound {
     }
 
     /** Befehl vom Meister. Wirft bei unbekannten Werten, damit Fehler im UI sichtbar werden. */
-    public void command(Map<String, Object> c) {
+    public Map<String, Object> command(Map<String, Object> c) {
         Map<String, Object> out;
         synchronized (this) { out = apply(c); }
         broadcast(out);
+        return out;
     }
 
     private Map<String, Object> apply(Map<String, Object> c) {
@@ -233,6 +234,9 @@ public final class Sound {
         Map<String, Object> s = new LinkedHashMap<>();
         s.put("type", "state"); s.put("scene", scene); s.put("ch", chs); s.put("berthaAt", berthaAt); s.put("fxVolume", fxVolume);
         s.put("serverNow", System.currentTimeMillis()); s.put("listeners", listeners()); s.put("listenerNames", listenerNames()); s.put("fxSeq", fxSeq); s.put("libSeq", libSeq);
+        List<String> fxFiles = new ArrayList<>(); // zum Vorladen im Browser
+        FX.values().forEach(f -> { if (Files.isRegularFile(root.resolve("Effects").resolve(f))) fxFiles.add(fxUrl(f)); });
+        s.put("fxFiles", fxFiles);
         return s;
     }
 

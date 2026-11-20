@@ -155,7 +155,8 @@ public final class App {
             });
             ctx.contentType("text/plain; charset=utf-8").result(sb.toString());
         });
-        m.post("/api/sound/cmd", ctx -> { sound.command(ctx.bodyAsClass(Map.class)); ctx.json(sound.state()); });
+        // Effekt: Antwort ist das Effekt-Ereignis (mit Nummer), damit der Meister ihn sofort hört; sonst der neue Zustand
+        m.post("/api/sound/cmd", ctx -> { var out = sound.command(ctx.bodyAsClass(Map.class)); ctx.json("fx".equals(out.get("type")) ? out : sound.state()); });
 
         m.get("/api/config", ctx -> {
             Map<String, Object> c = new LinkedHashMap<>();
@@ -197,6 +198,7 @@ public final class App {
             ctx.contentType("application/xml").result(Files.newInputStream(p));
         });
         m.get("/api/heroes/{file}/pdf", ctx -> pdf(ctx, jar, heroes, db, regeln, ctx.pathParam("file")));
+        m.post("/api/heroes/{file}/pdfmail", ctx -> pdfMailen(ctx, jar, heroes, db, regeln, mail, ctx.pathParam("file"), db.get("mailTo", "")));
         m.get("/api/heroes/{file}/zip", ctx -> { // XML + Backgroundstory, z. B. zum Weitergeben fürs Balancing
             Path p = heroes.file(ctx.pathParam("file"));
             String base = p.getFileName().toString().replaceAll("\\.xml$", "");
@@ -327,12 +329,25 @@ public final class App {
             if (!ap.isEmpty() && ap.get(0).get("file") != null && autoUebernehmen(db) && !"DEL".equals(kp.get(0).get("kind"))
                     && db.query("SELECT 1 FROM approval_item WHERE approval=? AND status='offen' AND kind='MG'", ap.get(0).get("id")).isEmpty())
                 db.exec("UPDATE hero SET status='übernommen' WHERE file=? AND status='neu'", ap.get(0).get("file"));
-            var it = db.query("SELECT a.hero, a.account, i.text FROM approval_item i JOIN approval a ON a.id=i.approval WHERE i.id=?", ctx.pathParam("id"));
-            // Keine Mail je Klick: Entscheidungen werden je Spieler gesammelt und nach 3 Minuten Ruhe als eine Mail verschickt
-            if (!it.isEmpty() && it.get(0).get("account") != null)
-                mail.sammeln(accounts.email(it.get(0).get("account")), str(it.get(0).get("hero")),
-                        "• " + Heroes.lesbar(str(it.get(0).get("text"))) + "\n  Entscheidung: " + st + (c.isEmpty() ? "" : "\n  Kommentar: " + c));
-            ctx.json(Map.of("ok", true));
+            // Eine Mail je Held: erst wenn alle Punkte dieser Anfrage entschieden sind. Mit allen Entscheidungen und Begründungen.
+            // Spätere Änderungen an einer abgeschlossenen Anfrage: nach kurzer Pause eine Mail mit dem neuen Gesamtstand.
+            var it = db.query("SELECT a.id, a.hero, a.account FROM approval_item i JOIN approval a ON a.id=i.approval WHERE i.id=?", ctx.pathParam("id"));
+            boolean fertig = false;
+            if (!it.isEmpty()) {
+                var alle = db.query("SELECT text, status, comment FROM approval_item WHERE approval=? AND status NOT IN ('zurückgezogen','überholt') ORDER BY id", it.get(0).get("id"));
+                fertig = alle.stream().noneMatch(x -> "offen".equals(x.get("status")));
+                if (fertig && it.get(0).get("account") != null) { // ohne Besitzer (z. B. per FTP) gibt es niemanden zu benachrichtigen
+                    StringBuilder liste = new StringBuilder();
+                    for (var x : alle) {
+                        String t = Heroes.lesbar(str(x.get("text")));
+                        liste.append("• ").append(t.isEmpty() ? "Meistergenehmigung" : t).append("\n  Entscheidung: ").append(str(x.get("status")));
+                        if (!str(x.get("comment")).isEmpty()) liste.append("\n  Begründung des Meisters: ").append(str(x.get("comment")));
+                        liste.append("\n");
+                    }
+                    mail.heldEntschieden(str(it.get(0).get("id")), accounts.email(it.get(0).get("account")), str(it.get(0).get("hero")), liste.toString());
+                }
+            }
+            ctx.json(Map.of("ok", true, "mail", fertig));
         });
 
         // ---------------- Spieler ----------------
@@ -521,6 +536,7 @@ public final class App {
             ctx.contentType("application/xml").result(Files.readAllBytes(p));
         });
         s.get("/api/myheroes/{file}/pdf", ctx -> pdf(ctx, jar, heroes, db, regeln, advance.own(ctx.pathParam("file"), ctx)));
+        s.post("/api/myheroes/{file}/pdfmail", ctx -> pdfMailen(ctx, jar, heroes, db, regeln, mail, advance.own(ctx.pathParam("file"), ctx), accounts.email(accounts.current(ctx).get("id"))));
         s.put("/api/myheroes/{file}/bg", ctx -> {
             String file = advance.own(ctx.pathParam("file"), ctx);
             String bg = cleanBg(ctx.bodyAsClass(Map.class).get("bg"));
@@ -674,7 +690,7 @@ Icons: Icons8 (icons8.com).""";
 
     static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
 
-    static String cleanBg(Object o) { return Jsoup.clean(str(o), Safelist.basic().addTags("h3")); }
+    static String cleanBg(Object o) { return Jsoup.clean(str(o), Safelist.basic().addTags("h1", "h2", "h3")); } // Überschriften 1–3 im Editor
 
     /**
      * Legt für eine hochgeladene/abgelegte XML eine Freigabe-Anfrage an: ein Punkt je in der XML vermerkter Meistergenehmigung.
@@ -728,7 +744,7 @@ Icons: Icons8 (icons8.com).""";
         return out;
     }
 
-    static final String TIERART = "Tierart: ";
+    static final String TIERART = "Tierart: ", WESEN = "Wesen: ";
 
     /**
      * Regelzusammenfassung für Helden samt Begleitern. Begleiter (Tier, Vertrauter, Dämon …) stehen in einer eigenen
@@ -744,10 +760,10 @@ Icons: Icons8 (icons8.com).""";
             spieler.put(name, regelNamen(h));
             for (Map<String, Object> b : (List<Map<String, Object>>) h.getOrDefault("W", List.of())) {
                 String art = str(b.get("art")), gattung = str(b.get("gattung")), familie = str(b.get("familie"));
-                String wer = str(b.get("name")) + (mitHelden ? ", Begleiter von " + name : "");
+                String wer = str(b.get("name")) + (mitHelden ? (str(b.get("art")).contains("wahrer Name") ? ", wahrer Name bekannt bei " : ", Begleiter von ") + name : "");
                 Map<String, String> r = new LinkedHashMap<>();
                 if (!gattung.isBlank() || !familie.isBlank())
-                    r.put(TIERART + (familie.isBlank() ? gattung : familie) + (gattung.isBlank() || familie.isBlank() ? "" : " / " + gattung), "");
+                    r.put((art.equalsIgnoreCase("Tier") ? TIERART : WESEN) + (familie.isBlank() ? gattung : familie) + (gattung.isBlank() || familie.isBlank() ? "" : " / " + gattung), "");
                 r.putAll((Map<String, String>) b.get("regeln"));
                 tiere.put(wer, r);
                 wasIst.put(wer, String.join(", ", java.util.stream.Stream.of(familie.isBlank() ? gattung : familie + (gattung.isBlank() ? "" : " (" + gattung + ")"), art).filter(x -> !x.isBlank()).toList()));
@@ -757,12 +773,12 @@ Icons: Icons8 (icons8.com).""";
         String html = regeln.zusammenfassung(spieler, mitHelden);
         if (tiere.isEmpty()) return html;
         StringBuilder sb = new StringBuilder(html);
-        sb.append("<hr><h1>Begleiter</h1><p><i>Tiere, Vertraute, Dämonen und andere Wesen der Helden. Das hier gilt für den Begleiter, nicht für den Helden.</i></p>");
+        sb.append("<hr><h1>Begleiter und beschwörbare Wesen</h1><p><i>Tiere, Vertraute und Wesen, deren wahren Namen ein Held kennt (Dämonen, Elementare, Geister …). Das hier gilt für das Wesen, nicht für den Helden.</i></p>");
         sb.append("<ul>");
         wasIst.forEach((wer, was) -> sb.append("<li><b>").append(esc(wer)).append("</b>").append(was.isEmpty() ? "" : " – " + esc(was)).append("</li>"));
         sb.append("</ul>");
-        sb.append(regeln.zusammenfassung(tiere, true, n -> n.startsWith(TIERART)
-                ? regeln.tierart(n.substring(TIERART.length()).split(" / "))
+        sb.append(regeln.zusammenfassung(tiere, true, n -> n.startsWith(TIERART) ? regeln.tierart(n.substring(TIERART.length()).split(" / "))
+                : n.startsWith(WESEN) ? regeln.tierart(n.substring(WESEN.length()).split(" / "))
                 : regeln.suche(n, tierArten)));
         return sb.toString();
     }
@@ -786,19 +802,39 @@ Icons: Icons8 (icons8.com).""";
 
     /** Heldenbogen als PDF, gedruckt von der helden.jar; ?bg=1 hängt Backgroundstory und Zusatzinfos an, ?regeln=1 die Regelzusammenfassung. */
     static void pdf(Context ctx, HeldenJar jar, Heroes heroes, Db db, Regeln regeln, String file) throws Exception {
+        var r = pdfErzeugen(ctx, jar, heroes, db, regeln, file);
+        ctx.header("Content-Disposition", "attachment; filename=\"" + r.dateiname() + "\"");
+        ctx.contentType("application/pdf").result(r.pdf());
+    }
+
+    record PdfDatei(String held, String dateiname, byte[] pdf, String teile) {}
+
+    /** PDF aus bis zu drei Teilen (?bogen=, ?bg=, ?regeln=, je 0/1); Bogen ohne Angabe wie bisher dabei. */
+    static PdfDatei pdfErzeugen(Context ctx, HeldenJar jar, Heroes heroes, Db db, Regeln regeln, String file) throws Exception {
         Path p = heroes.file(file);
         Map<String, Object> parsed = Heroes.parse(Files.readAllBytes(p));
-        String name = str(parsed.get("name"));
-        byte[] pdf;
+        String name = str(parsed.get("name")), basis = p.getFileName().toString().replaceAll("\\.xml$", "");
         boolean mit = "1".equals(ctx.queryParam("bg"));
         String regelHtml = "1".equals(ctx.queryParam("regeln")) ? regelHtml(regeln, Map.of(name, parsed), false) : null;
-        try { pdf = Pdf.heldenbogen(jar, p, name, mit ? background(db, file) : null, mit ? extra(db, file) : null, heroes.bild(file), regelHtml); }
+        boolean bogen = !"0".equals(ctx.queryParam("bogen"));
+        if (!bogen && !mit && regelHtml == null) throw new IllegalArgumentException("Bitte mindestens einen Teil auswählen: Heldenbogen, Backgroundstory oder Regelzusammenfassung.");
+        String teile = String.join(", ", java.util.stream.Stream.of(bogen ? "Heldenbogen" : "", mit ? "Backgroundstory & Zusatzinfos" : "", regelHtml != null ? "Regelzusammenfassung" : "").filter(x -> !x.isEmpty()).toList());
+        if (!bogen)
+            return new PdfDatei(name, basis + (regelHtml != null && !mit ? "_Regeln" : "_Texte") + ".pdf",
+                    Pdf.anhaenge(name, mit ? background(db, file) : null, mit ? extra(db, file) : null, regelHtml), teile);
+        try { return new PdfDatei(name, basis + ".pdf", Pdf.heldenbogen(jar, p, name, mit ? background(db, file) : null, mit ? extra(db, file) : null, heroes.bild(file), regelHtml), teile); }
         catch (Exception e) { // 4xx statt 5xx: Cloudflare ersetzt 5xx durch eine eigene Seite
             Throwable c = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null ? e.getCause() : e;
             throw new IllegalStateException("PDF nicht möglich: " + cause(c));
         }
-        ctx.header("Content-Disposition", "attachment; filename=\"" + p.getFileName().toString().replaceAll("\\.xml$", "") + ".pdf\"");
-        ctx.contentType("application/pdf").result(pdf);
+    }
+
+    /** Gleiches PDF wie zum Herunterladen, aber als Mail-Anhang an to. */
+    static void pdfMailen(Context ctx, HeldenJar jar, Heroes heroes, Db db, Regeln regeln, Mail mail, String file, String to) throws Exception {
+        if (to == null || to.isBlank()) throw new IllegalArgumentException("Es ist keine bestätigte Mail-Adresse hinterlegt.");
+        var r = pdfErzeugen(ctx, jar, heroes, db, regeln, file);
+        mail.notifyAnhang(to, "PDF: " + r.held(), "Seid gegrüßt,\n\nanbei das PDF zu „" + r.held() + "“.\nEnthalten: " + r.teile() + ".", r.pdf(), r.dateiname());
+        ctx.json(Map.of("ok", true, "to", to));
     }
 
     static String str(Object o) { return o == null ? "" : o.toString().trim(); }

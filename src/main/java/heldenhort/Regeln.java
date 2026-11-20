@@ -58,7 +58,50 @@ final class Regeln {
         Set<String> buch = new HashSet<>();
         List<Eintrag> out = new ArrayList<>();
         for (Eintrag e : r) if (buch.add(e.quelle().replaceAll("\\s*S\\..*$", "") + "|" + e.name())) out.add(e);
+        return zusammenlegen(out);
+    }
+
+    /**
+     * Gleicher Text in mehreren Büchern (z. B. SF in WdH und WdS): nur einmal zeigen, mit allen Quellen.
+     * Weicht der Wortlaut nur minimal ab (ein, zwei Wörter, z. B. Errata), wird ebenfalls zusammengelegt, aber vermerkt.
+     */
+    private static List<Eintrag> zusammenlegen(List<Eintrag> in) {
+        if (in.size() < 2) return in;
+        List<Eintrag> out = new ArrayList<>();
+        boolean[] weg = new boolean[in.size()];
+        for (int i = 0; i < in.size(); i++) {
+            if (weg[i]) continue;
+            Eintrag a = in.get(i);
+            List<String> quellen = new ArrayList<>(List.of(a.quelle()));
+            boolean abweichung = false;
+            for (int j = i + 1; j < in.size(); j++) {
+                if (weg[j]) continue;
+                int d = abstand(woerterText(a.text()), woerterText(in.get(j).text()));
+                if (d <= 3) { weg[j] = true; quellen.add(in.get(j).quelle()); abweichung |= d > 0; }
+            }
+            if (quellen.size() == 1) { out.add(a); continue; }
+            String text = a.text() + (abweichung ? "<p><i>Der Wortlaut in den genannten Quellen weicht minimal voneinander ab (z. B. Errata).</i></p>" : "");
+            out.add(new Eintrag(a.name(), a.namen(), a.art(), a.zusatz(), String.join(" · ", quellen), text));
+        }
         return out;
+    }
+
+    private static String[] woerterText(String html) { return norm(html.replaceAll("<[^>]+>", " ")).split(" "); }
+
+    /** Wort-Unterschiede (Einfügen/Löschen/Ersetzen), abgebrochen ab 4: nur „fast gleich“ zählt. */
+    private static int abstand(String[] a, String[] b) {
+        if (Math.abs(a.length - b.length) > 3) return 99;
+        int i = 0, j = 0, diff = 0;
+        while (i < a.length && j < b.length) {
+            if (a[i].equals(b[j])) { i++; j++; continue; }
+            if (++diff > 3) return 99;
+            // Ersetzung, Einfügung oder Löschung: was wieder synchron macht
+            if (i + 1 < a.length && j + 1 < b.length && a[i + 1].equals(b[j + 1])) { i++; j++; }
+            else if (j + 1 < b.length && a[i].equals(b[j + 1])) j++;
+            else if (i + 1 < a.length && a[i + 1].equals(b[j])) i++;
+            else { i++; j++; }
+        }
+        return diff + (a.length - i) + (b.length - j);
     }
 
     private static final List<String> ART = List.of("Tier", "Wesen", "Vorteil", "Nachteil", "Sonderfertigkeit", "Tierfähigkeit", "Talent", "Ritual", "Liturgie", "Zauber");

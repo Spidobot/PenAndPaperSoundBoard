@@ -119,6 +119,7 @@ public final class Heroes {
         if (held == null) throw new IllegalArgumentException("kein <held> gefunden");
         Map<String, Object> h = new LinkedHashMap<>();
         h.put("name", held.getAttribute("name"));
+        h.put("ap", num(attr(first(held, "abenteuerpunkte"), "value"))); // Gesamt-AP: Stärke des Helden auf einen Blick
         h.put("rasse", attr(first(held, "rasse"), "string"));
         h.put("kultur", attr(first(held, "kultur"), "string"));
         List<String> prof = new ArrayList<>();
@@ -318,6 +319,24 @@ public final class Heroes {
             for (Element t : all(w, "talent")) regeln.putIfAbsent(t.getAttribute("name"), t.getAttribute("value").isBlank() ? "" : "TaW " + t.getAttribute("value"));
             regeln.remove("");
             b.put("regeln", regeln);
+            out.add(b);
+        }
+        // Beschwörbare Wesen: SF „Wahrer Name: Dämon“ (auch Elementar, Geist, Untoter, Chimäre, Golemiden …)
+        // mit Auswahl Qualität / Basiswert / Name, z. B. 4 / 30 / Khuralthu
+        for (Element sf : all(held, "sonderfertigkeit")) {
+            String n = sf.getAttribute("name");
+            if (!n.startsWith("Wahrer Name")) continue;
+            String art = n.contains(":") ? n.substring(n.indexOf(':') + 1).trim() : "Wesen";
+            Map<Integer, String> wahl = new TreeMap<>();
+            for (Element w : all(sf, "wahl")) wahl.put(num(w.getAttribute("position")), w.getAttribute("value"));
+            String wesen = wahl.getOrDefault(2, "").trim();
+            if (wesen.isEmpty()) continue;
+            Map<String, Object> b = new LinkedHashMap<>();
+            b.put("name", wesen);
+            b.put("gattung", wesen);
+            b.put("familie", "");
+            b.put("art", art + ", wahrer Name bekannt" + (wahl.containsKey(0) ? " (Qualität " + wahl.get(0) + ")" : ""));
+            b.put("regeln", new LinkedHashMap<String, String>());
             out.add(b);
         }
         return out;

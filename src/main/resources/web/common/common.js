@@ -20,6 +20,8 @@ async function api(path,opt={}){
   return data;
 }
 const mmss=s=>!isFinite(s)?'--:--':String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0');
+/** Gesamt-AP lesbar, z. B. „5.000 AP“ */
+const fmtAp=ap=>ap!=null&&ap!==''?Number(ap).toLocaleString('de-AT')+' AP':'– AP';
 const ICON=k=>`/common/icons/${k}.png`;
 
 /** Hört den Soundboard-Stream wie Internetradio (Meister-Tab mit Ton und Spieler).
@@ -40,7 +42,7 @@ class Player{
    *  darum zählt die größte Differenz der letzten Minuten, nicht die letzte. Sonst springt der Titel zurück. */
   clock(serverNow){if(!serverNow)return;const s=serverNow-Date.now(),now=Date.now();
     this.samples=(this.samples||[]).filter(x=>now-x.t<300000);this.samples.push({t:now,s});this.skew=Math.max(...this.samples.map(x=>x.s))}
-  apply(st){this.state=st;this.clock(st.serverNow);
+  apply(st){this.state=st;this.clock(st.serverNow);this.preloadFx(st.fxFiles);
     for(const k in this.a){const c=st.ch[k],el=this.a[k];
       el.volume=Math.max(0,Math.min(1,c.volume/100*this.master));
       if(!this.enabled||!c.file||!c.playing){this.drop(k);continue}
@@ -55,12 +57,21 @@ class Player{
   pauseNow(k){this.drop(k)}
   setVolumeNow(k,v){this.a[k].volume=Math.max(0,Math.min(1,v/100*this.master))}
   setMaster(v){this.master=v;if(this.state)for(const k in this.a)this.a[k].volume=Math.max(0,Math.min(1,this.state.ch[k].volume/100*v))}
-  /** Effekt-Spieler einmal beim Klick freischalten (Firefox spielt sonst nur, was direkt ein Klick auslöst) */
-  unlock(){if(this.fxPool)return;this.fxPool=[0,1,2,3].map(()=>{const a=new Audio(SILENT);a.play().catch(()=>{});return a});this.fxNext=0;
-    for(const k in this.a){const el=this.a[k];if(!el.getAttribute('src')){el.src=SILENT;el.play().then(()=>{if(!el.dataset.want){el.pause();el.removeAttribute('src')}}).catch(()=>{})}}}
-  fx(file){if(!this.enabled)return;let a;
-    if(this.fxPool){a=this.fxPool[this.fxNext++%this.fxPool.length];a.pause();a.src=this.url(file)}else a=new Audio(this.url(file));
-    a.onerror=()=>this.onFxError&&this.onFxError(file,a.error?('Code '+a.error.code+(a.error.message?': '+a.error.message:'')):'unbekannt');a.volume=Math.max(0,Math.min(1,this.master*((this.state?.fxVolume??80)/100)));a.play().catch(e=>this.onFxError&&this.onFxError(file,e.name+': '+e.message))}
+  /** Ton einmal beim Klick freischalten (Browser spielen sonst nur, was direkt ein Klick auslöst) und alle Effekte vorladen */
+  unlock(){if(this.unlocked)return;this.unlocked=true;
+    for(const k in this.a){const el=this.a[k];if(!el.getAttribute('src')){el.src=SILENT;el.play().then(()=>{if(!el.dataset.want){el.pause();el.removeAttribute('src')}}).catch(()=>{})}}
+    this.preloadFx(this.state&&this.state.fxFiles)}
+  /** Effekt-Dateien vorab laden und (stumm) einmal anspielen: dann klingt ein Effekt sofort, ohne Nachladen über das Netz */
+  preloadFx(files){if(!files||!this.unlocked)return;this.fxEl=this.fxEl||{};
+    for(const f of files){if(this.fxEl[f])continue;const a=new Audio(this.url(f));a.preload='auto';this.fxEl[f]=a;
+      a.muted=true;a.play().then(()=>{a.pause();a.currentTime=0;a.muted=false}).catch(()=>{a.muted=false})}}
+  /** Effekt abspielen; id = Nummer vom Server, jede Nummer klingt genau einmal (sie kommt per Klick-Antwort UND per Abfrage) */
+  fx(file,id){if(!this.enabled)return;this.fxSeen=this.fxSeen||new Set();if(id!=null){if(this.fxSeen.has(id))return;this.fxSeen.add(id)}
+    this.fxEl=this.fxEl||{};let a=this.fxEl[file];
+    if(!a||!a.paused&&a.currentTime>0){a=new Audio(this.url(file));if(!this.fxEl[file])this.fxEl[file]=a} // läuft schon: zweite Kopie überlagert
+    a.onerror=()=>this.onFxError&&this.onFxError(file,a.error?('Code '+a.error.code+(a.error.message?': '+a.error.message:'')):'unbekannt');
+    a.volume=Math.max(0,Math.min(1,this.master*((this.state?.fxVolume??80)/100)));a.muted=false;try{a.currentTime=0}catch(_){}
+    a.play().catch(e=>this.onFxError&&this.onFxError(file,e.name==='NotAllowedError'?'Der Browser blockiert Ton, bis du einmal auf die Seite klickst.':e.name+': '+e.message))}
 }
 
 /** Abstimmungs-Übersicht: Zeilen = Termine, Spalten = Personen. mine = eigene Konto-ID (Spieler), sonst null. */
@@ -87,7 +98,7 @@ async function showImpressum(){let d=document.getElementById('imprDlg');
 function bgEditor(root,html,save,label='Backgroundstory'){
   root.innerHTML=`<div class="tb">
     <button type="button" data-cmd="bold" title="Fett"><b>F</b></button><button type="button" data-cmd="italic" title="Kursiv"><i>K</i></button><button type="button" data-cmd="underline" title="Unterstrichen"><u>U</u></button>
-    <button type="button" data-cmd="formatBlock" data-v="h3" title="Überschrift">Ü</button><button type="button" data-cmd="formatBlock" data-v="p" title="Absatz">¶</button>
+    <button type="button" data-cmd="formatBlock" data-v="h1" title="Überschrift 1 (groß)">Ü1</button><button type="button" data-cmd="formatBlock" data-v="h2" title="Überschrift 2">Ü2</button><button type="button" data-cmd="formatBlock" data-v="h3" title="Überschrift 3 (klein)">Ü3</button><button type="button" data-cmd="formatBlock" data-v="p" title="Absatz">¶</button>
     <button type="button" data-cmd="insertUnorderedList" title="Liste">• Liste</button><button type="button" data-cmd="insertOrderedList" title="Nummeriert">1. Liste</button>
     <button type="button" data-cmd="formatBlock" data-v="blockquote" title="Zitat">„Zitat“</button><button type="button" data-cmd="removeFormat" title="Formatierung entfernen">⌫ Format</button></div>
     <div class="ed" contenteditable="true" data-ph="${label==='Zusatzinfos'?'Z. B. Prinzipientreue, Geiz, Eitelkeit genauer beschrieben, Eigenheiten, Wünsche an den Meister …':'Woher kommt der Held? Was treibt ihn an? Familie, Feinde, Geheimnisse…'}"></div>
@@ -99,13 +110,19 @@ function bgEditor(root,html,save,label='Backgroundstory'){
   root.querySelector('[data-bgsave]').onclick=async()=>{try{await save(ed.innerHTML);root.querySelector('[data-bgst]').textContent='gespeichert';toast(label+' gespeichert')}catch(x){toastErr(x.message)}};
 }
 /** PDF-Knopf mit Haken „Backgroundstory anhängen“. base = .../{file} */
-function pdfLink(base,id){return `<span class="row" style="gap:6px;flex-wrap:nowrap"><a class="btn sm" data-pdf="${base}" data-pdfbg="${id}" href="${base}/pdf">PDF</a>
-  <label class="small" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="${id}" checked> Backgroundstory &amp; Zusatzinfos anhängen</label>
-  <label class="small" style="display:inline-flex;gap:4px;align-items:center" title="Was die eigenen Vor- und Nachteile, Sonderfertigkeiten, Manöver, Liturgien und Zauber laut Regelwerk bewirken"><input type="checkbox" id="${id}r" checked> Regelzusammenfassung anhängen</label></span>`}
-document.addEventListener('click',e=>{const a=e.target.closest('a[data-pdf]');if(!a)return;
-  const c=document.getElementById(a.dataset.pdfbg),r=document.getElementById(a.dataset.pdfbg+'r'),q=[];
-  if(c&&c.checked)q.push('bg=1');if(r&&r.checked)q.push('regeln=1');
-  a.href=a.dataset.pdf+'/pdf'+(q.length?'?'+q.join('&'):'');toast('PDF wird von der helden.jar erzeugt…')});
+/** PDF mit drei frei kombinierbaren Teilen: Heldenbogen, Backgroundstory & Zusatzinfos, Regelzusammenfassung */
+function pdfLink(base,id,mailTo){const cb=(sfx,txt,tip)=>`<label class="small" style="display:inline-flex;gap:4px;align-items:center"${tip?` title="${tip}"`:''}><input type="checkbox" id="${id}${sfx}" checked> ${txt}</label>`;
+  return `<span class="row" style="gap:8px;flex-wrap:wrap"><a class="btn sm" data-pdf="${base}" data-pdfbg="${id}" href="${base}/pdf">PDF</a>
+  ${cb('b','Heldenbogen')}${cb('','Backgroundstory &amp; Zusatzinfos')}${cb('r','Regelzusammenfassung','Was die eigenen Vor- und Nachteile, Sonderfertigkeiten, Manöver, Talente, Liturgien, Zauber und Begleiter laut Regelwerk bewirken')}
+  ${mailTo?`<button type="button" class="btn sm" data-pdfmail="${base}" data-pdfbg="${id}" title="Schickt das PDF mit den angekreuzten Teilen an ${esc(mailTo)}">Per Mail schicken</button>`:''}</span>`}
+document.addEventListener('click',e=>{const a=e.target.closest('a[data-pdf]');if(!a)return;const g=s=>{const x=document.getElementById(a.dataset.pdfbg+s);return!x||x.checked};
+  const bogen=g('b'),bg=g(''),regeln=g('r');
+  if(!bogen&&!bg&&!regeln){e.preventDefault();toast('Bitte mindestens einen Teil ankreuzen: Heldenbogen, Backgroundstory oder Regelzusammenfassung.');return}
+  a.href=a.dataset.pdf+'/pdf?bogen='+(bogen?1:0)+'&bg='+(bg?1:0)+'&regeln='+(regeln?1:0);toast(bogen?'PDF wird von der helden.jar erzeugt…':'PDF wird erstellt…')});
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-pdfmail]');if(!b||b.disabled)return;const g=s=>{const x=document.getElementById(b.dataset.pdfbg+s);return!x||x.checked};
+  const q='bogen='+(g('b')?1:0)+'&bg='+(g('')?1:0)+'&regeln='+(g('r')?1:0);if(!g('b')&&!g('')&&!g('r'))return toast('Bitte mindestens einen Teil ankreuzen.');
+  b.disabled=true;const t=b.textContent;b.textContent='wird erstellt …';
+  try{const r=await api(b.dataset.pdfmail+'/pdfmail?'+q,{method:'POST'});toast('PDF ist unterwegs an '+r.to+'.')}catch(x){toastErr(x.message)}finally{b.disabled=false;b.textContent=t}});
 
 /**
  * Verbindung zum Soundboard: der Browser fragt alle 0,7 s den Zustand ab (/api/sound/state).

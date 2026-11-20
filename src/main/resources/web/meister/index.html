@@ -65,7 +65,7 @@
 
     <section class="view" id="m-helden" hidden>
       <div class="spread"><h1>Helden</h1><span class="small mut">XML-Dateien, die du per FTP in den Helden-Ordner legst, erscheinen hier automatisch.</span></div>
-      <div class="card tw"><table><thead><tr><th>Held</th><th>Gehört</th><th>Profession</th><th>Eingang</th><th>Status</th><th></th></tr></thead><tbody id="htab"></tbody></table></div>
+      <div class="card tw"><table><thead><tr><th>Held</th><th title="Abenteuerpunkte gesamt: zeigt, wie erfahren/stark der Held ist">AP</th><th>Gehört</th><th>Profession</th><th>Eingang</th><th>Status</th><th></th></tr></thead><tbody id="htab"></tbody></table></div>
       <div class="card" id="hdet" hidden></div>
     </section>
 
@@ -73,7 +73,7 @@
       <div class="spread"><h1>Meisterfreigaben</h1><span class="small mut">Neue Anfragen kommen zusätzlich per Mail.</span></div>
       <div class="note small"><b>Worum geht es?</b> Manche Dinge darf ein Held laut Regelwerk nur mit Zustimmung des Meisters haben (z. B. seltene Vor- und Nachteile) oder die Helden-Software meldet etwas Ungewöhnliches (z. B. viele ungenutzte AP). Außerdem landen hier Steigerungen und Löschwünsche der Spieler.<br>
         <b>Freigeben</b> = passt so. <b>Ändern</b> = du hast es angepasst, schreib kurz dazu, was. <b>Ablehnen</b> = so nicht erlaubt.<br>
-        Der Spieler sieht deine Entscheidung sofort auf seiner Seite. Per Mail bekommt er <b>eine</b> Zusammenfassung, sobald du 3 Minuten lang nichts mehr entschieden hast.</div>
+        Der Spieler sieht deine Entscheidung sofort auf seiner Seite. Per Mail bekommt er <b>eine</b> Nachricht je Held, sobald alle Punkte dieses Helden entschieden sind, mit deinen Begründungen.</div>
       <div id="fglist" style="display:grid;gap:14px"></div>
     </section>
 
@@ -207,7 +207,7 @@ let st=null,lib=null;const pl=new Player();
 const starting={music:null,bg:null}; // Titel, der gerade gestartet wurde und noch lädt
 const IMG=(k,alt='')=>`<img class="ic" src="${ICON(k)}" alt="${esc(alt)}">`;
 // Antwort ist der neue Zustand: sofort anzeigen, nicht erst auf die Live-Verbindung warten
-const cmd=b=>api('/api/sound/cmd',{method:'POST',body:b}).then(s=>{if(s&&s.type==='state')onSound(s);return s}).catch(e=>toastErr(e.message));
+const cmd=b=>api('/api/sound/cmd',{method:'POST',body:b}).then(s=>{if(s&&s.type==='state')onSound(s);if(s&&s.type==='fx')pl.fx(s.file,s.id);return s}).catch(e=>toastErr(e.message)); // Effekt: Meister hört ihn sofort
 try{$('#hear').checked=localStorage.getItem('hh-hear')!=='0'}catch(e){$('#hear').checked=true}
 pl.enabled=$('#hear').checked;
 document.addEventListener('pointerdown',()=>pl.unlock(),{once:true}); // Effekt-Spieler beim ersten Klick freischalten
@@ -293,7 +293,7 @@ function start(id,file){starting[id]=file;sel[id]=file;updateList(id);cmd({actio
 $('#m-sound').addEventListener('dblclick',e=>{const b=e.target.closest('[data-pick]');if(b)start(b.dataset.pick,b.dataset.f)});
 $('#m-sound').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||b.disabled)return;
-  if(b.classList.contains('tog')){b.classList.remove('bump');void b.offsetWidth;b.classList.add('bump')}
+  if(b.classList.contains('tog')){b.classList.remove('bump');void b.offsetWidth;b.classList.add('bump');b.addEventListener('animationend',()=>b.classList.remove('bump'),{once:true})} // Klasse wieder weg, sonst spielt die Animation beim nächsten Einblenden erneut
   if(b.dataset.sc&&st&&st.scene!==b.dataset.sc){st.scene=b.dataset.sc;lib=libs[b.dataset.sc]||lib;renderSound();loadLib();cmd({action:'scene',scene:b.dataset.sc})} // sofort umschalten
   else if(b.dataset.folder!==undefined)showUpl();
   else if(b.dataset.fx){b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),600);cmd({action:'fx',key:b.dataset.fx})}
@@ -392,7 +392,7 @@ $('#darkm').onchange=e=>setDark(e.target.checked);
 try{setDark(localStorage.getItem('hh-dark')!=='0')}catch(_){setDark(true)}
 
 function onSound(m){
-  if(m.type==='fx'){pl.fx(m.file);return}
+  if(m.type==='fx'){pl.fx(m.file,m.id);return}
   if(m.type==='state'&&st&&m.libSeq!==st.libSeq){for(const k in libs)delete libs[k];setTimeout(()=>{loadSess();loadLib()},0)} // Listen haben sich geändert
   if(st&&m.serverNow<st.serverNow)return; // ältere Nachricht nach einer schnelleren Befehlsantwort
   const sceneChanged=!st||st.scene!==m.scene;st=m;pl.apply(m);if(sceneChanged)loadLib();else renderSound()}
@@ -404,11 +404,12 @@ liveEvents('/api/sound/events',onSound,ok=>{const l=$('#lstn');if(!l)return;l.cl
 
 /* ---------- Helden ---------- */
 let heroes=[],selHero=null;
+let MEISTERMAIL='';api('/api/config').then(c=>MEISTERMAIL=c.mailTo||'').catch(()=>{}); // „Per Mail schicken“ nur mit hinterlegter Meister-Mail
 async function loadHeroes(){try{[heroes,accts]=await Promise.all([api('/api/heroes'),api('/api/accounts')])}catch(e){return toastErr(e.message)}renderHeroes()}
 function renderHeroes(){
   const n=heroes.filter(h=>h.status==='neu').length;$('#hBadge').textContent=n;$('#hBadge').hidden=!n;
-  $('#htab').innerHTML=heroes.map(h=>`<tr${h.file===selHero?' class="best"':''}><td><b>${esc(h.name)}</b>${h.error?` <span class="err small">${esc(h.error)}</span>`:''}</td><td><select class="owner" data-file="${esc(h.file)}" aria-label="Besitzer von ${esc(h.name)}" style="width:auto"><option value="">– niemand (${esc(h.player||'FTP')}) –</option>${accts.map(a=>`<option value="${a.id}"${String(a.id)===String(h.account)?' selected':''}>${esc(a.name)}</option>`).join('')}</select></td><td>${esc(h.profession)}</td><td class="mono small">${esc(h.received)}</td>
-   <td><span class="pill ${h.status==='neu'?'new':'ok'}">${esc(h.status)}</span></td><td><button class="btn sm" data-h="${esc(h.file)}">Öffnen</button></td></tr>`).join('')||'<tr><td colspan="6" class="empty">Noch keine Helden. Spieler schicken sie über die Spieler-UI, oder du legst XML-Dateien per FTP ab.</td></tr>';
+  $('#htab').innerHTML=heroes.map(h=>`<tr${h.file===selHero?' class="best"':''}><td><b>${esc(h.name)}</b>${h.error?` <span class="err small">${esc(h.error)}</span>`:''}</td><td class="mono nob">${fmtAp(h.ap)}</td><td><select class="owner" data-file="${esc(h.file)}" aria-label="Besitzer von ${esc(h.name)}" style="width:auto"><option value="">– niemand (${esc(h.player||'FTP')}) –</option>${accts.map(a=>`<option value="${a.id}"${String(a.id)===String(h.account)?' selected':''}>${esc(a.name)}</option>`).join('')}</select></td><td>${esc(h.profession)}</td><td class="mono small">${esc(h.received)}</td>
+   <td><span class="pill ${h.status==='neu'?'new':'ok'}">${esc(h.status)}</span></td><td><button class="btn sm" data-h="${esc(h.file)}">Öffnen</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">Noch keine Helden. Spieler schicken sie über die Spieler-UI, oder du legst XML-Dateien per FTP ab.</td></tr>';
   const h=heroes.find(x=>x.file===selHero);$('#hdet').hidden=!h;if(!h)return;
   $('#hdet').innerHTML=sheetHtml(h,false);fillSheet($('#hdet'),h);
 }
@@ -447,7 +448,7 @@ $('#fglist').onclick=async e=>{const b=e.target.closest('[data-fg]');if(!b||b.di
   if(b.dataset.s==='geändert'&&!inp.value.trim()){hint.hidden=false;inp.focus();return}
   const row=b.parentElement;row.querySelectorAll('button').forEach(x=>x.disabled=true);const txt=b.textContent;b.textContent='…';
   try{await api('/api/approvals/items/'+id,{method:'POST',body:{status:b.dataset.s,comment:inp.value}});
-    fgEdit.delete(id);toast(txt+': gespeichert. Der Spieler sieht es sofort, die Mail kommt gesammelt.');document.activeElement&&document.activeElement.blur();await loadFg()}
+    fgEdit.delete(id);toast(txt+': gespeichert. Der Spieler sieht es sofort. Eine Mail bekommt er, sobald alle Punkte dieses Helden entschieden sind.');document.activeElement&&document.activeElement.blur();await loadFg()}
   catch(x){
     if(/Ist schon/.test(x.message)){fgEdit.delete(id);toast('Keine Änderung, bleibt wie es war.');await loadFg();return} // gleiche Entscheidung nochmal: kein Fehler
     toastErr(x.message);row.querySelectorAll('button').forEach(y=>y.disabled=false);b.textContent=txt}};
@@ -551,7 +552,7 @@ function sheetHtml(h,dialog){const s=h.sheet||{basis:{},sections:[],notizen:[]};
       <input type="search" class="sq" placeholder="Im Bogen suchen…" aria-label="Im Bogen suchen" style="width:220px">
       <a class="btn sm" href="/api/heroes/${encodeURIComponent(h.file)}/xml">XML</a>
       <a class="btn sm" href="/api/heroes/${encodeURIComponent(h.file)}/zip" title="XML, Backgroundstory und Zusatzinfos als ZIP">XML + Texte</a>
-      ${pdfLink('/api/heroes/'+encodeURIComponent(h.file),'pdfbg-m'+(dialog?'d':'')) }
+      ${pdfLink('/api/heroes/'+encodeURIComponent(h.file),'pdfbg-m'+(dialog?'d':''),MEISTERMAIL) }
       ${h.status==='neu'?'<button class="btn sm pri" data-take>Übernehmen</button>':''}
       <button class="btn sm danger" data-hdel>Löschen</button>
       ${dialog?'<button class="btn sm xclose" data-close aria-label="Schließen" title="Schließen (Esc)">✕</button>':''}</div></div>

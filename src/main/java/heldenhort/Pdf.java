@@ -37,6 +37,19 @@ public final class Pdf {
     }
 
     /** regelnHtml = Regelzusammenfassung der Vor-/Nachteile, SF und Zauber (aus /data/regeln), wird hinten angehängt. */
+    /** Nur die Anhänge (ohne den Bogen der helden.jar): Backgroundstory, Zusatzinfos und/oder Regelzusammenfassung. */
+    public static byte[] anhaenge(String title, String backgroundHtml, String extraHtml, String regelnHtml) throws Exception {
+        try (PDDocument doc = new PDDocument()) {
+            if (backgroundHtml != null && !backgroundHtml.isBlank()) appendHtml(doc, title + " – Backgroundstory", backgroundHtml);
+            if (extraHtml != null && !extraHtml.isBlank()) appendHtml(doc, title + " – Zusatzinfos", extraHtml);
+            if (regelnHtml != null && !regelnHtml.isBlank()) Textsatz.append(doc, title + " – Regelzusammenfassung", regelnHtml);
+            if (doc.getNumberOfPages() == 0) throw new IllegalArgumentException("Für diesen Helden gibt es zu den gewählten Teilen noch keinen Inhalt (z. B. keine Backgroundstory). Bitte „Heldenbogen“ dazunehmen oder erst etwas eintragen.");
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            doc.save(out);
+            return out.toByteArray();
+        }
+    }
+
     public static byte[] heldenbogen(HeldenJar jar, Path heroXml, String title, String backgroundHtml, String extraHtml, Path bild, String regelnHtml) throws Exception {
         if (bild != null && java.nio.file.Files.exists(bild)) {
             String xml = java.nio.file.Files.readString(heroXml, java.nio.charset.StandardCharsets.UTF_8);

@@ -13,9 +13,13 @@ Push auf `main` baut per GitHub Actions das Image auf ghcr.io.
 
 ## Regeltexte (ⓘ-Knöpfe, Regelzusammenfassung)
 - Texte liegen nur in `/data/regeln/*.json` (per FTP), nie im Repo. `Regeln.java` lädt sie bei Änderung neu und ordnet Namen der helden.jar unscharf zu.
-- Quellen: WdH, WdS (SF, Talente, Kampftechniken), WdZ (Rituale, Wesen/Dämonen), WdG, Liber Cantiones (Zauber), Zoo-Botanica (Tier-Fähigkeiten, Bestiarium). Erzeugt aus den PDFs mit `_DSA/Heldenhort-Regeln/regeltexte_erzeugen.py` (bewusst außerhalb des Repos). Buchkosten werden entfernt, Kosten kommen aus der helden.jar.
+- Quellen: WdH, WdS (SF, Talente, Kampftechniken), WdZ (Rituale, Wesen/Dämonen), WdG, Liber Cantiones (Zauber), Zoo-Botanica (Tier-Fähigkeiten, Bestiarium), Tractatus Contra Daemones (Dämonen samt Spielwerten). Gleiche Texte aus mehreren Büchern werden zusammengelegt. Erzeugt aus den PDFs mit `_DSA/Heldenhort-Regeln/regeltexte_erzeugen.py` (bewusst außerhalb des Repos). Buchkosten werden entfernt, Kosten kommen aus der helden.jar.
 - Meister-Text hat Vorrang vor dem Regeltext. Helden-PDF: Haken „Regelzusammenfassung anhängen“ (standardmäßig an, inkl. Zauber). Session: Knopf „Regelzusammenfassung“ (jede Regel einmal, mit Helden). Begleiter (gegenstand/Wesen im XML) als eigene Rubrik ab neuer Seite; Heroes.all() überspringt Wesen, damit Begleiterwerte nie beim Helden landen.
 
+## Mails und Freigaben
+- Freigaben: eine Mail je Held, erst wenn alle Punkte entschieden sind (30 s Pause für Korrekturen), mit Begründungen.
+- Alle Mails: Text + HTML mit eingebettetem W20-Logo (resources/mail/logo.png) und wechselndem hochnäsigem Meister-Gruß.
+- Wahre Namen (SF „Wahrer Name: Dämon“ mit Auswahl Qualität/…/Name) erscheinen als beschwörbare Wesen in der Begleiter-Rubrik.
+
 ## Stand
-Sammelmodus aktiv. Offene Punkte:
-- 37: Streifenmuster im Verteil-Schritt der Heldenerstellung nicht durchgängig (Name, Wert und Eingabefeld haben verschiedene Hintergründe). Einheitlich pro Zeile oder ganz weg.
+Sammelmodus aktiv. Offene Punkte: keine.

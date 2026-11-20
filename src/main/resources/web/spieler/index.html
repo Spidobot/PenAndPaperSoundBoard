@@ -213,7 +213,7 @@ function pendingHtml(p){
     return ''};
   const body=groups.map(g=>{if(g.g==='seq')return g.items.map(ctl).join('<br>');
     const cols=Math.max(...g.items.map(c=>c.col??0))+1;
-    return `<div class="ctlgrid" style="grid-template-columns:repeat(${cols},auto)">${g.items.map(c=>`<div style="grid-row:${(c.row??0)+1};grid-column:${(c.col??0)+1}" class="${(c.row??0)===0&&c.type==='label'?'h':''}">${ctl(c)}</div>`).join('')}</div>`}).join('');
+    return `<div class="ctlgrid" style="grid-template-columns:repeat(${cols},auto)">${g.items.map(c=>`<div style="grid-row:${(c.row??0)+1};grid-column:${(c.col??0)+1}" class="${(c.row??0)===0&&c.type==='label'?'h':''}${(c.row??0)%2===1?' z':''}">${ctl(c)}</div>`).join('')}</div>`}).join('');
   const tot=verteilTotal(p);
   return `<div class="card" style="border-color:var(--acc)"><h3>Auswahl ${p.index+1}: ${esc(p.title)}</h3>
     ${tot!=null?`<div class="budget" id="verteil" data-total="${tot}"></div>`:''}
@@ -367,8 +367,8 @@ $('#stepbody').addEventListener('click',e=>{const b=e.target.closest('button');i
 /* ---------- Meine Helden ---------- */
 let mine=[];
 async function loadMine(){try{[mine,me]=await Promise.all([api('/api/myheroes'),api('/api/me')])}catch(e){return toastErr(e.message)}$('#mineSheet').hidden=true;$('#upForm').hidden=!me.canUpload;
-  $('#mineList').innerHTML=mine.map(h=>`<div class="item"><div><b>${esc(h.name)}</b> <span class="small mut">${esc(h.rasse)} · ${esc(h.profession)}</span><div class="small mut">beim Meister seit ${esc(h.received)}</div></div>
-    <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button><button class="btn sm" data-bg="${esc(h.file)}">Backgroundstory</button><button class="btn sm" data-ex="${esc(h.file)}">Zusatzinfos</button><button class="btn sm" data-bild="${esc(h.file)}">Bild</button><a class="btn sm" href="/api/myheroes/${encodeURIComponent(h.file)}/xml">XML</a>${pdfLink('/api/myheroes/'+encodeURIComponent(h.file),'pdfbg-'+esc(h.file).replace(/\W/g,'_'))}${h.status==='neu'?'':`<button class="btn sm pri" data-adv="${esc(h.file)}">Steigern</button>`}${h.delAnfrage?`<span class="pill warn">Löschen angefragt</span><button class="btn sm" data-delzurueck="${h.delAnfrage}" data-file="${esc(h.file)}">Anfrage zurückziehen</button>`:`<button class="btn sm danger" data-hdel="${esc(h.file)}">${h.status==='neu'?'Zurückziehen':'Löschen anfragen'}</button>`}</div></div>`).join('')
+  $('#mineList').innerHTML=mine.map(h=>`<div class="item"><div><b>${esc(h.name)}</b> <span class="pill" title="Abenteuerpunkte gesamt">${fmtAp(h.ap)}</span> <span class="small mut">${esc(h.rasse)} · ${esc(h.profession)}</span><div class="small mut">beim Meister seit ${esc(h.received)}</div></div>
+    <div class="row"><span class="pill ${h.status==='neu'?'warn':'ok'}">${h.status==='neu'?'wartet auf den Meister':esc(h.status)}</span><button class="btn sm" data-h="${esc(h.file)}">Ansehen</button><button class="btn sm" data-bg="${esc(h.file)}">Backgroundstory</button><button class="btn sm" data-ex="${esc(h.file)}">Zusatzinfos</button><button class="btn sm" data-bild="${esc(h.file)}">Bild</button><a class="btn sm" href="/api/myheroes/${encodeURIComponent(h.file)}/xml">XML</a>${pdfLink('/api/myheroes/'+encodeURIComponent(h.file),'pdfbg-'+esc(h.file).replace(/\W/g,'_'),me&&me.email)}${h.status==='neu'?'':`<button class="btn sm pri" data-adv="${esc(h.file)}">Steigern</button>`}${h.delAnfrage?`<span class="pill warn">Löschen angefragt</span><button class="btn sm" data-delzurueck="${h.delAnfrage}" data-file="${esc(h.file)}">Anfrage zurückziehen</button>`:`<button class="btn sm danger" data-hdel="${esc(h.file)}">${h.status==='neu'?'Zurückziehen':'Löschen anfragen'}</button>`}</div></div>`).join('')
     ||'<p class="mut">Noch keine Helden beim Meister.</p>'}
 let advFile=null,advQ='';
 /* Live-Aktualisierung: alle 6 s den Stand holen; Änderungen melden und offene Ansichten auffrischen (ohne Tippen zu stören) */
@@ -509,7 +509,7 @@ const pl=new Player();let es=null;
 $('#wave').innerHTML='<i></i>'.repeat(16);
 pl.setMaster(LS.get('hh-vol',70)/100);$('#pvol').value=LS.get('hh-vol',70);
 function startStream(){pl.enabled=true;if(es)return;
-  es=liveEvents('/api/sound/events',m=>{if(m.type==='fx')pl.fx(m.file);else{pl.apply(m);sstat(m)}},ok=>{if(!ok)$('#pstat').textContent='Verbindung unterbrochen, verbinde neu…'},()=>pl.enabled&&pl.master>0?'?hoert=1':'')}
+  es=liveEvents('/api/sound/events',m=>{if(m.type==='fx')pl.fx(m.file,m.id);else{pl.apply(m);sstat(m)}},ok=>{if(!ok)$('#pstat').textContent='Verbindung unterbrochen, verbinde neu…'},()=>pl.enabled&&pl.master>0?'?hoert=1':'')}
 function stopStream(){pl.enabled=false;if(es){es.close();es=null}pl.stop()} // Ton aus = Stream trennen; beim Einschalten wieder live
 function sstat(m){$('#pstat').textContent=(m.ch.music.playing||m.ch.bg.playing)?'Verbunden. Du hörst den Spieltisch.':'Verbunden. Gerade ist es still.'}
 pl.onFxError=(file,why)=>toast('Effekt konnte nicht abgespielt werden: '+why);
