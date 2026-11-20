@@ -22,7 +22,8 @@ Beide können über den Nginx Proxy Manager ins Netz. Das Login-Cookie wird auto
    - **Helden-XML** `/data/helden` → ein Ordner, den du per FTP erreichst
 3. `ADMIN_PASSWORD` setzen.
 4. `helden.jar` per FTP nach `/mnt/user/appdata/heldenhort/jar/helden.jar` legen. Sie liegt aus Lizenzgründen nicht im Image. Danach wird sie einmal täglich zur eingestellten Uhrzeit über den Update-Server der Helden-Software aktualisiert (MD5-geprüft).
-5. In der Meister-UI unter *Konfiguration*: Spieler-Passwort, Mail-Empfänger und SMTP eintragen, Testmail schicken.
+5. Optional: Regeltexte (aus den eigenen Regelwerken erzeugt) per FTP nach `/mnt/user/appdata/heldenhort/regeln/` legen. Sie liegen aus Lizenzgründen nicht im Image. Ohne sie zeigen die ⓘ-Knöpfe nur den eigenen Text des Meisters.
+6. In der Meister-UI unter *Konfiguration*: Spieler-Passwort, Mail-Empfänger und SMTP eintragen, Testmail schicken.
 
 ## Ordner
 
@@ -36,6 +37,7 @@ Beide können über den Nginx Proxy Manager ins Netz. Das Login-Cookie wird auto
 ├── helden/*.xml           Helden (Spieler-Upload oder FTP)
 ├── db/heldenhort.sqlite   Einstellungen, Sessions, Freigaben, Status
 ├── jar/helden.jar         Helden-Software
+├── regeln/*.json          Regeltexte für die ⓘ-Knöpfe (per FTP, nicht im Image)
 └── home/                  Einstellungen der helden.jar
 ```
 

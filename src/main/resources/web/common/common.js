@@ -105,9 +105,12 @@ function bgEditor(root,html,save,label='Backgroundstory'){
 }
 /** PDF-Knopf mit Haken „Backgroundstory anhängen“. base = .../{file} */
 function pdfLink(base,id){return `<span class="row" style="gap:6px;flex-wrap:nowrap"><a class="btn sm" data-pdf="${base}" data-pdfbg="${id}" href="${base}/pdf">PDF</a>
-  <label class="small" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="${id}" checked> Backgroundstory &amp; Zusatzinfos anhängen</label></span>`}
+  <label class="small" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="${id}" checked> Backgroundstory &amp; Zusatzinfos anhängen</label>
+  <label class="small" style="display:inline-flex;gap:4px;align-items:center" title="Was die eigenen Vor- und Nachteile, Sonderfertigkeiten und Manöver laut Regelwerk bewirken"><input type="checkbox" id="${id}r"> Regelzusammenfassung anhängen</label></span>`}
 document.addEventListener('click',e=>{const a=e.target.closest('a[data-pdf]');if(!a)return;
-  const c=document.getElementById(a.dataset.pdfbg);a.href=a.dataset.pdf+'/pdf'+(c&&c.checked?'?bg=1':'');toast('PDF wird von der helden.jar erzeugt…')});
+  const c=document.getElementById(a.dataset.pdfbg),r=document.getElementById(a.dataset.pdfbg+'r'),q=[];
+  if(c&&c.checked)q.push('bg=1');if(r&&r.checked)q.push('regeln=1');
+  a.href=a.dataset.pdf+'/pdf'+(q.length?'?'+q.join('&'):'');toast('PDF wird von der helden.jar erzeugt…')});
 
 /**
  * Verbindung zum Soundboard: der Browser fragt alle 0,7 s den Zustand ab (/api/sound/state).
@@ -131,20 +134,25 @@ function liveEvents(url,onMsg,onStatus=()=>{},query=()=>''){let lastOk=Date.now(
   poll();
   return {close(){stopped=true;clearInterval(pt)}}}
 
-/** Info-Fenster zu Vor-/Nachteilen/Sonderfertigkeiten. Die helden.jar liefert keine Regeltexte; gezeigt werden
- *  Art/Kosten, der eigene Text des Meisters und eine Suche in der Wiki Aventurica. editable = Meister darf Text pflegen. */
+/** Info-Fenster zu Vor-/Nachteilen/Sonderfertigkeiten. Gezeigt werden Art/Kosten, der eigene Text des Meisters (hat Vorrang),
+ *  die Regeltexte aus /data/regeln (per FTP abgelegt) und eine Suche in der Wiki Aventurica. editable = Meister darf Text pflegen. */
 async function regelInfo(name,info,editable){let d=document.getElementById('riDlg');
-  if(!d){d=document.createElement('dialog');d.id='riDlg';d.className='sheetdlg';d.style.maxWidth='640px';document.body.append(d);
+  if(!d){d=document.createElement('dialog');d.id='riDlg';d.className='sheetdlg';d.style.maxWidth='680px';document.body.append(d);
     d.addEventListener('click',e=>{if(e.target===d||e.target.closest('[data-x]'))d.close()})}
   d.innerHTML=`<div class="spread sheethead"><h2>${esc(name)}</h2><button class="btn sm xclose" type="button" data-x aria-label="Schließen">✕</button></div>
     ${info?`<p><b>Kosten:</b> ${esc(info)}</p>`:''}
-    <h3>Regeltechnisch und im Spiel</h3><div id="riText" class="small">lädt …</div>
-    <p class="small"><a href="https://de.wiki-aventurica.de/wiki/Spezial:Suche?search=${encodeURIComponent(name.replace(/\s*\(.*$/,'').replace(/[:\[].*$/,'').trim())}" target="_blank" rel="noopener">In der Wiki Aventurica nachschlagen ↗</a></p>`;
-  d.showModal();let r={text:''};try{r=await api('/api/regelinfo?name='+encodeURIComponent(name))}catch(e){}
-  const box=d.querySelector('#riText');
-  if(editable){box.innerHTML='<p class="mut">Eigener Text für alle Spieler (was es regeltechnisch bewirkt und was es im Spiel bedeutet):</p><div id="riEd"></div>';
+    <div id="riText" class="small">lädt …</div>
+    <p class="small"><a href="https://de.wiki-aventurica.de/wiki/Spezial:Suche?search=${encodeURIComponent(name.replace(/^[^:]*:\s*/,'').replace(/\s*\(.*$/,'').replace(/[\[].*$/,'').trim())}" target="_blank" rel="noopener">In der Wiki Aventurica nachschlagen ↗</a></p>`;
+  d.showModal();let r={text:'',regel:[]};try{r=await api('/api/regelinfo?name='+encodeURIComponent(name))}catch(e){}
+  const box=d.querySelector('#riText'),regel=r.regel||[];
+  // Regeltexte sind serverseitig bereinigt (jsoup Safelist)
+  const rt=regel.map(e=>`<div class="ritext"><p class="mut"><b>${esc(e.name)}</b>${e.zusatz?' · '+esc(e.zusatz):''} · <span class="nob">${esc(e.art?e.art+', ':'')}${esc(e.quelle)}</span></p>${e.text}</div>`).join('');
+  const meister=r.text&&r.text.replace(/<[^>]*>/g,'').trim();
+  if(editable){box.innerHTML='<h3>Eigener Text</h3><p class="mut">Für alle Spieler, steht über dem Regeltext (was es regeltechnisch bewirkt und was es im Spiel bedeutet):</p><div id="riEd"></div>'
+      +(rt?`<h3>Aus dem Regelwerk</h3>${rt}`:'<p class="mut">Kein Regeltext gefunden (Datei unter /data/regeln, siehe Konfiguration).</p>');
     bgEditor(box.querySelector('#riEd'),r.text,async html=>{await api('/api/regelinfo',{method:'PUT',body:{name,text:html}})},'Text')}
-  else box.innerHTML=r.text||'<span class="mut">Der Meister hat dazu noch nichts eingetragen. Die helden.jar bringt keine Regeltexte mit, schau in die Wiki Aventurica.</span>'}
+  else if(meister)box.innerHTML='<h3>Vom Meister</h3>'+r.text+(rt?`<details><summary>Aus dem Regelwerk</summary>${rt}</details>`:'');
+  else box.innerHTML=rt?'<h3>Aus dem Regelwerk</h3>'+rt:'<span class="mut">Dazu gibt es noch keinen Text. Schau in die Wiki Aventurica.</span>'}
 
 /* Zahlenfelder bekommen links ein rotes − und rechts ein grünes + (statt der winzigen Pfeile).
    Gilt automatisch für jedes Zahlenfeld, auch für später eingefügte. Ein Klick löst dieselben Ereignisse aus wie Tippen. */

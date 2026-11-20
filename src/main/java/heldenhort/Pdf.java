@@ -33,12 +33,17 @@ public final class Pdf {
 
     /** bild = Heldenbild; wird nur für den Druck in eine Kopie der XML eingetragen (<portraet value="Pfad"/>), so druckt die Jar es mit. */
     public static byte[] heldenbogen(HeldenJar jar, Path heroXml, String title, String backgroundHtml, String extraHtml, Path bild) throws Exception {
+        return heldenbogen(jar, heroXml, title, backgroundHtml, extraHtml, bild, null);
+    }
+
+    /** regelnHtml = Regelzusammenfassung der Vor-/Nachteile und SF (aus /data/regeln), wird hinten angehängt. */
+    public static byte[] heldenbogen(HeldenJar jar, Path heroXml, String title, String backgroundHtml, String extraHtml, Path bild, String regelnHtml) throws Exception {
         if (bild != null && java.nio.file.Files.exists(bild)) {
             String xml = java.nio.file.Files.readString(heroXml, java.nio.charset.StandardCharsets.UTF_8);
             String tag = "<portraet value=\"" + bild.toAbsolutePath().toString().replace("&", "&amp;").replace("\"", "&quot;") + "\"/>";
             xml = xml.matches("(?s).*<portraet[^>]*/>.*") ? xml.replaceFirst("<portraet[^>]*/>", java.util.regex.Matcher.quoteReplacement(tag)) : xml.replaceFirst("(<held[^>]*>)", "$1" + java.util.regex.Matcher.quoteReplacement(tag));
             Path tmp = java.nio.file.Files.createTempFile("druck", ".xml");
-            try { java.nio.file.Files.writeString(tmp, xml, java.nio.charset.StandardCharsets.UTF_8); return heldenbogen(jar, tmp, title, backgroundHtml, extraHtml, null); }
+            try { java.nio.file.Files.writeString(tmp, xml, java.nio.charset.StandardCharsets.UTF_8); return heldenbogen(jar, tmp, title, backgroundHtml, extraHtml, null, regelnHtml); }
             finally { java.nio.file.Files.deleteIfExists(tmp); }
         }
         synchronized (jar) {
@@ -75,10 +80,21 @@ public final class Pdf {
                 }
                 if (backgroundHtml != null && !backgroundHtml.isBlank()) appendHtml(doc, title + " – Backgroundstory", backgroundHtml);
                 if (extraHtml != null && !extraHtml.isBlank()) appendHtml(doc, title + " – Zusatzinfos", extraHtml);
+                if (regelnHtml != null && !regelnHtml.isBlank()) Textsatz.append(doc, title + " – Regelzusammenfassung", regelnHtml);
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 doc.save(out);
                 return out.toByteArray();
             } finally { Thread.currentThread().setContextClassLoader(old); }
+        }
+    }
+
+    /** Einfaches HTML (Überschriften, Absätze, Listen, fett/kursiv) als Text-PDF, z. B. Regelzusammenfassung einer Session. */
+    public static byte[] html(String title, String html) throws Exception {
+        try (PDDocument doc = new PDDocument()) {
+            Textsatz.append(doc, title, html);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            doc.save(out);
+            return out.toByteArray();
         }
     }
 

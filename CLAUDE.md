@@ -10,7 +10,11 @@ Push auf `main` baut per GitHub Actions das Image auf ghcr.io.
 - Keine urheberrechtlich geschützten Inhalte (Regelwerke, Sounds) ins Repo, es ist öffentlich.
 - Fehler an den Browser als 4xx mit verständlichem deutschem Text (Cloudflare ersetzt 5xx).
 
+## Regeltexte (ⓘ-Knöpfe, Regelzusammenfassung)
+- Texte liegen nur in `/data/regeln/*.json` (per FTP), nie im Repo. `Regeln.java` lädt sie bei Änderung neu und ordnet Namen der helden.jar unscharf zu.
+- Erzeugt aus den PDFs mit `_DSA/Heldenhort-Regeln/regeltexte_erzeugen.py` (bewusst außerhalb des Repos). Buchkosten werden entfernt, Kosten kommen aus der helden.jar.
+- Meister-Text hat Vorrang vor dem Regeltext. Helden-PDF: Haken „Regelzusammenfassung anhängen“. Session: Knopf „Regelzusammenfassung“ (jede Regel einmal, mit Helden).
+
 ## Stand
 Sammelmodus aktiv. Offene Punkte:
 - 37: Streifenmuster im Verteil-Schritt der Heldenerstellung nicht durchgängig (Name, Wert und Eingabefeld haben verschiedene Hintergründe). Einheitlich pro Zeile oder ganz weg.
-- 38: Regeltexte für die ⓘ-Knöpfe (Vorteile, Nachteile, Sonderfertigkeiten) aus den Regelwerk-PDFs im Ordner `_DSA` (eine Ebene über diesem Repo) ziehen. Nur lokal bzw. im Container unter /data ablegen, nie ins Repo. Vom Meister gepflegter Text hat Vorrang.

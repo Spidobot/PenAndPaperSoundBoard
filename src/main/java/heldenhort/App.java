@@ -29,6 +29,7 @@ public final class App {
         jar.selfTest = probe -> { try { return creation.selfTest(probe); } catch (Exception e) { return "FEHLER " + e.getMessage(); } };
         jar.onRejected = msg -> mail.notifyMeister("helden.jar-Update zurückgehalten", msg);
         Heroes heroes = new Heroes(db, data.resolve("helden"));
+        Regeln regeln = new Regeln(data.resolve("regeln")); // Regeltexte aus /data/regeln/*.json (per FTP, nie im Repo)
         // per FTP abgelegte Helden: vermerkte Meistergenehmigungen landen ebenfalls unter „Freigaben“
         heroes.onFtp = (file, h) -> {
             int n = approvalFromXml(db, mail, file, str(h.get("name")), "FTP", null, h);
@@ -192,7 +193,7 @@ public final class App {
             ctx.header("Content-Disposition", "attachment; filename=\"" + p.getFileName() + "\"");
             ctx.contentType("application/xml").result(Files.newInputStream(p));
         });
-        m.get("/api/heroes/{file}/pdf", ctx -> pdf(ctx, jar, heroes, db, ctx.pathParam("file")));
+        m.get("/api/heroes/{file}/pdf", ctx -> pdf(ctx, jar, heroes, db, regeln, ctx.pathParam("file")));
         m.get("/api/heroes/{file}/zip", ctx -> { // XML + Backgroundstory, z. B. zum Weitergeben fürs Balancing
             Path p = heroes.file(ctx.pathParam("file"));
             String base = p.getFileName().toString().replaceAll("\\.xml$", "");
@@ -262,6 +263,14 @@ public final class App {
                 db.exec("UPDATE session SET name=? WHERE id=?", name, ctx.pathParam("id"));
             }
             ctx.json(Map.of("ok", true));
+        });
+        // Regelzusammenfassung aller Helden der Session: jede Regel einmal, mit den Helden, die sie haben
+        m.get("/api/sessions/{id}/regeln", ctx -> {
+            var r = sessionRegeln(db, heroes, regeln, ctx.pathParam("id"));
+            if ("pdf".equals(ctx.queryParam("format"))) {
+                ctx.header("Content-Disposition", "attachment; filename=\"Regeln " + r.getKey().replaceAll("[\\\\/:*?\"<>|]|[^\\x20-\\x7E]", "_") + ".pdf\"");
+                ctx.contentType("application/pdf").result(Pdf.html("Regelzusammenfassung: " + r.getKey(), r.getValue()));
+            } else ctx.json(Map.of("name", r.getKey(), "html", r.getValue(), "leer", regeln.leer()));
         });
         m.delete("/api/sessions/{id}", ctx -> {
             if (db.exec("DELETE FROM session WHERE id=?", ctx.pathParam("id")) == 0) throw new NotFoundResponse("Diese Session gibt es nicht mehr, vermutlich wurde sie gelöscht.");
@@ -505,7 +514,7 @@ public final class App {
             ctx.header("Content-Disposition", "attachment; filename=\"" + p.getFileName() + "\"");
             ctx.contentType("application/xml").result(Files.readAllBytes(p));
         });
-        s.get("/api/myheroes/{file}/pdf", ctx -> pdf(ctx, jar, heroes, db, advance.own(ctx.pathParam("file"), ctx)));
+        s.get("/api/myheroes/{file}/pdf", ctx -> pdf(ctx, jar, heroes, db, regeln, advance.own(ctx.pathParam("file"), ctx)));
         s.put("/api/myheroes/{file}/bg", ctx -> {
             String file = advance.own(ctx.pathParam("file"), ctx);
             String bg = cleanBg(ctx.bodyAsClass(Map.class).get("bg"));
@@ -579,7 +588,15 @@ public final class App {
         });
 
         // Regel-Info zu Vor-/Nachteilen/SF: eigener Text des Meisters (die helden.jar liefert keine Beschreibungen)
-        for (Javalin a : List.of(m, s)) a.get("/api/regelinfo", ctx -> ctx.json(Map.of("name", str(ctx.queryParam("name")), "text", db.get("regelinfo:" + str(ctx.queryParam("name")), ""))));
+        // Regeltexte aus /data/regeln/*.json (per FTP abgelegt, nie im Repo). Der Text des Meisters hat Vorrang und steht oben.
+        for (Javalin a : List.of(m, s)) a.get("/api/regelinfo", ctx -> {
+            String n = str(ctx.queryParam("name"));
+            List<Map<String, Object>> rt = new ArrayList<>();
+            for (Regeln.Eintrag e : regeln.suche(n))
+                rt.add(Map.of("name", e.name(), "art", e.art(), "zusatz", e.zusatz(), "quelle", e.quelle(), "text", e.text()));
+            ctx.json(Map.of("name", n, "text", db.get("regelinfo:" + n, ""), "regel", rt));
+        });
+        m.get("/api/regeltexte", ctx -> ctx.json(regeln.status()));
         m.put("/api/regelinfo", ctx -> {
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
             String n = str(b.get("name"));
@@ -694,13 +711,39 @@ Icons: Icons8 (icons8.com).""";
         return r.isEmpty() ? "" : str(r.get(0).get("background"));
     }
 
-    /** Heldenbogen als PDF, gedruckt von der helden.jar; ?bg=1 hängt die Backgroundstory an. */
-    static void pdf(Context ctx, HeldenJar jar, Heroes heroes, Db db, String file) throws Exception {
+    /** Vor-/Nachteile und Sonderfertigkeiten eines Helden: Name → Wert (Wert leer, wenn keiner). */
+    @SuppressWarnings("unchecked")
+    static Map<String, String> regelNamen(Map<String, Object> h) {
+        Map<String, String> out = new LinkedHashMap<>();
+        for (Map<String, String> v : (List<Map<String, String>>) h.get("V")) out.putIfAbsent(v.get("name"), str(v.get("value")));
+        for (String sf : (List<String>) h.get("SF")) out.putIfAbsent(sf, "");
+        return out;
+    }
+
+    static Map.Entry<String, String> sessionRegeln(Db db, Heroes heroes, Regeln regeln, String id) throws Exception {
+        var r = db.query("SELECT name, heroes FROM session WHERE id=?", id);
+        if (r.isEmpty()) throw new NotFoundResponse("Diese Session gibt es nicht mehr, vermutlich wurde sie gelöscht.");
+        List<?> files = new com.fasterxml.jackson.databind.ObjectMapper().readValue(str(r.get(0).get("heroes")), List.class);
+        if (files.isEmpty()) throw new IllegalArgumentException("In dieser Session sind noch keine Helden.");
+        Map<String, Map<String, String>> helden = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (Object f : files) {
+            Path p;
+            try { p = heroes.file(str(f)); } catch (Exception gone) { continue; } // Held inzwischen gelöscht
+            Map<String, Object> h = Heroes.parse(Files.readAllBytes(p));
+            helden.put(str(h.get("name")), regelNamen(h));
+        }
+        return Map.entry(str(r.get(0).get("name")), regeln.zusammenfassung(helden, true));
+    }
+
+    /** Heldenbogen als PDF, gedruckt von der helden.jar; ?bg=1 hängt Backgroundstory und Zusatzinfos an, ?regeln=1 die Regelzusammenfassung. */
+    static void pdf(Context ctx, HeldenJar jar, Heroes heroes, Db db, Regeln regeln, String file) throws Exception {
         Path p = heroes.file(file);
-        String name = str(Heroes.parse(Files.readAllBytes(p)).get("name"));
+        Map<String, Object> parsed = Heroes.parse(Files.readAllBytes(p));
+        String name = str(parsed.get("name"));
         byte[] pdf;
         boolean mit = "1".equals(ctx.queryParam("bg"));
-        try { pdf = Pdf.heldenbogen(jar, p, name, mit ? background(db, file) : null, mit ? extra(db, file) : null, heroes.bild(file)); }
+        String regelHtml = "1".equals(ctx.queryParam("regeln")) ? regeln.zusammenfassung(Map.of(name, regelNamen(parsed)), false) : null;
+        try { pdf = Pdf.heldenbogen(jar, p, name, mit ? background(db, file) : null, mit ? extra(db, file) : null, heroes.bild(file), regelHtml); }
         catch (Exception e) { // 4xx statt 5xx: Cloudflare ersetzt 5xx durch eine eigene Seite
             Throwable c = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null ? e.getCause() : e;
             throw new IllegalStateException("PDF nicht möglich: " + cause(c));

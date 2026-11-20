@@ -79,7 +79,8 @@
       <div class="spread"><h1>Session</h1>
         <div class="row"><select id="sessSel" style="width:auto" aria-label="Session"></select><a class="btn sm" href="#m-sessions">Sessions verwalten</a></div>
       </div>
-      <div class="card"><span class="label">Helden in dieser Session</span><div class="hpick" id="hpick"></div></div>
+      <div class="card"><span class="label">Helden in dieser Session</span><div class="hpick" id="hpick"></div>
+        <div class="row"><button class="btn sm" type="button" id="sesRegeln" title="Vor-/Nachteile, Sonderfertigkeiten und Manöver aller Helden dieser Session, jede Regel einmal mit den Helden, die sie haben">Regelzusammenfassung</button><a class="btn sm" id="sesRegelnPdf" href="#">als PDF</a></div></div>
       <div class="card">
         <div class="field"><label class="label" for="q">Suchen: alles am Helden (Eigenschaften, Talente, Zauber, Vor-/Nachteile, Sonderfertigkeiten, Kampfwerte, Ausrüstung, Geld …)</label>
           <div class="row" style="flex-wrap:nowrap"><input type="text" id="q" list="qlist" autocomplete="off" placeholder="z. B. Sinnenschärfe, Gefahreninstinkt, KL, Langschwert, Balsam…" value="Sinnenschärfe">
@@ -164,8 +165,11 @@
           <p class="small mut">Einmal täglich zu dieser Uhrzeit fragt der Server beim Update-Server der Helden-Software nach. Gibt es eine neue Version, wird sie geladen, per MD5 geprüft und ausgetauscht.</p>
           <div class="row"><button class="btn sm" type="button" id="updnow">Jetzt prüfen</button><button class="btn sm" type="button" id="selftest" title="Baut mit der laufenden helden.jar einen Testhelden komplett durch">Selbsttest</button></div>
           <p class="small mut">Vor jedem Austausch baut der Server mit der neuen Version einen Testhelden. Klappt das nicht, bleibt die bisherige Version aktiv und du bekommst eine Mail.</p>
+          <h3>Regeltexte für die ⓘ-Knöpfe</h3>
+          <div id="regelinfo" class="small"></div>
+          <p class="small mut">Die Texte stammen aus deinen eigenen Regelwerken und liegen deshalb nicht im Programm. Lege die JSON-Datei(en) per FTP in den Ordner oben (Unraid: <span class="mono">appdata/heldenhort/regeln</span>). Neue oder geänderte Dateien werden automatisch gelesen. Dein eigener Text zu einem Eintrag steht immer über dem Regeltext.</p>
           <h3>Speicherorte im Container</h3>
-          <dl class="paths"><dt class="mono">/data/audio/Music/&lt;Szene&gt;</dt><dd>Musik (Village, Travel, Dungeon, Castle, Fight)</dd><dt class="mono">/data/audio/Sounds/&lt;Szene&gt;</dt><dd>Hintergrundgeräusche</dd><dt class="mono">/data/audio/Effects</dt><dd>Effekt-Knöpfe (Schatztruhe.mp3, Kuh.mp3 …)</dd><dt class="mono">/data/audio/…</dt><dd>Upload im Soundboard (nur Music/Sounds) oder per FTP</dd><dt class="mono">/data/helden</dt><dd>Helden-XML, per FTP befüllbar</dd><dt class="mono">/data/db/heldenhort.sqlite</dt><dd>Einstellungen, Sessions, Freigaben</dd><dt class="mono">/data/jar/helden.jar</dt><dd>ersetzt sich selbst über ihren Updater</dd></dl>
+          <dl class="paths"><dt class="mono">/data/audio/Music/&lt;Szene&gt;</dt><dd>Musik (Village, Travel, Dungeon, Castle, Fight)</dd><dt class="mono">/data/audio/Sounds/&lt;Szene&gt;</dt><dd>Hintergrundgeräusche</dd><dt class="mono">/data/audio/Effects</dt><dd>Effekt-Knöpfe (Schatztruhe.mp3, Kuh.mp3 …)</dd><dt class="mono">/data/audio/…</dt><dd>Upload im Soundboard (nur Music/Sounds) oder per FTP</dd><dt class="mono">/data/helden</dt><dd>Helden-XML, per FTP befüllbar</dd><dt class="mono">/data/db/heldenhort.sqlite</dt><dd>Einstellungen, Sessions, Freigaben</dd><dt class="mono">/data/jar/helden.jar</dt><dd>ersetzt sich selbst über ihren Updater</dd><dt class="mono">/data/regeln/*.json</dt><dd>Regeltexte für die ⓘ-Knöpfe (per FTP, nicht im Programm)</dd></dl>
         </details>
         <div class="row"><button class="btn pri" type="submit">Speichern</button><span class="savest" id="savest" aria-live="polite"></span></div>
       </form>
@@ -637,8 +641,18 @@ setInterval(()=>{if(location.hash==='#m-termine'&&!$('#pollForm').contains(docum
 const CFG=['autoUebernehmen','steigerLimit','greeting','impressum','mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];
 // Speichern erst nach erfolgreichem Laden: sonst würden leere Felder die gespeicherte Konfiguration überschreiben
 async function loadCfg(){const sb=$('#cfg button[type=submit]');sb.disabled=true;$('#cfgErr').hidden=true;
-  try{const c=await api('/api/config');CFG.forEach(k=>$('#'+k).value=c[k]??'');sb.disabled=false;saveSt('','');loadJar()}
+  try{const c=await api('/api/config');CFG.forEach(k=>$('#'+k).value=c[k]??'');sb.disabled=false;saveSt('','');loadJar();loadRegeln()}
   catch(e){$('#cfgErr').hidden=false;$('#cfgErrMsg').textContent=e.message}}
+$('#sesRegeln').onclick=async()=>{if(cur==null)return toast('Keine Session gewählt');
+  try{const r=await api('/api/sessions/'+cur+'/regeln');let d=$('#sesRegDlg');
+    if(!d){d=document.createElement('dialog');d.id='sesRegDlg';d.className='sheetdlg';document.body.append(d);d.addEventListener('click',e=>{if(e.target===d||e.target.closest('[data-x]'))d.close()})}
+    // HTML ist serverseitig bereinigt (jsoup Safelist)
+    d.innerHTML=`<div class="spread sheethead"><h2>Regeln: ${esc(r.name)}</h2><button class="btn sm xclose" type="button" data-x aria-label="Schließen">✕</button></div>
+      ${r.leer?'<p class="err">Keine Regeltexte geladen. Datei per FTP nach /data/regeln legen (siehe Konfiguration).</p>':''}<div class="small regsum">${r.html}</div>`;d.showModal()}catch(e){toastErr(e.message)}};
+$('#sesRegelnPdf').onclick=e=>{if(cur==null){e.preventDefault();return toast('Keine Session gewählt')}e.currentTarget.href='/api/sessions/'+cur+'/regeln?format=pdf';toast('PDF wird erstellt…')};
+async function loadRegeln(){try{const r=await api('/api/regeltexte');
+  $('#regelinfo').innerHTML=`<dl class="kv"><dt>Ordner</dt><dd class="mono">${esc(r.pfad)}</dd><dt>Dateien</dt><dd class="mono">${r.dateien.length?r.dateien.map(esc).join(', '):'keine'}</dd>
+   <dt>Einträge</dt><dd>${r.anzahl}${Object.keys(r.proArt).length?' ('+Object.entries(r.proArt).map(([k,v])=>esc(k)+': '+v).join(', ')+')':''}</dd></dl>${r.fehler?`<p class="err">${esc(r.fehler)}</p>`:''}`}catch(e){toastErr(e.message)}}
 async function loadJar(){try{const j=await api('/api/jar');
   $('#jarinfo').innerHTML=j.present?`<dl class="kv"><dt>Installiert</dt><dd class="mono">${esc(j.version||'?')}</dd>
    <dt>Letzte Prüfung</dt><dd class="mono">${esc(j.lastCheck||'noch nie')}</dd>

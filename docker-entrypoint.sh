@@ -7,8 +7,8 @@ PUID="${PUID:-99}"
 PGID="${PGID:-100}"
 umask "${UMASK:-0002}"
 if [ "$(id -u)" = "0" ]; then
-  mkdir -p /data/home /data/jar /data/helden /data/db
-  for d in /data /data/home /data/jar /data/helden /data/db; do chown "$PUID:$PGID" "$d" || true; done
+  mkdir -p /data/home /data/jar /data/helden /data/db /data/regeln
+  for d in /data /data/home /data/jar /data/helden /data/db /data/regeln; do chown "$PUID:$PGID" "$d" || true; done
   # Datenbank, Jar, Einstellungen: rekursiv (klein). Helden-XML: nur Dateien direkt im Ordner.
   chown -R "$PUID:$PGID" /data/home /data/jar /data/db 2>/dev/null || true
   find /data -maxdepth 1 -type f -exec chown "$PUID:$PGID" {} + 2>/dev/null || true

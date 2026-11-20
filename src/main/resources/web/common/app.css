@@ -280,3 +280,5 @@ tr.geplant td{background:var(--acc-soft)}
 .cartbar{position:sticky;bottom:0;z-index:20;display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding:12px 14px;margin-top:12px;background:var(--panel);border:2px solid var(--acc);border-radius:var(--r);box-shadow:0 -6px 20px rgba(0,0,0,.25)}
 .cartbar ul{margin:6px 0;padding-left:18px}
 .bildbox img{max-width:220px;max-height:260px;border-radius:6px;display:block;margin-bottom:8px;border:1px solid var(--line,#444)}
+.ritext{border-left:3px solid var(--line);padding-left:10px;margin:8px 0 12px}.ritext p{margin:4px 0}
+.regsum h2{margin-top:18px}.regsum h3{margin:14px 0 4px}
