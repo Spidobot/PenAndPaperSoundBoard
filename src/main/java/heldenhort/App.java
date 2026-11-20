@@ -38,6 +38,8 @@ public final class App {
             if (n > 0) mail.notifyMeister("Freigabe nötig: " + h.get("name"), "Im per FTP abgelegten Helden „" + h.get("name") + "“ (" + file + ") sind " + n + " Punkt(e) mit Meistergenehmigung vermerkt. Siehe „Freigaben“.");
         };
         Advance advance = new Advance(db, heroes, jar, accounts, mail);
+        Begleiter begleiter = new Begleiter(db, advance, regeln, accounts, mail);
+        advance.begleiter = begleiter;
         Sound sound = new Sound(data.resolve("audio"));
         sound.db = db;
         sound.warmUp();
@@ -665,6 +667,7 @@ public final class App {
 
         new Polls(db, mail, accounts).routes(m, s);
         advance.routes(m, s);
+        begleiter.routes(m, s);
 
         m.start(Integer.parseInt(env("MEISTER_PORT", "8080")));
         s.start(Integer.parseInt(env("SPIELER_PORT", "8081")));

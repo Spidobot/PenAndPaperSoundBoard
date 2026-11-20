@@ -411,9 +411,50 @@ setInterval(pollStand,6000);
 /* Steigern: erst vormerken (− Zahl +), dann alles in einer Zusammenfassung bestätigen. Ein Fehlklick kostet nichts.
    Preise rechnet der Browser mit derselben Steigerungstabelle wie der Server (kommt vom Server mit). */
 let ADV=null,cart={};
-async function openAdvance(file){if(advFile!==file)cart={};advFile=file;let s;
+async function openAdvance(file){if(advFile!==file){cart={};BGL=null}advFile=file;let s;
   try{s=await api('/api/myheroes/'+encodeURIComponent(file)+'/advance')}catch(e){if(e.status===404)return heroGone();return toastErr(e.message)}
-  ADV=s;renderAdvance()}
+  ADV=s;renderAdvance();ladeBegleiter()}
+/* ---------- Begleiter steigern (WdZ S. 124: nur Vertraute mit eigenen AP, SKT-Spalte F, höchstens 1,5 × Startwert) ---------- */
+let BGL=null,bglFrage=null; // bglFrage: Knopf, der gerade „Wirklich?“ fragt (ein Fehlklick kostet nichts)
+async function ladeBegleiter(){if(!advFile)return;try{BGL=await api('/api/myheroes/'+encodeURIComponent(advFile)+'/begleiter')}catch(e){BGL=[]}
+  const box=$('#bglBox');if(box)box.innerHTML=bglHtml()}
+function bglKnopf(id,text,frage){return bglFrage===id?`<button class="btn sm danger" data-bgl="${esc(id)}" data-ok="1">${esc(frage)}</button> <button class="btn sm" data-bgl-nein>Nein</button>`
+  :`<button class="btn sm pri" data-bgl="${esc(id)}">${esc(text)}</button>`}
+function bglHtml(){if(!BGL||!BGL.length)return '';
+  return `<h3 style="margin-top:18px">Begleiter</h3>`+BGL.map(b=>`<div class="card bgl" style="margin:8px 0">
+    <div class="spread"><b>${esc(b.name)}</b><span class="small mut">${esc(b.art)}</span></div>
+    <p class="small mut">${esc(b.hinweis)}</p>
+    ${b.vertraut?`<p class="cost"><b>Freie AP ${b.frei}</b> von ${b.ap} · Loyalität <b>${b.lo??15}</b> von 25 · bisher übertragen ${b.uebertragen}</p>
+      <div class="row" style="align-items:center"><label class="small" for="bglUe${b.idx}">AP von ${esc(ADV?ADV.name:'deinem Helden')} übertragen (hat ${b.heldFrei} frei)</label>
+        <input type="number" min="1" max="${b.heldFrei}" id="bglUe${b.idx}" data-nostep style="width:90px" value="${esc((bglUe[b.idx]??''))}">
+        ${bglKnopf('ue|'+b.idx,'Übertragen','Wirklich? Geht nicht zurück')}
+        <span class="small mut">Dauerhaft, nur von der Hexe zum Vertrauten. Je 50 übertragene AP steigt die Loyalität um 1 (höchstens 25), WdZ S. 124.</span></div>`:''}
+    <div class="tw"><table class="small zebra"><thead><tr><th>Wert</th><th>jetzt</th><th></th></tr></thead><tbody>
+      ${b.werte.map(w=>`<tr><td>${esc(w.label)}</td><td class="mono nowrap"><b>${w.wert}</b>${w.start!=null&&w.start!==w.wert?` <span class="small mut">Start ${w.start}</span>`:''}</td><td>${!b.vertraut?'':w.kosten!=null
+        ?(w.kosten>b.frei?`<span class="small mut">+1 kostet ${w.kosten} AP, dir fehlen ${w.kosten-b.frei} AP</span>`:bglKnopf('st|'+b.idx+'|'+w.key,`+1 · ${w.kosten} AP`,`Wirklich? ${w.kosten} AP`))
+        :`<span class="small mut">${esc(w.grund||'')}</span>`}</td></tr>`).join('')}</tbody></table></div>
+    ${b.sf.length||b.zauber.length?`<p class="small"><b>Kann:</b> ${[...b.sf,...b.zauber].map(esc).join(', ')}</p>`:''}
+    ${b.vertraut&&b.zauberAngebot&&b.zauberAngebot.length?`<details class="sec"><summary><b>Vertrautenzauber lernen</b> <span class="small mut">(WdZ S. 125 ff., Lernkosten aus dem Regelwerk)</span></summary>
+      <div class="tw"><table class="small zebra"><tbody>${b.zauberAngebot.map(z=>`<tr><td><b>${esc(z.name)}</b> <button type="button" class="ib info" data-ri="${esc(z.name)}" data-ri-art="Ritual" aria-label="Was bedeutet ${esc(z.name)}?">ⓘ</button></td>
+        <td class="small mut">${esc(z.tierarten)}</td><td class="mono">${z.ap!=null?z.ap+' AP':''}</td><td>${z.grund?`<span class="small mut">${esc(z.grund)}</span>`
+        :z.ap>b.frei?`<span class="small mut">dir fehlen ${z.ap-b.frei} AP</span>`:bglKnopf('lz|'+b.idx+'|'+z.name,'Lernen',`Wirklich? ${z.ap} AP`)}</td></tr>`).join('')}</tbody></table></div></details>`:''}
+    ${b.log&&b.log.length?`<details class="sec"><summary class="small">Verlauf</summary><ul class="small">${b.log.map(l=>`<li>${esc(l.at)} · ${esc(l.was)}${l.ap?' · '+l.ap+' AP':''} <span class="mut">(${esc(l.wer||'')})</span></li>`).join('')}</ul></details>`:''}
+  </div>`).join('')}
+let bglUe={};
+$('#mineSheet').addEventListener('input',e=>{const m=e.target.id&&e.target.id.match(/^bglUe(\d+)$/);if(m)bglUe[m[1]]=e.target.value});
+$('#mineSheet').addEventListener('click',async e=>{
+  if(e.target.closest('[data-bgl-nein]')){bglFrage=null;$('#bglBox').innerHTML=bglHtml();return}
+  const b=e.target.closest('[data-bgl]');if(!b)return;const id=b.dataset.bgl;
+  if(!b.dataset.ok){bglFrage=id;$('#bglBox').innerHTML=bglHtml();return}
+  bglFrage=null;const [art,idx,rest]=[id.split('|')[0],id.split('|')[1],id.split('|').slice(2).join('|')];
+  const url='/api/myheroes/'+encodeURIComponent(advFile)+'/begleiter/'+idx+'/';
+  try{let r;
+    if(art==='st')r=await api(url+'steigern',{method:'POST',body:{key:rest}});
+    if(art==='lz')r=await api(url+'lernen',{method:'POST',body:{zauber:rest}});
+    if(art==='ue'){const n=+bglUe[idx];if(!(n>0)){toast('Erst eintragen, wie viele AP übertragen werden');$('#bglBox').innerHTML=bglHtml();return}
+      r=await api(url+'uebertragen',{method:'POST',body:{ap:n}});delete bglUe[idx];const s=await api('/api/myheroes/'+encodeURIComponent(advFile)+'/advance');ADV=s;renderAdvance()}
+    toast(r.text)}catch(x){toastErr(x.message)}
+  ladeBegleiter()});
 function sktCost(col,to,se){let c=ADV.cols.indexOf(col);if(c<0)return null;if(se)c=Math.max(0,c-1);const row=ADV.skt[c];if(to<1)return row[1];if(to>=row.length)return null;return row[to]}
 /* Plan für eine Fertigkeit: Schritte, Kosten je Schritt, ob ein Schritt eine Freigabe braucht */
 function plan(kind,name){const s=ADV,n=cart[name]||0,steps=[];
@@ -457,6 +498,7 @@ function renderAdvance(){const s=ADV,frei=s.freieAp,sum=cartSumme(),rest=frei-su
     <div class="spread"><h3>Talente</h3><input type="search" id="advq" placeholder="Talent suchen…" value="${esc(advQ)}" style="width:220px" aria-label="Talent suchen"></div>
     <div class="tw tscroll"><table class="small zebra"><thead><tr><th>Talent</th><th>TaW</th><th></th><th>Probe</th><th>Spalte</th></tr></thead><tbody>${s.talente.map(t=>zeile('talent',t)).join('')}</tbody></table></div>
     <p class="small mut" id="advNone" hidden>Nichts, was du dir gerade leisten kannst.</p>
+    <div id="bglBox">${bglHtml()}</div>
     <div class="cartbar"${items.length?'':' hidden'}><div><b>Zusammenfassung</b><ul class="small">${items.map(([name,n])=>{const kind=s.talente.some(x=>x.name===name)?'talent':'eigenschaft',p=plan(kind,name);
         const st=p.steps.slice(0,n);return `<li>${esc(name)} ${p.base+(kind==='eigenschaft'?(p.it.value-p.it.base):0)} → ${p.base+n+(kind==='eigenschaft'?(p.it.value-p.it.base):0)}: ${st.map(x=>x.frei?x.cost+' AP'+(x.se?' (SE)':''):'Anfrage an den Meister').join(' + ')}</li>`}).join('')}</ul>
       <div>Summe <b>${sum} AP</b>, danach frei: <b>${rest} AP</b></div></div>

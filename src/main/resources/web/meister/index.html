@@ -637,7 +637,30 @@ function fillSheet(root,h){root.querySelectorAll(".hbild").forEach(b=>bildEditor
 function openSheet(file){const h=heroes.find(x=>x.file===file);if(!h)return;const d=$('#sheet');
   // ⓘ-Texte des Bogens im Hintergrund vorladen
   try{const sec=(h.sheet&&h.sheet.sections)||[];vorladenRegeln(sec.filter(x=>/vorteil|nachteil|sonderfertig|zauber|talent/i.test(x.title)).flatMap(x=>x.rows.map(r=>r.name)))}catch(_){}
-  $('#sheetbody').innerHTML=sheetHtml(h,true);fillSheet($('#sheetbody'),h);if(!d.open)d.showModal();$('#sheetbody .sq').focus()}
+  $('#sheetbody').innerHTML=sheetHtml(h,true)+'<div id="mBgl"></div>';fillSheet($('#sheetbody'),h);if(!d.open)d.showModal();$('#sheetbody .sq').focus();mBglLaden(file)}
+/* Begleiter im Bogen bearbeiten: Werte setzen (z. B. nach Abrichten, ZBA), Fähigkeiten eintragen, Sonder-AP für Vertraute */
+let MBGL={file:null,list:[]};
+async function mBglLaden(file){MBGL.file=file;try{MBGL.list=await api('/api/heroes/'+encodeURIComponent(file)+'/begleiter')}catch(e){MBGL.list=[]}const el=$('#mBgl');if(el)el.innerHTML=mBglHtml()}
+function mBglHtml(){if(!MBGL.list.length)return '';
+  return '<h2 style="margin-top:18px">Begleiter bearbeiten</h2>'+MBGL.list.map(b=>`<div class="card" style="margin:8px 0" data-mb="${b.idx}">
+    <div class="spread"><b>${esc(b.name)}</b><span class="small mut">${esc(b.art)}</span></div><p class="small mut">${esc(b.hinweis)}</p>
+    ${b.vertraut?`<p class="small">Vertrauten-AP: <b>${b.frei}</b> frei von ${b.ap} · Loyalität ${b.lo??15} · von der Hexe übertragen ${b.uebertragen}
+      · Sonder-AP <input type="number" min="1" data-nostep class="mbap" style="width:80px" aria-label="Sonder-AP für ${esc(b.name)}"> <button class="btn sm" data-mbap>Geben</button>
+      <br><span class="mut">Beim Aussenden bekommt ein Vertrauter automatisch ein Viertel der AP der Hexe (WdZ S. 124).</span></p>`:''}
+    <div class="tw"><table class="small zebra"><thead><tr><th>Wert</th><th>Start</th><th>setzen</th></tr></thead><tbody>${b.werte.map(w=>`<tr><td>${esc(w.label)}</td><td class="mono mut">${w.start??''}</td>
+      <td><input type="number" data-nostep value="${w.wert}" data-mbw="${esc(w.key)}" style="width:80px" aria-label="${esc(w.label)} setzen"></td></tr>`).join('')}</tbody></table></div>
+    <p class="small"><b>Kann:</b> ${[...b.sf,...b.zauber].map(esc).join(', ')||'–'}</p>
+    <div class="row" style="align-items:center"><input type="text" class="mbsf" placeholder="Fähigkeit, Ausbildung oder Trick (z. B. Apport, Wache)" style="width:280px" aria-label="Fähigkeit für ${esc(b.name)}">
+      ${b.vertraut?'<input type="number" min="0" data-nostep class="mbsfap" placeholder="AP" style="width:80px" aria-label="AP-Kosten">':''}<button class="btn sm" data-mbsf>Eintragen</button>
+      <span class="small mut">${b.vertraut?'Vertraute zahlen AP: Ausbildung = TaP* aus ZBA S. 20 × 10, Tricks 10–50 AP (WdZ S. 123).':'Ohne AP (Abrichten, ZBA S. 20).'}</span></div>
+  </div>`).join('')}
+document.addEventListener('change',async e=>{const i=e.target.closest('#mBgl [data-mbw]');if(!i)return;const idx=i.closest('[data-mb]').dataset.mb;
+  try{const r=await api('/api/heroes/'+encodeURIComponent(MBGL.file)+'/begleiter/'+idx+'/wert',{method:'POST',body:{key:i.dataset.mbw,wert:+i.value}});toast(r.text)}catch(x){toastErr(x.message)}mBglLaden(MBGL.file)});
+document.addEventListener('click',async e=>{const b=e.target.closest('#mBgl [data-mbsf], #mBgl [data-mbap]');if(!b)return;const card=b.closest('[data-mb]'),idx=card.dataset.mb,base='/api/heroes/'+encodeURIComponent(MBGL.file)+'/begleiter/'+idx+'/';
+  try{let r;if(b.dataset.mbsf!==undefined){const n=card.querySelector('.mbsf').value.trim();if(!n)return toast('Erst eintragen, was der Begleiter lernt');const ap=card.querySelector('.mbsfap');
+      r=await api(base+'sf',{method:'POST',body:{name:n,ap:ap?+ap.value||0:0}})}
+    else{const n=+card.querySelector('.mbap').value;if(!(n>0))return toast('Erst eintragen, wie viele AP');r=await api(base+'ap',{method:'POST',body:{ap:n}})}
+    toast(r.text)}catch(x){toastErr(x.message)}mBglLaden(MBGL.file)});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-sheet]');if(b)openSheet(b.dataset.sheet);
   const i=e.target.closest('[data-rim]');if(i)regelInfo(i.dataset.rim,'',true)});
 $('#sheet').addEventListener('click',e=>{if(e.target===$('#sheet'))$('#sheet').close()});

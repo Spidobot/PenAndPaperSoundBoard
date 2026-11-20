@@ -21,6 +21,11 @@ Push auf `main` baut per GitHub Actions das Image auf ghcr.io.
 - Kennt die Jar keine Bedingung (`ungeprueft`): `Regeln.voraussetzungen` liest „Voraussetzungen:“ aus dem Regeltext und prüft Eigenschaften und kursive SF/Vorteile.
 - Waffen: `App.waffenPruefen` – Kampftechnik nicht erlernt → roter Hinweis mit ersatzweisen Fertigkeiten aus WdS.
 
+## Begleiter (Begleiter.java)
+- Nur Vertraute (Held hat SF Vertrautenbindung, Begleiter wesensart Tier) haben eigene AP (WdZ S. 124): beim Aussenden automatisch ein Viertel der Helden-AP, Hexe kann AP übertragen (je 50 → Loyalität +1, max. 25). Steigern nach SKT-Spalte F, LE/AE/MR als Zukauf, max. 1,5 × Startwert (außer AE, Ritualkenntnis).
+- Werte stehen im Helden-XML (<Wesen>), Startwerte/AP/LO/RK in der DB. Vertrautenzauber und Meister-Tricks NUR in der DB (begleiter_kann): die helden.jar kennt sie nicht und verwirft sonst beim Einlesen den ganzen Begleiter.
+- Normale Tiere: keine AP, Meister setzt Werte im Heldenbogen (Abrichten, ZBA).
+
 ## Mails und Freigaben
 - Freigaben: eine Mail je Held, erst wenn alle Punkte entschieden sind (30 s Pause für Korrekturen), mit Begründungen.
 - Alle Mails: Text + HTML mit eingebettetem W20-Logo (resources/mail/logo.png) und wechselndem hochnäsigem Meister-Gruß.

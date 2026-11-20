@@ -36,6 +36,7 @@ public final class Advance {
     static final List<String> EIG = List.of("Mut", "Klugheit", "Intuition", "Charisma", "Fingerfertigkeit", "Gewandtheit", "Konstitution", "Körperkraft");
     static final Map<String, String> SHORT = Map.of("MU", "Mut", "KL", "Klugheit", "IN", "Intuition", "CH", "Charisma", "FF", "Fingerfertigkeit", "GE", "Gewandtheit", "KO", "Konstitution", "KK", "Körperkraft");
 
+    Begleiter begleiter; // Vertraute bekommen beim Aussenden ein Viertel der AP (WdZ S. 124)
     private final Db db;
     private final Heroes heroes;
     private final HeldenJar jar;
@@ -296,6 +297,7 @@ public final class Advance {
             }
             Map<String, Integer> geld = geld(a.get("geld"));
             if (!geld.isEmpty()) { geldGutschreiben(d, held, geld); write(file, d); }
+            String vertraute = begleiter == null || ap <= 0 ? "" : begleiter.vertrautenAp(file, ap, App.str(a.get("note")));
             for (Object t : se) db.exec("INSERT INTO se(file,target,granted) VALUES(?,?,?)", file, App.str(t), now);
             db.exec("UPDATE award SET sent=? WHERE id=?", now, a.get("id"));
             String who = accounts.email(db.query("SELECT account FROM hero WHERE file=?", file).stream().findFirst().map(r -> r.get("account")).orElse(null));
@@ -306,8 +308,9 @@ public final class Advance {
             String was = teile.size() <= 1 ? String.join("", teile) : String.join(", ", teile.subList(0, teile.size() - 1)) + " und " + teile.get(teile.size() - 1);
             mail.notify(who, (ap != 0 ? "Neue Abenteuerpunkte für " : "Belohnung für ") + held.getAttribute("name"),
                     "Der Meister hat " + held.getAttribute("name") + " " + was + " gegeben."
+                            + (vertraute.isEmpty() ? "" : "\n" + vertraute + ".")
                             + (ap != 0 || !se.isEmpty() ? "\n\nSteigern kannst du unter „Meine Helden“." : "") + (geld.isEmpty() ? "" : "\nDas Geld steht schon in der Geldbörse des Helden."));
-            done.add(held.getAttribute("name") + ": " + String.join(", ", teile));
+            done.add(held.getAttribute("name") + ": " + String.join(", ", teile) + (vertraute.isEmpty() ? "" : " (" + vertraute + ")"));
         }
         return done;
     }
@@ -356,14 +359,14 @@ public final class Advance {
 
     // ------------------------------------------------------------------ XML
 
-    private Document read(String file) throws Exception {
+    Document read(String file) throws Exception {
         var f = javax.xml.parsers.DocumentBuilderFactory.newInstance();
         f.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
         return f.newDocumentBuilder().parse(heroes.file(file).toFile());
     }
 
     /** Schreibt atomar und lässt die helden.jar die Datei probehalber laden; scheitert das, bleibt die alte Datei. */
-    private void write(String file, Document d) throws Exception {
+    void write(String file, Document d) throws Exception {
         Path p = heroes.file(file), tmp = p.resolveSibling(p.getFileName() + ".neu");
         var t = javax.xml.transform.TransformerFactory.newInstance().newTransformer();
         t.setOutputProperty(javax.xml.transform.OutputKeys.ENCODING, "UTF-8");
@@ -388,14 +391,14 @@ public final class Advance {
         }
     }
 
-    private static void setFreieAp(Document d, Element held, int v) {
+    static void setFreieAp(Document d, Element held, int v) {
         Element f = Heroes.first(held, "freieabenteuerpunkte");
         if (f == null) { f = d.createElement("freieabenteuerpunkte"); held.appendChild(f); }
         f.setAttribute("value", String.valueOf(v));
     }
 
     /** Ereignis wie die Helden-Software es schreibt (Protokoll im Helden). */
-    private static void ereignis(Document d, Element held, String text, String obj, int alt, int neu, String kommentar) {
+    static void ereignis(Document d, Element held, String text, String obj, int alt, int neu, String kommentar) {
         Element list = Heroes.first(held, "ereignisse");
         if (list == null) { list = d.createElement("ereignisse"); held.appendChild(list); }
         Element e = d.createElement("ereignis");

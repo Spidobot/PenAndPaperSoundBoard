@@ -384,6 +384,12 @@ final class Regeln {
      */
     String zusammenfassung(Map<String, ? extends Map<String, String>> helden, boolean mitHelden) { return zusammenfassung(helden, mitHelden, this::suche); }
 
+    /** Vertrautenzauber (WdZ S. 125 ff.): Rituale mit „Tierarten:“ im Text. */
+    synchronized List<Eintrag> vertrautenzauber() {
+        laden(); nimm(List.of("Ritual"));
+        return alle.stream().filter(e -> { String t = e.text().replaceAll("<[^>]+>", " "); return t.matches("(?s).*Tierarten\\s*:.*") && t.contains("Ritualprobe"); }).toList();
+    }
+
     /** Treffer bevorzugt aus diesen Arten (z. B. bei Begleitern Tier-Fähigkeiten statt der gleichnamigen Helden-SF). */
     synchronized List<Eintrag> suche(String name, java.util.Collection<String> bevorzugt) {
         // erst nur in den Dateien dieser Rubriken suchen (schneller, keine Verwechslung), dann notfalls überall

@@ -333,3 +333,10 @@ div.tile[data-go]{cursor:pointer}
 .probe .pres.bad{color:#d93a2b;font-weight:600}
 .probe .pres.warn{color:var(--warn)}
 .probe input.falsch{border-color:#d93a2b;color:#d93a2b}
+
+/* Begleiter steigern: schmal genug fürs Handy */
+.bgl table{width:100%}
+.bgl td:first-child{min-width:7em}
+.bgl td:last-child{white-space:normal}
+.bgl .btn.sm{white-space:nowrap}
+.bgl .row input{width:90px}
