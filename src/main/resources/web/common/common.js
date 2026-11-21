@@ -297,10 +297,10 @@ async function ladenBrowser(root,opt){await katalogLaden();const st={kat:'',q:''
       <td class="mono small">${k.gewicht>=40?(Math.round(k.gewicht/4)/10)+' Stein':k.gewicht+' U'}</td>
       <td class="mono">${kreuzerText(p(k))}${p(k)!==k.preis?`<div class="small mut">Standard ${kreuzerText(k.preis)}</div>`:''}</td>
       ${opt.meister?`<td><input type="text" class="lpreis" value="${k.eigenerPreis?esc(kreuzerText(k.ladenpreis)):''}" placeholder="z. B. 3D 5S" style="width:90px" aria-label="Preis im Laden für ${esc(k.name)}"></td>`:''}
-      <td class="nowrap"><input type="number" class="lanz" min="1" value="1" data-nostep style="width:52px" aria-label="Anzahl">
-        <button class="btn sm pri" data-lkauf="1">Kaufen</button>${opt.meister?'<button class="btn sm" data-lkauf="0" title="ohne Geld abzuziehen">Geben</button>':''}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">Nichts gefunden.</td></tr>';
+      <td class="nowrap">${opt.zu?.()?'':`<input type="number" class="lanz" min="1" value="1" data-nostep style="width:52px" aria-label="Anzahl">
+        <button class="btn sm pri" data-lkauf="1">${esc(opt.knopf||'Kaufen')}</button>${opt.meister?'<button class="btn sm" data-lkauf="0" title="ohne Geld abzuziehen">Geben</button>':''}`}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">Nichts gefunden.</td></tr>';
     root.querySelector('.lmehr').innerHTML=n>l.length?`${l.length} von ${n} angezeigt. <button class="link" data-lmehr>alle zeigen</button>`:`${n} Artikel`};
-  zeigen();
+  zeigen();root.ladenNeu=zeigen;
   let t=null;root.querySelector('.lq').oninput=e=>{clearTimeout(t);t=setTimeout(()=>{st.q=e.target.value.trim();st.mehr=false;zeigen()},200)};
   root.querySelector('.ls').onchange=e=>{st.sort=e.target.value;zeigen()};
   root.onclick=async e=>{const k=e.target.closest('[data-lk]');if(k){st.kat=k.dataset.lk;st.mehr=false;root.querySelectorAll('[data-lk]').forEach(b=>b.setAttribute('aria-current',b===k));zeigen();return}

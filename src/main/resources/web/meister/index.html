@@ -20,7 +20,7 @@
     <a href="#m-sessions" data-v="m-sessions">Sessions</a>
     <a href="#m-spieler" data-v="m-spieler">Spieler</a>
     <a href="#m-termine" data-v="m-termine">Termine</a>
-    <a href="#m-laden" data-v="m-laden">Laden</a>
+    <a href="#m-laden" data-v="m-laden">Laden <span class="pill" id="korbZahl" hidden></span></a>
     <a href="#m-namen" data-v="m-namen">NSC-Generator</a>
     <a href="#m-config" data-v="m-config">Konfiguration</a>
     <a href="#" id="logout">Abmelden</a>
@@ -151,6 +151,7 @@
 
     <section class="view" id="m-laden" hidden>
       <div class="spread"><h1>Laden</h1><span class="small mut" id="mLadenStatus"></span></div>
+      <div class="card" id="mKoerbe"></div>
       <div class="card"><div class="row" style="align-items:center"><label class="label" for="mLadenHeld" style="margin:0">Für wen?</label><select id="mLadenHeld" style="width:auto"></select>
         <span class="small mut">„Kaufen“ zieht das Geld des Helden ab, „Geben“ trägt es geschenkt ein. „Preis im Laden“ je nach Verfügbarkeit, leer = Standardpreis × Faktor (Konfiguration).</span></div></div>
       <div class="card" id="mLadenBrowser"></div>
@@ -873,7 +874,28 @@ async function mLadenView(){try{const l=await api('/api/laden');$('#mLadenStatus
     kaufen:async(name,anzahl,geschenkt)=>{const f=$('#mLadenHeld').value;if(!f)return toast('Erst einen Helden wählen');
       try{const r=await api('/api/heroes/'+encodeURIComponent(f)+'/ausruestung',{method:'POST',body:{name,anzahl,kaufen:!geschenkt}});toast(r.text);mLadenInv()}catch(x){toastErr(x.message)}},
     preisSetzen:async(name,preis)=>{try{const r=await api('/api/laden/preis',{method:'POST',body:{name,preis}});toast(r.text)}catch(x){toastErr(x.message)}}})}
-  mLadenInv()}
+  mLadenInv();koerbeLaden()}
+/* Warenkörbe der Spieler: Preise je Position ändern (nur für diesen Korb), Artikel entfernen, freigeben oder ablehnen */
+async function koerbeLaden(){let l;try{l=await api('/api/warenkoerbe')}catch(e){$('#mKoerbe').innerHTML='<p class="mut">'+esc(e.message)+'</p>';return}
+  $('#korbZahl').hidden=!l.length;$('#korbZahl').textContent=l.length;
+  if(!l.length){$('#mKoerbe').innerHTML='<h3>Warenkörbe zur Freigabe</h3><p class="mut">Keine offenen Warenkörbe.</p>';return}
+  $('#mKoerbe').innerHTML='<h3>Warenkörbe zur Freigabe</h3>'+l.map(k=>`<div class="korb" data-korb="${k.id}" style="margin-bottom:14px">
+    <div class="spread"><b>${esc(k.held)}</b><span class="small mut">gesendet ${esc(k.gesendet||'')}</span></div>
+    <div class="tw"><table class="small zebra"><thead><tr><th>Artikel</th><th>Anzahl</th><th>Ladenpreis</th><th>Preis je Stück</th><th>Summe</th><th></th></tr></thead><tbody>
+    ${k.pos.map(p=>`<tr data-pos="${p.id}"><td><b>${esc(p.name)}</b></td><td class="mono">${p.anzahl}</td><td class="mono">${kreuzerText(p.preis)}</td>
+      <td><input type="text" class="kpreis" value="${esc(kreuzerText(p.stueck))}" style="width:90px" aria-label="Preis je Stück für ${esc(p.name)}"></td>
+      <td class="mono">${kreuzerText(p.summe)}</td><td><button class="btn sm" data-kpweg="${p.id}" aria-label="${esc(p.name)} entfernen">Entfernen</button></td></tr>`).join('')||'<tr><td colspan="6" class="empty">Alle Artikel entfernt.</td></tr>'}</tbody></table></div>
+    <p><b>Zusammen ${esc(k.summeText)}</b> · ${esc(k.held)} hat ${esc(k.geldText)}${k.summe>k.geld?` <span class="pill warn">es fehlen ${kreuzerText(k.summe-k.geld)}</span>`:''}</p>
+    <div class="row" style="align-items:center"><button class="btn pri" data-kfrei>Freigeben</button><input type="text" class="kgrund" placeholder="Begründung (optional)" style="flex:1;min-width:200px" aria-label="Begründung für die Ablehnung">
+      <button class="btn" data-kab>Ablehnen</button></div></div>`).join('')}
+$('#mKoerbe').onclick=async e=>{const k=e.target.closest('[data-korb]');if(!k)return;const id=k.dataset.korb;
+  try{const w=e.target.closest('[data-kpweg]');if(w){await api('/api/warenkoerbe/pos/'+w.dataset.kpweg,{method:'DELETE'});return koerbeLaden()}
+    if(e.target.closest('[data-kfrei]')){const r=await api('/api/warenkoerbe/'+id+'/freigeben',{method:'POST'});toast(r.text);koerbeLaden();mLadenInv();return}
+    if(e.target.closest('[data-kab]')){const r=await api('/api/warenkoerbe/'+id+'/ablehnen',{method:'POST',body:{grund:k.querySelector('.kgrund').value.trim()}});toast(r.text);koerbeLaden()}}catch(x){toastErr(x.message)}};
+$('#mKoerbe').addEventListener('change',async e=>{const i=e.target.closest('.kpreis');if(!i)return;const v=preisText(i.value);
+  if(Number.isNaN(v))return toastErr('Preis nicht lesbar. Beispiele: „3D 5S“, „12 S“, „8H“ oder nur eine Zahl (Silbertaler).');
+  try{await api('/api/warenkoerbe/pos/'+i.closest('[data-pos]').dataset.pos,{method:'PUT',body:{preis:v}});koerbeLaden()}catch(x){toastErr(x.message)}});
+koerbeLaden();setInterval(()=>{if(!document.hidden&&!$('#mKoerbe').contains(document.activeElement))koerbeLaden()},30000);
 function mLadenInv(){const f=$('#mLadenHeld').value;if(!f){$('#mLadenInv').innerHTML='<p class="mut">Keine Helden.</p>';return}LS.set('hh-mladenheld',f);
   $('#mLadenInvTitel').textContent='Gepäck von '+$('#mLadenHeld').selectedOptions[0].text;ausrOeffnen($('#mLadenInv'),'/api/heroes/'+encodeURIComponent(f),true,true)}
 $('#mLadenHeld').onchange=mLadenInv;

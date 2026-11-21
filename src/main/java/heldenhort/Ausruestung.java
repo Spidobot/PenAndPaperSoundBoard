@@ -26,9 +26,13 @@ public class Ausruestung {
     private final Advance adv;
     private final Regeln regeln;
     private final Accounts accounts;
+    private final Mail mail;
 
-    public Ausruestung(Db db, Heroes heroes, HeldenJar jar, Advance adv, Regeln regeln, Accounts accounts) {
-        this.db = db; this.heroes = heroes; this.jar = jar; this.adv = adv; this.regeln = regeln; this.accounts = accounts;
+    public Ausruestung(Db db, Heroes heroes, HeldenJar jar, Advance adv, Regeln regeln, Accounts accounts, Mail mail) {
+        this.db = db; this.heroes = heroes; this.jar = jar; this.adv = adv; this.regeln = regeln; this.accounts = accounts; this.mail = mail;
+        // Warenkorb: Spieler sammeln, Meister prüft (Preise je Position änderbar), erst die Freigabe bucht Ware und Geld
+        db.exec("CREATE TABLE IF NOT EXISTS warenkorb(id INTEGER PRIMARY KEY AUTOINCREMENT, file TEXT, account INTEGER, status TEXT, created TEXT, gesendet TEXT, entschieden TEXT, kommentar TEXT)");
+        db.exec("CREATE TABLE IF NOT EXISTS warenkorb_pos(id INTEGER PRIMARY KEY AUTOINCREMENT, korb INTEGER, name TEXT, anzahl INTEGER, preis INTEGER, meisterpreis INTEGER)");
     }
 
     // ------------------------------------------------------------------ Katalog
@@ -396,6 +400,145 @@ public class Ausruestung {
         return 0;
     }
 
+    // ------------------------------------------------------------------ Warenkorb
+
+    /** Offener (noch nicht gesendeter) oder angefragter Korb eines Helden; legt bei Bedarf einen offenen an. */
+    private Map<String, Object> korbFuer(String file, Object account, boolean anlegen) {
+        var r = db.query("SELECT * FROM warenkorb WHERE file=? AND status IN ('offen','angefragt') ORDER BY id DESC LIMIT 1", file);
+        if (!r.isEmpty()) return r.get(0);
+        if (!anlegen) return null;
+        long id = db.exec("INSERT INTO warenkorb(file,account,status,created) VALUES(?,?,?,?)", file, account, "offen", App.now());
+        return db.query("SELECT * FROM warenkorb WHERE id=?", id).get(0);
+    }
+
+    /** Korb mit Positionen, Summen und Name des Helden. */
+    Map<String, Object> korbDaten(Map<String, Object> k) throws Exception {
+        Map<String, Object> m = new LinkedHashMap<>(k);
+        List<Map<String, Object>> pos = db.query("SELECT * FROM warenkorb_pos WHERE korb=? ORDER BY id", k.get("id"));
+        int summe = 0;
+        for (var p : pos) {
+            int st = p.get("meisterpreis") != null ? ((Number) p.get("meisterpreis")).intValue() : ((Number) p.get("preis")).intValue();
+            p.put("stueck", st);
+            p.put("summe", st * ((Number) p.get("anzahl")).intValue());
+            summe += st * ((Number) p.get("anzahl")).intValue();
+            Map<String, Object> kat = katalogNachName == null ? Map.of() : katalogNachName.getOrDefault(String.valueOf(p.get("name")), Map.of());
+            p.put("gewicht", kat.get("gewicht"));
+        }
+        m.put("pos", pos);
+        m.put("summe", summe);
+        m.put("summeText", geldText(summe));
+        try {
+            Document d = adv.read(String.valueOf(k.get("file")));
+            Element held = (Element) d.getElementsByTagName("held").item(0);
+            m.put("held", held.getAttribute("name"));
+            m.put("geld", geldInKreuzer(held));
+            m.put("geldText", geldText(geldInKreuzer(held)));
+        } catch (Exception e) { m.put("held", k.get("file")); }
+        return m;
+    }
+
+    synchronized Map<String, Object> korbZustand(String file) throws Exception {
+        katalog();
+        Map<String, Object> out = new LinkedHashMap<>();
+        Map<String, Object> k = korbFuer(file, null, false);
+        out.put("korb", k == null ? null : korbDaten(k));
+        var letzte = db.query("SELECT * FROM warenkorb WHERE file=? AND status IN ('freigegeben','abgelehnt') ORDER BY id DESC LIMIT 3", file);
+        List<Map<String, Object>> l = new ArrayList<>();
+        for (var x : letzte) l.add(korbDaten(x));
+        out.put("letzte", l);
+        out.put("laden", ladenInfo());
+        return out;
+    }
+
+    synchronized void korbHinzu(String file, Object account, String name, int anzahl) throws Exception {
+        if (!"1".equals(db.get("ladenOffen", "0"))) throw new IllegalStateException("Der Laden ist zu. Einkaufen geht, wenn der Meister ihn öffnet.");
+        if (anzahl < 1 || anzahl > 999) throw new IllegalArgumentException("Anzahl zwischen 1 und 999.");
+        artikel(name);
+        Map<String, Object> k = korbFuer(file, account, true);
+        if (!"offen".equals(k.get("status"))) throw new IllegalStateException("Dein Warenkorb liegt gerade beim Meister. Neue Artikel gehen, sobald er entschieden hat.");
+        var vorh = db.query("SELECT id, anzahl FROM warenkorb_pos WHERE korb=? AND name=? AND meisterpreis IS NULL", k.get("id"), name);
+        if (!vorh.isEmpty()) db.exec("UPDATE warenkorb_pos SET anzahl=anzahl+? WHERE id=?", anzahl, vorh.get(0).get("id"));
+        else db.exec("INSERT INTO warenkorb_pos(korb,name,anzahl,preis) VALUES(?,?,?,?)", k.get("id"), name, anzahl, ladenpreis(name));
+    }
+
+    /** Position entfernen; Spieler nur im offenen Korb, Meister auch im angefragten. */
+    synchronized void korbWeg(long posId, String file, boolean meister) {
+        var p = db.query("SELECT p.id, k.status, k.file FROM warenkorb_pos p JOIN warenkorb k ON k.id=p.korb WHERE p.id=?", posId);
+        if (p.isEmpty()) throw new io.javalin.http.NotFoundResponse("Diesen Artikel gibt es im Warenkorb nicht mehr.");
+        if (file != null && !file.equals(p.get(0).get("file"))) throw new io.javalin.http.NotFoundResponse("Dieser Warenkorb gehört nicht zu deinem Helden.");
+        if (!meister && !"offen".equals(p.get(0).get("status"))) throw new IllegalStateException("Der Warenkorb liegt beim Meister, ändern kann ihn gerade nur er.");
+        db.exec("DELETE FROM warenkorb_pos WHERE id=?", posId);
+    }
+
+    synchronized String korbSenden(String file, Object account) throws Exception {
+        Map<String, Object> k = korbFuer(file, account, false);
+        if (k == null || !"offen".equals(k.get("status"))) throw new IllegalStateException("Es gibt keinen offenen Warenkorb zum Senden.");
+        Map<String, Object> d = korbDaten(k);
+        if (((List<?>) d.get("pos")).isEmpty()) throw new IllegalArgumentException("Der Warenkorb ist leer.");
+        db.exec("UPDATE warenkorb SET status='angefragt', gesendet=? WHERE id=?", App.now(), k.get("id"));
+        List<String> z = new ArrayList<>();
+        for (Object o : (List<?>) d.get("pos")) { Map<?, ?> p = (Map<?, ?>) o; z.add(p.get("anzahl") + "× " + p.get("name") + " (" + geldText(((Number) p.get("summe")).intValue()) + ")"); }
+        mail.notifyMeister("Warenkorb: " + d.get("held"), d.get("held") + " möchte einkaufen (zusammen " + d.get("summeText") + ", hat " + d.get("geldText") + "):\n\n- "
+                + String.join("\n- ", z) + "\n\nPrüfen und freigeben in der Meister-UI unter „Laden“.");
+        return "Warenkorb an den Meister geschickt (" + d.get("summeText") + ").";
+    }
+
+    List<Map<String, Object>> koerbeOffen() throws Exception {
+        katalog();
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (var k : db.query("SELECT * FROM warenkorb WHERE status='angefragt' ORDER BY gesendet")) out.add(korbDaten(k));
+        return out;
+    }
+
+    /** Meister gibt frei: Geld und Tragkraft prüfen, dann alle Positionen ins Gepäck, Geld abziehen – in einem Schritt. */
+    synchronized String korbFreigeben(long id) throws Exception {
+        var r = db.query("SELECT * FROM warenkorb WHERE id=? AND status='angefragt'", id);
+        if (r.isEmpty()) throw new IllegalStateException("Dieser Warenkorb wartet nicht (mehr) auf Freigabe.");
+        Map<String, Object> d = korbDaten(r.get(0));
+        String file = String.valueOf(r.get(0).get("file"));
+        List<?> pos = (List<?>) d.get("pos");
+        if (pos.isEmpty()) throw new IllegalArgumentException("Der Warenkorb ist leer. Ablehnen oder Artikel stehen lassen.");
+        Document doc = adv.read(file);
+        Element held = (Element) doc.getElementsByTagName("held").item(0);
+        int summe = ((Number) d.get("summe")).intValue(), geld = geldInKreuzer(held);
+        if (summe > geld) throw new IllegalArgumentException(held.getAttribute("name") + " hat nur " + geldText(geld) + ", der Warenkorb kostet " + geldText(summe) + ". Es fehlen " + geldText(summe - geld) + ". Preise senken, Artikel entfernen oder ablehnen.");
+        double neu = lastUnzen(doc, held);
+        for (Object o : pos) { Map<?, ?> p = (Map<?, ?>) o; if (p.get("gewicht") instanceof Number w) neu += w.doubleValue() * ((Number) p.get("anzahl")).intValue(); }
+        int tk = tragkraftUnzen(held), tol = Integer.parseInt(db.get("ueberladung", "0"));
+        if (tk > 0 && neu > tk * (1 + tol / 100.0) && !"0".equals(db.get("tragkraftSperre", "1")))
+            throw new IllegalArgumentException("Zu schwer: " + held.getAttribute("name") + " trüge danach " + Math.round(neu / 4.0) / 10.0 + " Stein, Tragkraft " + tk / 40 + " Stein"
+                    + (tol > 0 ? " plus " + tol + " %" : "") + " (WdS S. 144). Artikel entfernen oder in der Konfiguration die Sperre lockern.");
+        Element gl = liste(doc, held, "gegenstände");
+        for (Object o : pos) {
+            Map<?, ?> p = (Map<?, ?>) o;
+            String name = String.valueOf(p.get("name"));
+            Element g = null;
+            for (Element e : kinder(gl, "gegenstand")) if (e.getAttribute("name").equals(name) && kinder(e, "Wesen").isEmpty()) { g = e; break; }
+            if (g == null) { g = doc.createElement("gegenstand"); g.setAttribute("name", name); g.setAttribute("anzahl", "0"); g.setAttribute("slot", "0"); gl.appendChild(g); }
+            g.setAttribute("anzahl", String.valueOf(Heroes.num(g.getAttribute("anzahl")) + ((Number) p.get("anzahl")).intValue()));
+        }
+        geldSetzen(doc, held, geld - summe);
+        Advance.ereignis(doc, held, "Einkauf", "Warenkorb " + id, geld, geld - summe, geldText(summe));
+        speichern(file, doc);
+        db.exec("UPDATE warenkorb SET status='freigegeben', entschieden=? WHERE id=?", App.now(), id);
+        String who = accounts.email(r.get(0).get("account"));
+        List<String> z = new ArrayList<>();
+        for (Object o : pos) { Map<?, ?> p = (Map<?, ?>) o; z.add(p.get("anzahl") + "× " + p.get("name") + " für " + geldText(((Number) p.get("summe")).intValue())); }
+        mail.notify(who, "Einkauf freigegeben: " + held.getAttribute("name"), "Der Meister hat den Warenkorb von " + held.getAttribute("name") + " freigegeben:\n\n- " + String.join("\n- ", z)
+                + "\n\nZusammen " + geldText(summe) + ", übrig " + geldText(geld - summe) + ". Alles liegt schon im Gepäck.");
+        return held.getAttribute("name") + ": Einkauf für " + geldText(summe) + " gebucht, übrig " + geldText(geld - summe) + ".";
+    }
+
+    synchronized String korbAblehnen(long id, String grund) throws Exception {
+        var r = db.query("SELECT * FROM warenkorb WHERE id=? AND status='angefragt'", id);
+        if (r.isEmpty()) throw new IllegalStateException("Dieser Warenkorb wartet nicht (mehr) auf Freigabe.");
+        Map<String, Object> d = korbDaten(r.get(0));
+        db.exec("UPDATE warenkorb SET status='abgelehnt', entschieden=?, kommentar=? WHERE id=?", App.now(), grund, id);
+        mail.notify(accounts.email(r.get(0).get("account")), "Einkauf abgelehnt: " + d.get("held"), "Der Meister hat den Warenkorb von " + d.get("held") + " abgelehnt."
+                + (grund.isBlank() ? "" : "\n\nBegründung: " + grund) + "\n\nEs wurde nichts abgebucht.");
+        return d.get("held") + ": Warenkorb abgelehnt.";
+    }
+
     // ------------------------------------------------------------------ Kampfwerte (für LeP-/Treffer-Verfolgung in der Initiative)
 
     /** LeP, Wundschwelle und RS je Zone, wie die helden.jar sie für den Bogen rechnet (XMLDatenGenerator). */
@@ -551,6 +694,31 @@ public class Ausruestung {
         m.get("/api/namen/generatoren", ctx -> ctx.json(generatoren()));
         m.get("/api/namen", ctx -> ctx.json(namen(App.str(ctx.queryParam("g")), "w".equals(ctx.queryParam("s")), "1".equals(ctx.queryParam("adlig")),
                 ctx.queryParam("n") == null ? 10 : Integer.parseInt(ctx.queryParam("n")))));
+        // Warenkörbe: Meister prüft, ändert Preise je Position, entfernt Artikel, gibt frei oder lehnt ab
+        m.get("/api/warenkoerbe", ctx -> ctx.json(koerbeOffen()));
+        m.put("/api/warenkoerbe/pos/{id}", ctx -> {
+            Object p = ctx.bodyAsClass(Map.class).get("preis");
+            if (p != null && !(p instanceof Number)) throw new IllegalArgumentException("Preis nicht lesbar.");
+            if (p instanceof Number n && (n.intValue() < 0 || n.intValue() > 100_000_000)) throw new IllegalArgumentException("Preis zwischen 0 und 100000 Dukaten.");
+            db.exec("UPDATE warenkorb_pos SET meisterpreis=? WHERE id=?", p == null ? null : ((Number) p).intValue(), Long.parseLong(ctx.pathParam("id")));
+            ctx.json(Map.of("ok", true));
+        });
+        m.delete("/api/warenkoerbe/pos/{id}", ctx -> { korbWeg(Long.parseLong(ctx.pathParam("id")), null, true); ctx.json(Map.of("ok", true)); });
+        m.post("/api/warenkoerbe/{id}/freigeben", ctx -> ctx.json(Map.of("text", korbFreigeben(Long.parseLong(ctx.pathParam("id"))))));
+        m.post("/api/warenkoerbe/{id}/ablehnen", ctx -> ctx.json(Map.of("text", korbAblehnen(Long.parseLong(ctx.pathParam("id")), App.str(ctx.bodyAsClass(Map.class).get("grund"))))));
+        // Spieler: Warenkorb
+        s.get("/api/myheroes/{file}/warenkorb", ctx -> ctx.json(korbZustand(adv.own(ctx.pathParam("file"), ctx))));
+        s.post("/api/myheroes/{file}/warenkorb", ctx -> {
+            String file = adv.own(ctx.pathParam("file"), ctx);
+            if (!"übernommen".equals(db.query("SELECT status FROM hero WHERE file=?", file).get(0).get("status")))
+                throw new IllegalStateException("Einkaufen geht erst, wenn der Meister den Helden übernommen hat.");
+            Map<?, ?> b = ctx.bodyAsClass(Map.class);
+            korbHinzu(file, accounts.current(ctx).get("id"), App.str(b.get("name")), b.get("anzahl") instanceof Number n ? n.intValue() : 1);
+            ctx.json(korbZustand(file));
+        });
+        s.delete("/api/myheroes/{file}/warenkorb/{pos}", ctx -> { String file = adv.own(ctx.pathParam("file"), ctx); korbWeg(Long.parseLong(ctx.pathParam("pos")), file, false); ctx.json(korbZustand(file)); });
+        s.post("/api/myheroes/{file}/warenkorb/senden", ctx -> { String file = adv.own(ctx.pathParam("file"), ctx); String t = korbSenden(file, accounts.current(ctx).get("id")); var z = korbZustand(file); z.put("text", t); ctx.json(z); });
+
         // Spieler: eigener Held
         s.get("/api/myheroes/{file}/ausruestung", ctx -> ctx.json(zustand(adv.own(ctx.pathParam("file"), ctx))));
         s.post("/api/myheroes/{file}/ausruestung", ctx -> {
@@ -562,10 +730,8 @@ public class Ausruestung {
             if (b.get("slot") != null) text = anlegen(file, App.str(b.get("slot")), App.str(b.get("name")), App.str(b.get("talent")));
             else {
                 int n = b.get("anzahl") instanceof Number x ? x.intValue() : 1;
-                if (n > 0) {
-                    if (!"1".equals(db.get("ladenOffen", "0"))) throw new IllegalStateException("Der Laden ist zu. Einkaufen geht, wenn der Meister ihn öffnet.");
-                    text = aendern(file, App.str(b.get("name")), n, true);
-                } else text = aendern(file, App.str(b.get("name")), n, false); // ablegen/wegwerfen geht immer
+                if (n > 0) throw new IllegalStateException("Einkaufen geht über den Warenkorb: erst hineinlegen, dann an den Meister schicken.");
+                else text = aendern(file, App.str(b.get("name")), n, false); // ablegen/wegwerfen geht immer
             }
             ctx.json(Map.of("text", text, "zustand", zustand(file)));
         });

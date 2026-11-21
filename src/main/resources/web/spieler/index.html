@@ -93,6 +93,7 @@ html,body{margin:0}
     <div class="row" style="margin-bottom:14px"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Laden</h1></div>
     <div class="card"><div class="row" style="align-items:center"><label class="label" for="ladenHeld" style="margin:0">Wer kauft ein?</label><select id="ladenHeld" style="width:auto"></select>
       <span class="small mut" id="ladenHinweis"></span></div></div>
+    <div class="card" id="ladenKorb"></div>
     <div class="card" id="ladenBrowser"></div>
     <div class="card"><h3>Dein Gepäck</h3><div id="ladenBox"></div></div>
   </div>
@@ -563,12 +564,31 @@ async function ladenStatus(){try{const l=await api('/api/laden');$('#ladenStatus
 async function ladenView(){let hs;try{hs=(await api('/api/myheroes')).filter(h=>h.status!=='neu')}catch(e){return toastErr(e.message)}
   if(!hs.length){$('#ladenHeld').innerHTML='';$('#ladenHinweis').textContent='Einkaufen geht erst mit einem Helden, den der Meister übernommen hat.';$('#ladenBox').innerHTML='';return}
   const last=LS.get('hh-ladenheld','');$('#ladenHeld').innerHTML=hs.map(h=>`<option value="${esc(h.file)}"${h.file===last?' selected':''}>${esc(h.name)}</option>`).join('');
-  let l={};try{l=await api('/api/laden')}catch(e){}$('#ladenHinweis').textContent=l.offen?'Der Laden ist offen.'+(l.faktor&&l.faktor!==100?' Preise heute: '+l.faktor+' %.':''):'Der Laden ist gerade zu. Du kannst stöbern, kaufen geht, wenn der Meister ihn öffnet.';ladenHeldZeigen()}
+  let l={};try{l=await api('/api/laden')}catch(e){}ladenOffen=!!l.offen;
+  $('#ladenHinweis').textContent=l.offen?'Der Laden ist offen. Lege Artikel in den Warenkorb und schick ihn dem Meister, er bestätigt den Kauf.'+(l.faktor&&l.faktor!==100?' Preise heute: '+l.faktor+' %.':''):'Der Laden ist gerade zu. Du kannst stöbern, einkaufen geht, wenn der Meister ihn öffnet.';
+  if($('#ladenBrowser').ladenNeu)$('#ladenBrowser').ladenNeu();ladenHeldZeigen()}
+let ladenOffen=false;
+const korbBase=()=>'/api/myheroes/'+encodeURIComponent($('#ladenHeld').value)+'/warenkorb';
+function korbZeigen(z){const k=z.korb,el=$('#ladenKorb'),d=z.letzte&&z.letzte[0];
+  const ent=d?`<p class="small">${d.status==='freigegeben'?'<span class="pill ok">freigegeben</span>':'<span class="pill warn">abgelehnt</span>'} Letzter Einkauf (${esc(d.summeText)}), entschieden ${esc(d.entschieden||'')}${d.kommentar?': '+esc(d.kommentar):''}</p>`:'';
+  if(!k||!k.pos.length){el.innerHTML=`<h3>Warenkorb</h3><p class="mut">${ladenOffen?'Leer. Artikel unten mit „In den Warenkorb“ hineinlegen.':'Leer.'}</p>${ent}`;return}
+  const beim=k.status==='angefragt';
+  el.innerHTML=`<div class="spread"><h3>Warenkorb</h3>${beim?'<span class="pill">liegt beim Meister</span>':''}</div>
+    <div class="tw"><table class="small zebra"><thead><tr><th>Artikel</th><th>Anzahl</th><th>Stück</th><th>Summe</th><th></th></tr></thead><tbody>
+    ${k.pos.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td class="mono">${p.anzahl}</td><td class="mono">${kreuzerText(p.stueck)}${p.meisterpreis!=null&&p.meisterpreis!==p.preis?`<div class="small mut">statt ${kreuzerText(p.preis)}</div>`:''}</td>
+      <td class="mono">${kreuzerText(p.summe)}</td><td>${beim?'':`<button class="btn sm" data-kweg="${p.id}" aria-label="${esc(p.name)} entfernen">Entfernen</button>`}</td></tr>`).join('')}</tbody></table></div>
+    <p><b>Zusammen ${esc(k.summeText)}</b> · ${esc(k.held)} hat ${esc(k.geldText)}${k.summe>k.geld?` <span class="pill warn">es fehlen ${kreuzerText(k.summe-k.geld)}</span>`:''}</p>
+    ${beim?`<p class="small mut">Gesendet ${esc(k.gesendet||'')}. Der Meister prüft, ändert eventuell Preise und gibt frei. Erst dann kommt alles ins Gepäck und das Geld wird abgezogen.</p>`
+      :`<button class="btn pri" id="korbSenden">Zur Freigabe an den Meister schicken</button>`}${ent}`}
+async function korbLaden(){try{korbZeigen(await api(korbBase()))}catch(e){$('#ladenKorb').innerHTML='<p class="mut">'+esc(e.message)+'</p>'}}
+$('#ladenKorb').onclick=async e=>{const w=e.target.closest('[data-kweg]');
+  try{if(w){korbZeigen(await api(korbBase()+'/'+w.dataset.kweg,{method:'DELETE'}));return}
+    if(e.target.closest('#korbSenden')){const r=await api(korbBase()+'/senden',{method:'POST'});toast(r.text);korbZeigen(r)}}catch(x){toastErr(x.message)}};
 let ladenBrowserDa=false;
 async function ladenHeldZeigen(){const f=$('#ladenHeld').value;if(!f)return;LS.set('hh-ladenheld',f);$('#ladenBox').innerHTML='<p class="mut">lädt …</p>';
-  ausrOeffnen($('#ladenBox'),'/api/myheroes/'+encodeURIComponent(f),false,true);
-  if(!ladenBrowserDa){ladenBrowserDa=true;await ladenBrowser($('#ladenBrowser'),{meister:false,kaufen:async(name,anzahl)=>{const h=$('#ladenHeld').value;
-    try{const r=await api('/api/myheroes/'+encodeURIComponent(h)+'/ausruestung',{method:'POST',body:{name,anzahl}});toast(r.text);ausrOeffnen($('#ladenBox'),'/api/myheroes/'+encodeURIComponent(h),false,true)}catch(x){toastErr(x.message)}}})}}
+  ausrOeffnen($('#ladenBox'),'/api/myheroes/'+encodeURIComponent(f),false,true);korbLaden();
+  if(!ladenBrowserDa){ladenBrowserDa=true;await ladenBrowser($('#ladenBrowser'),{meister:false,knopf:'In den Warenkorb',zu:()=>!ladenOffen,kaufen:async(name,anzahl)=>{
+    try{korbZeigen(await api(korbBase(),{method:'POST',body:{name,anzahl}}));toast(anzahl+'× '+name+' liegt im Warenkorb.')}catch(x){toastErr(x.message)}}})}}
 $('#ladenHeld').onchange=ladenHeldZeigen;
 
 /* ---------- Termine ---------- */
