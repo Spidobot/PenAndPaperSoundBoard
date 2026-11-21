@@ -16,6 +16,8 @@ public final class Sound {
     public Db db; // für die Session-Liste
     /** Feste Effekt-Knöpfe aus dem alten Soundboard. Datei liegt unter /data/audio/Effects/. */
     public static final Map<String, String> FX = new LinkedHashMap<>();
+    /** Würfelgeräusch für „Hörbar würfeln“: liegt wie die anderen Effekte im Ordner Effects (nicht im Repo). */
+    static final String WUERFEL = "Wuerfel.mp3";
     static {
         FX.put("truhe", "Schatztruhe.mp3"); FX.put("kuh", "Kuh.mp3"); FX.put("avengers", "Avengers.mp3");
         FX.put("ziege", "Bertha.mp3"); FX.put("qadd", "QuestHinzugefuegt.mp3"); FX.put("qdone", "QuestAbgeschlossen.mp3");
@@ -170,8 +172,8 @@ public final class Sound {
             fxVolume = Math.max(0, Math.min(100, ((Number) c.get("value")).intValue()));
         } else if (action.equals("bertha")) {
             berthaAt = Boolean.TRUE.equals(c.get("on")) ? System.currentTimeMillis() + 3_600_000 : 0;
-        } else if (action.equals("wuerfel")) { // Würfelgeräusch (eingebaut, /common/wuerfel.wav), z. B. beim verdeckten Würfeln
-            return fxEvent("@wuerfel");
+        } else if (action.equals("wuerfel")) { // Würfelgeräusch beim verdeckten Würfeln: eigene Datei Effects/Wuerfel.mp3, sonst eingebaut
+            return fxEvent(Files.isRegularFile(root.resolve("Effects").resolve(WUERFEL)) ? fxUrl(WUERFEL) : "@wuerfel");
         } else if (action.equals("fx")) {
             String f = FX.get(String.valueOf(c.get("key")));
             if (f == null) throw new IllegalArgumentException("Diesen Effekt-Knopf gibt es nicht. Bitte Seite neu laden.");
@@ -238,6 +240,7 @@ public final class Sound {
         s.put("serverNow", System.currentTimeMillis()); s.put("listeners", listeners()); s.put("listenerNames", listenerNames()); s.put("fxSeq", fxSeq); s.put("libSeq", libSeq);
         List<String> fxFiles = new ArrayList<>(); // zum Vorladen im Browser
         FX.values().forEach(f -> { if (Files.isRegularFile(root.resolve("Effects").resolve(f))) fxFiles.add(fxUrl(f)); });
+        fxFiles.add(Files.isRegularFile(root.resolve("Effects").resolve(WUERFEL)) ? fxUrl(WUERFEL) : "@wuerfel");
         s.put("fxFiles", fxFiles);
         return s;
     }
