@@ -170,6 +170,8 @@ public final class Sound {
             fxVolume = Math.max(0, Math.min(100, ((Number) c.get("value")).intValue()));
         } else if (action.equals("bertha")) {
             berthaAt = Boolean.TRUE.equals(c.get("on")) ? System.currentTimeMillis() + 3_600_000 : 0;
+        } else if (action.equals("wuerfel")) { // Würfelgeräusch (eingebaut, /common/wuerfel.wav), z. B. beim verdeckten Würfeln
+            return fxEvent("@wuerfel");
         } else if (action.equals("fx")) {
             String f = FX.get(String.valueOf(c.get("key")));
             if (f == null) throw new IllegalArgumentException("Diesen Effekt-Knopf gibt es nicht. Bitte Seite neu laden.");

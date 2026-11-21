@@ -41,7 +41,8 @@ class Player{
       const lost=()=>{if(!el.dataset.want)return;el.dataset.want='';clearTimeout(this.retry[k]);this.retry[k]=setTimeout(()=>this.state&&this.apply(this.state),1500)};
       el.addEventListener('ended',lost);el.addEventListener('error',lost);
       ['waiting','playing','pause','loadstart','canplay'].forEach(ev=>el.addEventListener(ev,()=>this.onStatus&&this.onStatus(k)))}}
-  url(f){const [p,q]=f.split('?');return '/audio/'+p.split('/').map(encodeURIComponent).join('/')+(q?'?'+q:'')}
+  url(f){if(f.startsWith('@'))return '/common/'+f.slice(1)+'.wav'; // eingebaute Geräusche, z. B. @wuerfel
+    const [p,q]=f.split('?');return '/audio/'+p.split('/').map(encodeURIComponent).join('/')+(q?'?'+q:'')}
   /** Position laut Server, auf jetzt hochgerechnet */
   pos(k){const c=this.state&&this.state.ch[k];if(!c)return 0;return c.playing?c.pos+(Date.now()+this.skew-this.state.serverNow)/1000:c.pos}
   /** Uhrabgleich mit dem Server. Verspätete Nachrichten (Proxy puffert) lassen den Server-Zeitpunkt älter wirken;
@@ -215,7 +216,7 @@ async function katalogLaden(){if(!KAT){KAT=(await api('/api/katalog')).filter(x=
 function kreuzerText(k){if(!k)return '0 K';const t=[];for(const[w,n]of[[1000,'D'],[100,'S'],[10,'H'],[1,'K']]){const c=Math.floor(k/w);k-=c*w;if(c)t.push(c+' '+n)}return t.join(' ')}
 const SLOTNAME={nkwaffe1:'Nahkampfwaffe 1',nkwaffe2:'Nahkampfwaffe 2',fkwaffe1:'Fernkampfwaffe',schild1:'Schild / Parierwaffe',ruestung1:'Rüstung 1',ruestung2:'Rüstung 2',ruestung3:'Rüstung 3',ruestung4:'Rüstung 4',ruestung5:'Rüstung 5',ruestung6:'Rüstung 6'};
 const SLOTART={nkwaffe1:'Nahkampfwaffe',nkwaffe2:'Nahkampfwaffe',fkwaffe1:'Fernkampfwaffe',schild1:'Schild',ruestung1:'Rüstung',ruestung2:'Rüstung',ruestung3:'Rüstung',ruestung4:'Rüstung',ruestung5:'Rüstung',ruestung6:'Rüstung'};
-function ausrHtml(z,meister){
+function ausrHtml(z,meister,ohneEinkauf){
   const laden=z.laden||{},fak=laden.faktor||100;
   const ruest=Object.keys(z.plaetze).filter(s=>s.startsWith('ruestung')).length;
   const slots=['nkwaffe1','nkwaffe2','fkwaffe1','schild1',...['ruestung1','ruestung2','ruestung3','ruestung4','ruestung5','ruestung6'].slice(0,Math.max(1,ruest+1))];
@@ -241,12 +242,12 @@ function ausrHtml(z,meister){
 `;
   return `<div class="ausr">
     <p class="cost"><b>Geld ${esc(z.geldText)}</b> · Last <b>${z.gewichtStein}</b> von ${z.tragkraftStein} Stein Tragkraft <span class="small mut">(ohne getragene Rüstung)</span>${z.lastBe?` · <b class="warn">BE +${z.lastBe} durch Last</b>`:''} ${meister?'':` · Laden: <b>${laden.offen?'offen':'zu'}</b>${laden.offen&&fak!==100?' (Preise '+fak+' %)':''}`}</p>
-${meister?teilAngelegt+teilEinkauf:teilEinkauf+teilAngelegt}
+${ohneEinkauf?teilAngelegt:meister?teilAngelegt+teilEinkauf:teilEinkauf+teilAngelegt}
     <datalist id="katlist"></datalist></div>`}
 /** Ausrüstung in root anzeigen und bedienen. nachher(z) wird nach jeder Änderung aufgerufen. */
-async function ausrOeffnen(root,base,meister){let z;
+async function ausrOeffnen(root,base,meister,ohneEinkauf){let z;
   try{[z]=await Promise.all([api(base+'/ausruestung'),katalogLaden()])}catch(e){root.innerHTML=`<p class="mut">${esc(e.message)}</p>`;return}
-  const zeigen=()=>{root.innerHTML=ausrHtml(z,meister);const dl=root.querySelector('#katlist');if(dl)dl.innerHTML=KAT.map(k=>`<option value="${esc(k.name)}">${esc(k.art)} · ${kreuzerText(k.ladenpreis??k.preis)}</option>`).join('')};
+  const zeigen=()=>{root.innerHTML=ausrHtml(z,meister,ohneEinkauf);const dl=root.querySelector('#katlist');if(dl)dl.innerHTML=KAT.map(k=>`<option value="${esc(k.name)}">${esc(k.art)} · ${kreuzerText(k.ladenpreis??k.preis)}</option>`).join('')};
   zeigen();
   const senden=async body=>{try{const r=await api(base+'/ausruestung',{method:'POST',body});toast(r.text);z=r.zustand;zeigen()}catch(x){toastErr(x.message)}};
   root.oninput=e=>{if(!e.target.closest('.aw-neu,.aw-anz'))return;const n=root.querySelector('.aw-neu').value,a=+root.querySelector('.aw-anz').value||1,k=KAT.find(x=>x.name===n),p=root.querySelector('.aw-preis');
@@ -256,3 +257,58 @@ async function ausrOeffnen(root,base,meister){let z;
       if(!KAT.some(k=>k.name===n))return toastErr('„'+n+'“ kennt die helden.jar nicht. Bitte aus der Liste wählen.');senden({name:n,anzahl:a,kaufen:b.dataset.awAdd==='1'})}
     if(b.dataset.awWeg){senden({name:b.closest('[data-item]').dataset.item,anzahl:-(+b.dataset.awWeg)})}
     if(b.dataset.awAnlegen!==undefined){const tr=b.closest('[data-slot]'),t=tr.querySelector('.aw-tal');senden({slot:tr.dataset.slot,name:tr.querySelector('.aw-name').value,talent:t?t.value:''})}}}
+
+/* ---------- Laden-Browser (Meister und Spieler): stöbern nach Kategorien, suchen, sortieren ----------
+   opt: {meister, kaufen(name,anzahl,geschenkt) → Promise, preisSetzen(name,kreuzer|null) → Promise} */
+const LADENKAT=[
+  ['Nahkampfwaffen',k=>/Nahkampfwaffe/.test(k.art)],
+  ['Fernkampfwaffen',k=>/Fernkampfwaffe/.test(k.art)],
+  ['Munition',k=>/^(Pfeil|Bolzen|Kugel|Bleikugel|Schleuderstein|Wurf)/i.test(k.name)&&!/Nahkampf|Fernkampf/.test(k.art)],
+  ['Schilde & Parierwaffen',k=>/Schild|Parierwaffe/.test(k.art)],
+  ['Rüstungen',k=>/Rüstung/.test(k.art)],
+  ['Kleidung',k=>/hemd|hose|mantel|robe|stiefel|schuh|hut|umhang|kleid|gürtel|handschuh|mütze|kappe|weste|rock|tunika|wams|kittel|schal|socken|sandale|gewand|cape|kapuze|tuch\b/i.test(k.name)],
+  ['Behälter & Taschen',k=>/rucksack|beutel|köcher|kiste|truhe|flasche|schlauch|tasche|sack|korb|fass|krug|dose|kästchen|schatulle|futteral|scheide|eimer/i.test(k.name)],
+  ['Licht & Feuer',k=>/fackel|laterne|kerze|lampe|lampenöl|zunder|feuerstein|lunte|docht/i.test(k.name)],
+  ['Reise & Lager',k=>/decke|zelt|schlafsack|kochgeschirr|kessel|pfanne|seil|haken|kompass|karte|proviant|rationen|hängematte|plane|wasserschlauch|angel/i.test(k.name)],
+  ['Werkzeug',k=>/hammer|zange|säge|schaufel|spaten|hacke|meißel|feile|nadel|dietrich|brecheisen|axt\b|beil\b|bohrer|werkzeug|schere|amboss|kelle|messer\b/i.test(k.name)&&!/Nahkampf/.test(k.art)],
+  ['Heilung & Kräuter',k=>/verband|kraut|trank|salbe|blüte|wurz|beere|pilz|tee\b|elixier|heil|gift|pflaster|wurzel|moos|rinde|blatt|samen/i.test(k.name)],
+  ['Schreiben & Wissen',k=>/feder|tinte|papier|pergament|buch|siegel|schreib|kreide|karte/i.test(k.name)],
+  ['Schmuck & Wertsachen',k=>/ring\b|ringe|kette|amulett|brosche|ohrring|armreif|diadem|edelstein|perle|gold|silber/i.test(k.name)&&!/Rüstung|Nahkampf/.test(k.art)],
+  ['Reiten & Tiere',k=>/sattel|zaum|hufeisen|zügel|pferd|futter|sporen|halfter|geschirr|decke, satt/i.test(k.name)],
+  ['Essen & Trinken',k=>/brot|käse|wein|bier|schnaps|met\b|fleisch|wurst|honig|salz|gewürz|pfeffer|mahlzeit|ration|obst|apfel|zucker|mehl|speck|fisch|kaffee|branntwein|likör|saft|milch|butter/i.test(k.name)&&!/Nahkampf|Rüstung/.test(k.art)],
+  ['Haushalt & Pflege',k=>/seife|öl\b|öl,|duft|parfüm|kamm|bürste|spiegel|handtuch|becher|teller|löffel|schüssel|geschirr|besteck|kanne|topf|bad|rasier|nähzeug|zwirn|faden|wolle|stoff|leinen/i.test(k.name)&&!/Nahkampf|Rüstung/.test(k.art)],
+  ['Kunst & Luxus',k=>/gemälde|statue|figur|teppich|wandbehang|vase|porzellan|kristall|glas\b/i.test(k.name)],
+  ['Musik & Spiel',k=>/flöte|laute|harfe|trommel|fiedel|horn\b|leier|würfel|karten|spiel/i.test(k.name)],
+];
+function ladenKategorie(k){for(const[n,f]of LADENKAT)if(f(k))return n;return 'Sonstiges'}
+async function ladenBrowser(root,opt){await katalogLaden();const st={kat:'',q:'',sort:'name',mehr:false};
+  for(const k of KAT)k.kat=ladenKategorie(k);
+  const kats=[...LADENKAT.map(x=>x[0]),'Sonstiges'].map(n=>[n,KAT.filter(k=>k.kat===n).length]).filter(x=>x[1]);
+  root.innerHTML=`<div class="laden"><div class="ladenkat"><button class="link" data-lk="" aria-current="true">Alle <span class="mut">${KAT.length}</span></button>
+      ${kats.map(([n,c])=>`<button class="link" data-lk="${esc(n)}">${esc(n)} <span class="mut">${c}</span></button>`).join('')}</div>
+    <div class="ladenliste"><div class="row" style="align-items:center"><input type="search" class="lq" placeholder="Suchen, z. B. Pfeil, Laterne, Langschwert" style="flex:1;min-width:200px" aria-label="Im Laden suchen">
+      <select class="ls" style="width:auto" aria-label="Sortieren"><option value="name">Name</option><option value="preis">Preis aufsteigend</option><option value="preisab">Preis absteigend</option><option value="gewicht">Gewicht</option></select></div>
+      <div class="tw"><table class="small zebra"><thead><tr><th>Artikel</th><th>Kategorie</th><th>Gewicht</th><th>Preis</th>${opt.meister?'<th>Preis im Laden</th>':''}<th></th></tr></thead><tbody class="lb"></tbody></table></div>
+      <p class="small mut lmehr"></p></div></div>`;
+  const zeigen=()=>{const q=st.q.toLowerCase();let l=KAT.filter(k=>(!st.kat||k.kat===st.kat)&&(!q||k.name.toLowerCase().includes(q)));
+    const p=k=>k.ladenpreis??k.preis;l.sort(st.sort==='preis'?(a,b)=>p(a)-p(b):st.sort==='preisab'?(a,b)=>p(b)-p(a):st.sort==='gewicht'?(a,b)=>a.gewicht-b.gewicht:(a,b)=>a.name.localeCompare(b.name));
+    const n=l.length;if(!st.mehr)l=l.slice(0,150);
+    root.querySelector('.lb').innerHTML=l.map(k=>`<tr data-ln="${esc(k.name)}"><td><b>${esc(k.name)}</b>${k.quelle?` <span class="small mut">${esc(k.quelle)}</span>`:''}</td><td class="small mut">${esc(k.kat)}</td>
+      <td class="mono small">${k.gewicht>=40?(Math.round(k.gewicht/4)/10)+' Stein':k.gewicht+' U'}</td>
+      <td class="mono">${kreuzerText(p(k))}${p(k)!==k.preis?`<div class="small mut">Standard ${kreuzerText(k.preis)}</div>`:''}</td>
+      ${opt.meister?`<td><input type="text" class="lpreis" value="${k.eigenerPreis?esc(kreuzerText(k.ladenpreis)):''}" placeholder="z. B. 3D 5S" style="width:90px" aria-label="Preis im Laden für ${esc(k.name)}"></td>`:''}
+      <td class="nowrap"><input type="number" class="lanz" min="1" value="1" data-nostep style="width:52px" aria-label="Anzahl">
+        <button class="btn sm pri" data-lkauf="1">Kaufen</button>${opt.meister?'<button class="btn sm" data-lkauf="0" title="ohne Geld abzuziehen">Geben</button>':''}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">Nichts gefunden.</td></tr>';
+    root.querySelector('.lmehr').innerHTML=n>l.length?`${l.length} von ${n} angezeigt. <button class="link" data-lmehr>alle zeigen</button>`:`${n} Artikel`};
+  zeigen();
+  let t=null;root.querySelector('.lq').oninput=e=>{clearTimeout(t);t=setTimeout(()=>{st.q=e.target.value.trim();st.mehr=false;zeigen()},200)};
+  root.querySelector('.ls').onchange=e=>{st.sort=e.target.value;zeigen()};
+  root.onclick=async e=>{const k=e.target.closest('[data-lk]');if(k){st.kat=k.dataset.lk;st.mehr=false;root.querySelectorAll('[data-lk]').forEach(b=>b.setAttribute('aria-current',b===k));zeigen();return}
+    if(e.target.closest('[data-lmehr]')){st.mehr=true;zeigen();return}
+    const b=e.target.closest('[data-lkauf]');if(!b)return;const tr=b.closest('[data-ln]');
+    await opt.kaufen(tr.dataset.ln,+tr.querySelector('.lanz').value||1,b.dataset.lkauf==='0')};
+  root.addEventListener('change',async e=>{const i=e.target.closest('.lpreis');if(!i||!opt.preisSetzen)return;const name=i.closest('[data-ln]').dataset.ln,v=preisText(i.value);
+    if(Number.isNaN(v))return toastErr('Preis nicht lesbar. Beispiele: „3D 5S“, „12 S“, „8H“ oder nur eine Zahl (Silbertaler).');
+    await opt.preisSetzen(name,v);KAT=null;await katalogLaden();for(const x of KAT)x.kat=ladenKategorie(x);zeigen()})}
+function preisText(t){t=String(t).trim().toUpperCase().replace(',','.');if(!t)return null;if(/^\d+(\.\d+)?$/.test(t))return Math.round(+t*100);
+  let k=0,ok=false;for(const m of t.matchAll(/(\d+(?:\.\d+)?)\s*([DSHK])/g)){ok=true;k+=Math.round(+m[1]*{D:1000,S:100,H:10,K:1}[m[2]])}return ok?k:NaN}

@@ -358,3 +358,10 @@ tr.geplant td{background:var(--acc-soft)}
 .nscz{border-bottom:1px solid var(--line);padding:4px 0}
 .nscz summary{cursor:pointer}
 .nscz pre{white-space:pre-wrap;font-family:inherit;margin:6px 0}
+
+/* Laden-Browser */
+.laden{display:grid;grid-template-columns:200px 1fr;gap:16px;align-items:start}
+.ladenkat{display:grid;gap:2px;position:sticky;top:10px}
+.ladenkat .link{text-align:left;padding:4px 6px;border-radius:6px;display:flex;justify-content:space-between}
+.ladenkat .link[aria-current="true"]{background:var(--panel2,rgba(255,255,255,.06));font-weight:700}
+@media (max-width:800px){.laden{grid-template-columns:1fr}.ladenkat{position:static;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}}

@@ -93,7 +93,8 @@ html,body{margin:0}
     <div class="row" style="margin-bottom:14px"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Laden</h1></div>
     <div class="card"><div class="row" style="align-items:center"><label class="label" for="ladenHeld" style="margin:0">Wer kauft ein?</label><select id="ladenHeld" style="width:auto"></select>
       <span class="small mut" id="ladenHinweis"></span></div></div>
-    <div class="card" id="ladenBox"></div>
+    <div class="card" id="ladenBrowser"></div>
+    <div class="card"><h3>Dein Gepäck</h3><div id="ladenBox"></div></div>
   </div>
   <div id="s-termine" hidden>
     <div class="row" style="margin-bottom:14px"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Termine</h1></div>
@@ -562,8 +563,12 @@ async function ladenStatus(){try{const l=await api('/api/laden');$('#ladenStatus
 async function ladenView(){let hs;try{hs=(await api('/api/myheroes')).filter(h=>h.status!=='neu')}catch(e){return toastErr(e.message)}
   if(!hs.length){$('#ladenHeld').innerHTML='';$('#ladenHinweis').textContent='Einkaufen geht erst mit einem Helden, den der Meister übernommen hat.';$('#ladenBox').innerHTML='';return}
   const last=LS.get('hh-ladenheld','');$('#ladenHeld').innerHTML=hs.map(h=>`<option value="${esc(h.file)}"${h.file===last?' selected':''}>${esc(h.name)}</option>`).join('');
-  $('#ladenHinweis').textContent='';ladenHeldZeigen()}
-function ladenHeldZeigen(){const f=$('#ladenHeld').value;if(!f)return;LS.set('hh-ladenheld',f);$('#ladenBox').innerHTML='<p class="mut">lädt …</p>';ausrOeffnen($('#ladenBox'),'/api/myheroes/'+encodeURIComponent(f),false)}
+  let l={};try{l=await api('/api/laden')}catch(e){}$('#ladenHinweis').textContent=l.offen?'Der Laden ist offen.'+(l.faktor&&l.faktor!==100?' Preise heute: '+l.faktor+' %.':''):'Der Laden ist gerade zu. Du kannst stöbern, kaufen geht, wenn der Meister ihn öffnet.';ladenHeldZeigen()}
+let ladenBrowserDa=false;
+async function ladenHeldZeigen(){const f=$('#ladenHeld').value;if(!f)return;LS.set('hh-ladenheld',f);$('#ladenBox').innerHTML='<p class="mut">lädt …</p>';
+  ausrOeffnen($('#ladenBox'),'/api/myheroes/'+encodeURIComponent(f),false,true);
+  if(!ladenBrowserDa){ladenBrowserDa=true;await ladenBrowser($('#ladenBrowser'),{meister:false,kaufen:async(name,anzahl)=>{const h=$('#ladenHeld').value;
+    try{const r=await api('/api/myheroes/'+encodeURIComponent(h)+'/ausruestung',{method:'POST',body:{name,anzahl}});toast(r.text);ausrOeffnen($('#ladenBox'),'/api/myheroes/'+encodeURIComponent(h),false,true)}catch(x){toastErr(x.message)}}})}}
 $('#ladenHeld').onchange=ladenHeldZeigen;
 
 /* ---------- Termine ---------- */

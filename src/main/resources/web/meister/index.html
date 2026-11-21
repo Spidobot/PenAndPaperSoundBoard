@@ -20,6 +20,7 @@
     <a href="#m-sessions" data-v="m-sessions">Sessions</a>
     <a href="#m-spieler" data-v="m-spieler">Spieler</a>
     <a href="#m-termine" data-v="m-termine">Termine</a>
+    <a href="#m-laden" data-v="m-laden">Laden</a>
     <a href="#m-namen" data-v="m-namen">NSC-Generator</a>
     <a href="#m-config" data-v="m-config">Konfiguration</a>
     <a href="#" id="logout">Abmelden</a>
@@ -109,7 +110,7 @@
         <datalist id="qlist"></datalist>
         <div class="chips" id="quick"></div>
         <div class="row probebar"><label class="small" for="pmod"><b>Probe würfeln:</b> Erschwernis (+) / Erleichterung (−)</label><input type="number" id="pmod" value="0" style="width:80px" aria-label="Erschwernis der Probe">
-          <span class="small mut">Gewürfelte Zahlen je Würfel der Reihe nach eintragen (springt selbst weiter), das Ergebnis steht sofort daneben.</span><button class="btn sm pri" type="button" id="pverdeckt" title="Würfelt für alle angezeigten Proben, die Spieler sehen nichts davon">Verdeckt würfeln</button><button class="btn sm" type="button" id="pclear">Würfel leeren</button></div>
+          <span class="small mut">Gewürfelte Zahlen je Würfel der Reihe nach eintragen (springt selbst weiter), das Ergebnis steht sofort daneben.</span><button class="btn sm pri" type="button" id="pverdeckt" title="Würfelt für alle angezeigten Proben, die Spieler sehen nichts davon">Verdeckt würfeln</button><label class="small" style="display:inline-flex;gap:4px;align-items:center" title="Spieler hören im Soundstream ein Würfelgeräusch (Lautstärke der Effekte)"><input type="checkbox" id="phoerbar"> Wurf hörbar</label><button class="btn sm" type="button" id="pclear">Würfel leeren</button></div>
         <div class="tw"><table><thead><tr><th>Held</th><th>Treffer</th><th>Art</th><th>Wert</th><th style="width:14%"></th><th>Probe (W20 je Eigenschaft)</th><th>Details</th></tr></thead><tbody id="rbody"></tbody></table></div>
       </div>
       <div class="card" id="awardCard">
@@ -146,6 +147,14 @@
           <button class="btn sm pri" type="submit">Anlegen</button></form></div>
       <div class="card tw"><table><thead><tr><th>Name</th><th>Mail</th><th>Zuletzt da</th><th>Letzte Anmeldung</th><th>Helden</th><th>XML-Upload</th><th title="Pärchen: stimmt bei Terminen auch für diese Person ab">Termine auch für</th><th></th></tr></thead><tbody id="acctab"></tbody></table></div>
       <p class="small mut">Spieler melden sich mit Name und Passwort an und können das Passwort selbst ändern. Die Mail-Adresse hinterlegen sie selbst; sie gilt erst nach Klick auf den Bestätigungslink.</p>
+    </section>
+
+    <section class="view" id="m-laden" hidden>
+      <div class="spread"><h1>Laden</h1><span class="small mut" id="mLadenStatus"></span></div>
+      <div class="card"><div class="row" style="align-items:center"><label class="label" for="mLadenHeld" style="margin:0">Für wen?</label><select id="mLadenHeld" style="width:auto"></select>
+        <span class="small mut">„Kaufen“ zieht das Geld des Helden ab, „Geben“ trägt es geschenkt ein. „Preis im Laden“ je nach Verfügbarkeit, leer = Standardpreis × Faktor (Konfiguration).</span></div></div>
+      <div class="card" id="mLadenBrowser"></div>
+      <div class="card"><h3 id="mLadenInvTitel">Gepäck</h3><div id="mLadenInv"></div></div>
     </section>
 
     <section class="view" id="m-namen" hidden>
@@ -239,7 +248,7 @@
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
   $$('.side a[data-v]').forEach(a=>a.dataset.v===h?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'));
-  ({'m-namen':namenView,'m-helden':loadHeroes,'m-freigaben':loadFg,'m-session':loadSession,'m-sessions':loadSessions,'m-spieler':loadAccounts,'m-termine':loadPolls,'m-config':loadCfg})[h]?.();if(h==='m-sound')setTimeout(fitLists,0);}
+  ({'m-laden':mLadenView,'m-namen':namenView,'m-helden':loadHeroes,'m-freigaben':loadFg,'m-session':loadSession,'m-sessions':loadSessions,'m-spieler':loadAccounts,'m-termine':loadPolls,'m-config':loadCfg})[h]?.();if(h==='m-sound')setTimeout(fitLists,0);}
 addEventListener('hashchange',route);
 
 /* ---------- Soundboard ---------- */
@@ -605,7 +614,11 @@ $('#rbody').addEventListener('input',e=>{const i=e.target.closest('.probe input'
 $('#pmod').oninput=()=>$$('#rbody .probe').forEach(probeAuswerten);
 $('#pverdeckt').onclick=()=>{const b=$$('#rbody .probe');if(!b.length)return toast('Erst oben eine Fertigkeit suchen, z. B. Sinnenschärfe');
   for(const box of b){box.querySelectorAll('input').forEach(i=>{i.value=1+Math.floor(Math.random()*20);i.classList.remove('falsch')});probeAuswerten(box)}
-  toast(b.length+' Proben verdeckt gewürfelt')};
+  if($('#phoerbar').checked)api('/api/sound/cmd',{method:'POST',body:{action:'wuerfel'}}).catch(()=>{});
+  toast(b.length+' Proben gewürfelt'+($('#phoerbar').checked?', die Spieler hören das Würfelgeräusch':', die Spieler bekommen nichts mit'))};
+const pKnopf=()=>{const h=$('#phoerbar').checked;$('#pverdeckt').textContent=h?'Hörbar würfeln':'Verdeckt würfeln';$('#pverdeckt').title=h?'Würfelt für alle angezeigten Proben; die Spieler hören das Würfelgeräusch, sehen aber keine Ergebnisse':'Würfelt für alle angezeigten Proben, die Spieler bekommen nichts mit'};
+try{$('#phoerbar').checked=!!JSON.parse(localStorage.getItem('hh-phoerbar')||'false')}catch(_){}pKnopf();
+$('#phoerbar').onchange=e=>{try{localStorage.setItem('hh-phoerbar',JSON.stringify(e.target.checked))}catch(_){}pKnopf()};
 $('#pclear').onclick=()=>{PW={};renderSearch();const f=$('#rbody .probe input');if(f)f.focus()};
 /* AP und SE vormerken */
 let awSe=[],awOv={};const MUENZ=['Dukat','Silbertaler','Heller','Kreuzer'],MKURZ={Dukat:'D',Silbertaler:'S',Heller:'H',Kreuzer:'K'};
@@ -851,7 +864,20 @@ $('#nNsc').onclick=async()=>{LS.set('hh-ngen',$('#nGen').value);const gen=$('#nG
   $('#nNscList').innerHTML=l.map(o=>{const z=nscZeile(o,gen);return `<details class="nscz"><summary><b>${esc(o.name)}</b> <span class="small mut">${z.kurz.map(esc).join(' · ')}</span></summary>
     <pre>${esc(z.lang)}</pre><button class="btn sm" data-nsc="${esc(z.lang)}">Kopieren</button></details>`}).join('')};
 $('#nNscList').onclick=e=>{const b=e.target.closest('[data-nsc]');if(!b)return;navigator.clipboard?.writeText(b.dataset.nsc).then(()=>toast('NSC kopiert'),()=>toast('Kopieren geht hier nicht, bitte markieren'))};
-/* ---------- Laden ---------- */
+/* ---------- Laden (Meister): stöbern, Preise, für einen Helden kaufen oder geben ---------- */
+let mLadenOffen=false;
+async function mLadenView(){try{const l=await api('/api/laden');$('#mLadenStatus').innerHTML=(l.offen?'<span class="pill ok">für Spieler offen</span>':'<span class="pill">für Spieler zu</span>')+(l.faktor!==100?' · Preise '+l.faktor+' %':'')+' · <a href="#m-config">Einstellungen</a>'}catch(e){}
+  const hs=heroes.length?heroes:await api('/api/heroes').catch(()=>[]);const last=LS.get('hh-mladenheld','');
+  $('#mLadenHeld').innerHTML=hs.filter(h=>!h.error).map(h=>`<option value="${esc(h.file)}"${h.file===last?' selected':''}>${esc(h.name)}</option>`).join('');
+  if(!mLadenOffen){mLadenOffen=true;await ladenBrowser($('#mLadenBrowser'),{meister:true,
+    kaufen:async(name,anzahl,geschenkt)=>{const f=$('#mLadenHeld').value;if(!f)return toast('Erst einen Helden wählen');
+      try{const r=await api('/api/heroes/'+encodeURIComponent(f)+'/ausruestung',{method:'POST',body:{name,anzahl,kaufen:!geschenkt}});toast(r.text);mLadenInv()}catch(x){toastErr(x.message)}},
+    preisSetzen:async(name,preis)=>{try{const r=await api('/api/laden/preis',{method:'POST',body:{name,preis}});toast(r.text)}catch(x){toastErr(x.message)}}})}
+  mLadenInv()}
+function mLadenInv(){const f=$('#mLadenHeld').value;if(!f){$('#mLadenInv').innerHTML='<p class="mut">Keine Helden.</p>';return}LS.set('hh-mladenheld',f);
+  $('#mLadenInvTitel').textContent='Gepäck von '+$('#mLadenHeld').selectedOptions[0].text;ausrOeffnen($('#mLadenInv'),'/api/heroes/'+encodeURIComponent(f),true,true)}
+$('#mLadenHeld').onchange=mLadenInv;
+/* ---------- Laden-Einstellungen ---------- */
 async function ladenLaden(){try{const l=await api('/api/laden');$('#ladenOffen').checked=l.offen;$('#ladenFaktor').value=l.faktor}catch(e){}}
 $('#ladenOffen').onchange=async e=>{try{await api('/api/laden',{method:'POST',body:{offen:e.target.checked}});toast(e.target.checked?'Laden ist offen: Spieler können einkaufen.':'Laden ist zu.')}catch(x){toastErr(x.message);e.target.checked=!e.target.checked}};
 $('#ladenFaktor').onchange=async e=>{try{const l=await api('/api/laden',{method:'POST',body:{faktor:+e.target.value}});toast('Ladenpreise: '+l.faktor+' % vom Standardpreis');kZeigen(true)}catch(x){toastErr(x.message)}};
