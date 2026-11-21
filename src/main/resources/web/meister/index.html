@@ -661,7 +661,7 @@ async function mBglLaden(file){MBGL.file=file;try{MBGL.list=await api('/api/hero
   const el=$('#mBgl');if(el)el.innerHTML=mBglHtml()}
 function mBglHtml(){if(!MBGL.list.length)return '';
   return '<h2 style="margin-top:18px">Begleiter bearbeiten</h2>'+MBGL.list.map(b=>`<div class="card" style="margin:8px 0" data-mb="${b.idx}">
-    <div class="spread"><b>${esc(b.name)}</b><span class="small mut">${esc(b.art)}</span></div><p class="small mut">${esc(b.hinweis)}</p>
+    <div class="spread"><b>${esc(b.name)}</b><span class="row"><span class="small mut">${esc(b.art)}</span>${MBGL.frage===b.idx?`<button class="btn sm danger" data-mbdel="${b.idx}">Wirklich entfernen? Geht nicht zurück</button><button class="btn sm" data-mbnein>Nein</button>`:`<button class="btn sm" data-mbfrage="${b.idx}">Begleiter entfernen (z. B. gestorben)</button>`}</span></div><p class="small mut">${esc(b.hinweis)}</p>
     ${b.vertraut?`<p class="small">Vertrauten-AP: <b>${b.frei}</b> frei von ${b.ap} · Loyalität ${b.lo??15} · von der Hexe übertragen ${b.uebertragen}
       · Sonder-AP <input type="number" min="1" data-nostep class="mbap" style="width:80px" aria-label="Sonder-AP für ${esc(b.name)}"> <button class="btn sm" data-mbap>Geben</button>
       <br><span class="mut">Beim Aussenden bekommt ein Vertrauter automatisch ein Viertel der AP der Hexe (WdZ S. 124).</span></p>`:''}
@@ -680,6 +680,10 @@ document.addEventListener('change',e=>{const s=e.target.closest('#mBgl select.mb
 document.addEventListener('change',async e=>{const i=e.target.closest('#mBgl [data-mbw]');if(!i)return;const idx=i.closest('[data-mb]').dataset.mb;
   try{const r=await api('/api/heroes/'+encodeURIComponent(MBGL.file)+'/begleiter/'+idx+'/wert',{method:'POST',body:{key:i.dataset.mbw,wert:+i.value}});toast(r.text)}catch(x){toastErr(x.message)}mBglLaden(MBGL.file)});
 document.addEventListener('click',e=>{const r=e.target.closest('#mBgl [data-mbri]');if(r&&r.dataset.ri)regelInfo(r.dataset.ri,'',true,'Tierfähigkeit')});
+document.addEventListener('click',async e=>{const f=e.target.closest('#mBgl [data-mbfrage]'),n=e.target.closest('#mBgl [data-mbnein]'),x=e.target.closest('#mBgl [data-mbdel]');
+  if(f){MBGL.frage=+f.dataset.mbfrage;$('#mBgl').innerHTML=mBglHtml()}
+  if(n){MBGL.frage=null;$('#mBgl').innerHTML=mBglHtml()}
+  if(x){MBGL.frage=null;try{const r=await api('/api/heroes/'+encodeURIComponent(MBGL.file)+'/begleiter/'+x.dataset.mbdel,{method:'DELETE'});toast(r.text)}catch(y){toastErr(y.message)}mBglLaden(MBGL.file)}});
 document.addEventListener('click',async e=>{const b=e.target.closest('#mBgl [data-mbsf], #mBgl [data-mbap]');if(!b)return;const card=b.closest('[data-mb]'),idx=card.dataset.mb,base='/api/heroes/'+encodeURIComponent(MBGL.file)+'/begleiter/'+idx+'/';
   try{let r;if(b.dataset.mbsf!==undefined){const s=card.querySelector('.mbsf'),n=s.value;if(!n)return toast('Erst auswählen, was der Begleiter lernt');const ap=card.querySelector('.mbsfap'),wahl=card.querySelector('.mbwahl').value.trim();
       if(s.selectedOptions[0].dataset.wahl&&!wahl)return toast(n+' braucht einen Wert, z. B. Hinterhalt 12, Gelände Wald, Trick Pfötchen');

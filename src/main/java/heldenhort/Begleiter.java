@@ -451,6 +451,25 @@ public class Begleiter {
         return name(w) + " kann jetzt " + was + (ap > 0 ? " (" + ap + " AP)" : "");
     }
 
+    /** Meister: Begleiter aus dem Helden entfernen (z. B. gestorben). Datenbank-Einträge der folgenden Begleiter rücken nach. */
+    private synchronized String entfernen(String file, int idx) throws Exception {
+        Document d = adv.read(file);
+        Element held = held(d);
+        List<Element> ws = wesen(held);
+        if (idx < 0 || idx >= ws.size()) throw new NotFoundResponse("Diesen Begleiter gibt es im Helden nicht mehr.");
+        Element w = ws.get(idx);
+        String name = name(w);
+        Node geg = w.getParentNode();
+        geg.getParentNode().removeChild(geg);
+        Advance.ereignis(d, held, "Begleiter entfernt", name, 0, 0, "vom Meister entfernt");
+        adv.write(file, d);
+        for (String t : List.of("begleiter", "begleiter_log", "begleiter_kann")) {
+            db.exec("DELETE FROM " + t + " WHERE file=? AND idx=?", file, idx);
+            db.exec("UPDATE " + t + " SET idx=idx-1 WHERE file=? AND idx>?", file, idx);
+        }
+        return name + " ist aus " + held.getAttribute("name") + " entfernt.";
+    }
+
     // ------------------------------------------------------------------ Routen
 
     public void routes(Javalin m, Javalin s) {
@@ -486,6 +505,7 @@ public class Begleiter {
             Map<?, ?> b = ctx.bodyAsClass(Map.class);
             ctx.json(Map.of("text", sfEintragen(ctx.pathParam("file"), Integer.parseInt(ctx.pathParam("idx")), App.str(b.get("name")), App.str(b.get("wahl")), b.get("ap") instanceof Number n ? n.intValue() : 0)));
         });
+        m.delete("/api/heroes/{file}/begleiter/{idx}", ctx -> ctx.json(Map.of("text", entfernen(ctx.pathParam("file"), Integer.parseInt(ctx.pathParam("idx"))))));
         m.post("/api/heroes/{file}/begleiter/{idx}/ap", ctx -> { // Sonder-AP für einen Vertrauten
             String file = ctx.pathParam("file");
             int idx = Integer.parseInt(ctx.pathParam("idx"));
