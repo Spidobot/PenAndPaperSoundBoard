@@ -34,7 +34,7 @@ Push auf `main` baut per GitHub Actions das Image auf ghcr.io.
 - Laden: Meister öffnet ihn (Session-Ansicht, Preisfaktor %). Tragkraft = KK Stein (WdS S. 144), getragene Rüstung zählt nicht als Last; Sperre und Toleranz in der Konfiguration. Begleiter (gegenstand mit Wesen) sind kein Gepäck.
 - NSC-Namen: Namengeneratoren.xml/Namenlisten.xml der Jar; Link auf rpgenerator.net/dsa.
 - Battlemap: Konzept in docs/battlemap-konzept.md, noch nicht umgesetzt.
-- Initiative: Karte in der Session-Ansicht, Zustand je Session als JSON (db „initiative-<id>“). INI-Basis der Helden aus XML (eigenschaft „ini“) + Kampfreflexe 4 + Kampfgespür 2. Hausregel-Checkbox (global, „iniHausregel“): höchste INI handelt zuletzt.
+- Initiative: Karte in der Session-Ansicht, Zustand je Session als JSON (db „initiative-<id>“). INI-Basis der Helden aus XML (eigenschaft „ini“) + Kampfreflexe 4 + Kampfgespür 2. Hausregel-Checkbox (global, „iniHausregel“): höchste INI handelt zuletzt. Treffer: TP minus Gesamt- oder Zonen-RS (Zone W20 nach WdS S. 108), LeP/RS/Wundschwelle der Helden aus XMLDatenGenerator.genDaten der Jar (/api/heroes/{file}/kampfwerte).
 
 ## Mails und Freigaben
 - Freigaben: eine Mail je Held, erst wenn alle Punkte entschieden sind (30 s Pause für Korrekturen), mit Begründungen.

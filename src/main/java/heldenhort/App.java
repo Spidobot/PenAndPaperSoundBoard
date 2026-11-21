@@ -251,6 +251,7 @@ public final class App {
             st.put("kaempfer", b.get("kaempfer"));
             st.put("runde", b.get("runde") instanceof Number n ? n.intValue() : 1);
             st.put("dran", str(b.get("dran")));
+            st.put("rsModus", "zonen".equals(str(b.get("rsModus"))) ? "zonen" : "gesamt");
             db.put("initiative-" + ctx.pathParam("id"), JSON.writeValueAsString(st));
             if (b.get("hausregel") != null) db.put("iniHausregel", Boolean.TRUE.equals(b.get("hausregel")) ? "1" : "0");
             ctx.json(Map.of("ok", true));

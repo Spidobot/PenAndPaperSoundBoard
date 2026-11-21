@@ -367,6 +367,40 @@ public class Ausruestung {
         return 0;
     }
 
+    // ------------------------------------------------------------------ Kampfwerte (für LeP-/Treffer-Verfolgung in der Initiative)
+
+    /** LeP, Wundschwelle und RS je Zone, wie die helden.jar sie für den Bogen rechnet (XMLDatenGenerator). */
+    Map<String, Object> kampfwerte(String file) throws Exception {
+        Path p = heroes.file(file);
+        synchronized (jar) {
+            ClassLoader l = jar.loader(), old = Thread.currentThread().getContextClassLoader();
+            Thread.currentThread().setContextClassLoader(l);
+            try {
+                l.loadClass("helden.framework.settings.Setting").getMethod("initAll").invoke(null);
+                Object xp = l.loadClass("helden.framework.held.persistenz.XMLPersistierer").getConstructor().newInstance();
+                Object h = ((List<?>) Creation.call(xp, "ladeHelden", p.toFile())).get(0);
+                org.w3c.dom.Document d = (org.w3c.dom.Document) Creation.call(l.loadClass("helden.plugin.datenxmlplugin.XMLDatenGenerator"), "genDaten", h, 3);
+                Element root = d.getDocumentElement();
+                Map<String, Object> m = new LinkedHashMap<>();
+                Element le = Heroes.first(root, "lebensenergie");
+                m.put("le", le == null ? null : num(Heroes.first(le, "akt")));
+                Element ws = Heroes.first(root, "wundschwelle");
+                m.put("ws", ws == null ? null : num(ws));
+                Element rz = Heroes.first(root, "ruestungzonen");
+                Map<String, Integer> rs = new LinkedHashMap<>();
+                if (rz != null) for (String z : List.of("kopf", "brust", "ruecken", "bauch", "linkerarm", "rechterarm", "linkesbein", "rechtesbein", "gesamtschutz", "behinderung"))
+                    if (Heroes.first(rz, z) != null) rs.put(z, num(Heroes.first(rz, z)));
+                m.put("rs", rs);
+                return m;
+            } finally { Thread.currentThread().setContextClassLoader(old); }
+        }
+    }
+
+    private static Integer num(Element e) {
+        if (e == null) return null;
+        try { return Integer.parseInt(e.getTextContent().trim()); } catch (NumberFormatException x) { return null; }
+    }
+
     // ------------------------------------------------------------------ NSC-Namen
 
     private volatile Map<String, List<String>> namenlisten;
@@ -472,6 +506,7 @@ public class Ausruestung {
             ctx.json(ladenInfo());
         });
         m.get("/api/laden", ctx -> ctx.json(ladenInfo()));
+        m.get("/api/heroes/{file}/kampfwerte", ctx -> ctx.json(kampfwerte(heroes.file(ctx.pathParam("file")).getFileName().toString())));
         m.get("/api/namen/generatoren", ctx -> ctx.json(generatoren()));
         m.get("/api/namen", ctx -> ctx.json(namen(App.str(ctx.queryParam("g")), "w".equals(ctx.queryParam("s")), "1".equals(ctx.queryParam("adlig")),
                 ctx.queryParam("n") == null ? 10 : Integer.parseInt(ctx.queryParam("n")))));
