@@ -226,19 +226,22 @@ function ausrHtml(z,meister){
       <td>${cand.length?`<select class="aw-name" aria-label="${SLOTNAME[s]} wählen"><option value="">– ablegen –</option>${cand.map(i=>`<option${(z.plaetze[s]||'').startsWith(i.name)?' selected':''}>${esc(i.name)}</option>`).join('')}</select>
         ${waffe?`<select class="aw-tal" aria-label="Talent">${tal.map(t=>`<option${(z.plaetze[s]||'').includes('('+t+')')?' selected':''}>${esc(t)}</option>`).join('')}</select>`:''}
         <button class="btn sm" data-aw-anlegen>Übernehmen</button>`:'<span class="small mut">nichts Passendes im Gepäck</span>'}</td></tr>`};
-  return `<div class="ausr">
-    <p class="cost"><b>Geld ${esc(z.geldText)}</b> · Last <b>${z.gewichtStein}</b> von ${z.tragkraftStein} Stein Tragkraft <span class="small mut">(ohne getragene Rüstung)</span>${z.lastBe?` · <b class="warn">BE +${z.lastBe} durch Last</b>`:''} ${meister?'':` · Laden: <b>${laden.offen?'offen':'zu'}</b>${laden.offen&&fak!==100?' (Preise '+fak+' %)':''}`}</p>
-    <h4>Angelegt</h4><div class="tw"><table class="small zebra"><tbody>${slots.map(slotZeile).join('')}</tbody></table></div>
+  const teilAngelegt=`    <h4>Angelegt</h4><div class="tw"><table class="small zebra"><tbody>${slots.map(slotZeile).join('')}</tbody></table></div>
     <h4>Im Gepäck</h4><div class="tw"><table class="small zebra"><thead><tr><th>Gegenstand</th><th>Anzahl</th><th>Gewicht</th><th>Wert</th><th></th></tr></thead><tbody>
       ${z.inventar.map(i=>`<tr data-item="${esc(i.name)}"><td>${esc(i.name)} <span class="small mut">${esc(i.art)}</span></td><td class="mono">${i.anzahl}</td>
         <td class="mono small">${i.gewicht!=null?Math.round(i.gewicht*i.anzahl)+' U':''}</td><td class="mono small">${i.preis!=null?kreuzerText(i.preis*i.anzahl):''}</td>
         <td class="nowrap"><button class="btn sm" data-aw-weg="1" title="einen weniger">−1</button>${i.anzahl>1?`<button class="btn sm" data-aw-weg="${i.anzahl}">alle weg</button>`:''}</td></tr>`).join('')||'<tr><td colspan="5" class="mut">Nichts im Gepäck.</td></tr>'}</tbody></table></div>
-    <h4>${meister?'Gegenstand eintragen':'Einkaufen'}</h4>
+`;
+  const teilEinkauf=`    <h4>${meister?'Gegenstand eintragen':'Einkaufen'}</h4>
     ${meister||laden.offen?`<div class="row" style="align-items:center"><input type="text" class="aw-neu" list="katlist" placeholder="Gegenstand suchen, z. B. Pfeil, Wolldecke" style="width:280px" aria-label="Gegenstand">
       <input type="number" class="aw-anz" min="1" value="1" data-nostep style="width:70px" aria-label="Anzahl"><span class="small aw-preis mut"></span>
       ${meister?'<button class="btn sm" data-aw-add="0">Eintragen (geschenkt)</button><button class="btn sm pri" data-aw-add="1">Kaufen (Geld abziehen)</button>':'<button class="btn sm pri" data-aw-add="1">Kaufen</button>'}</div>
       <p class="small mut">Preise und Gewichte aus der helden.jar (Aventurisches Arsenal, Meisterschirm …)${fak!==100?', Ladenpreise '+fak+' %':''}.</p>`
       :'<p class="small mut">Der Laden ist gerade zu. Der Meister öffnet ihn, wenn ihr einkaufen könnt.</p>'}
+`;
+  return `<div class="ausr">
+    <p class="cost"><b>Geld ${esc(z.geldText)}</b> · Last <b>${z.gewichtStein}</b> von ${z.tragkraftStein} Stein Tragkraft <span class="small mut">(ohne getragene Rüstung)</span>${z.lastBe?` · <b class="warn">BE +${z.lastBe} durch Last</b>`:''} ${meister?'':` · Laden: <b>${laden.offen?'offen':'zu'}</b>${laden.offen&&fak!==100?' (Preise '+fak+' %)':''}`}</p>
+${meister?teilAngelegt+teilEinkauf:teilEinkauf+teilAngelegt}
     <datalist id="katlist"></datalist></div>`}
 /** Ausrüstung in root anzeigen und bedienen. nachher(z) wird nach jeder Änderung aufgerufen. */
 async function ausrOeffnen(root,base,meister){let z;

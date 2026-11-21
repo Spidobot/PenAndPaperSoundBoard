@@ -57,6 +57,7 @@ html,body{margin:0}
         <p id="pstat" class="small mut">Nicht verbunden</p>
         <label class="small tsvol"><span>Lautstärke</span><input type="range" class="vol" id="pvol" min="0" max="100" value="70" aria-label="Lautstärke"></label></div>
       <button class="tile" data-go="s-termine"><span class="ico">⧗</span><h2>Termine</h2><span class="mut">Abstimmen, wann die nächste Runde stattfindet.</span><span class="dot" id="pollDot" hidden title="Hier fehlt noch deine Stimme" aria-label="Hier fehlt noch deine Stimme"></span></button>
+      <button class="tile" data-go="s-laden"><span class="ico">⚖</span><h2>Laden</h2><span class="mut">Ausrüstung kaufen und dein Gepäck verwalten.</span><span class="small" id="ladenStatus"></span></button>
     </div>
   </div>
 
@@ -88,6 +89,12 @@ html,body{margin:0}
   </div>
 
   <!-- Termine -->
+  <div id="s-laden" hidden>
+    <div class="row" style="margin-bottom:14px"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Laden</h1></div>
+    <div class="card"><div class="row" style="align-items:center"><label class="label" for="ladenHeld" style="margin:0">Wer kauft ein?</label><select id="ladenHeld" style="width:auto"></select>
+      <span class="small mut" id="ladenHinweis"></span></div></div>
+    <div class="card" id="ladenBox"></div>
+  </div>
   <div id="s-termine" hidden>
     <div class="row" style="margin-bottom:14px"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Termine</h1></div>
     <div id="pollList" style="display:grid;gap:14px"></div>
@@ -116,13 +123,13 @@ html,body{margin:0}
 <script src="/common/common.js?v=@build.version@"></script>
 <script>
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-const VIEWS=['s-login','s-home','s-create','s-mine','s-konto','s-termine'];
+const VIEWS=['s-login','s-home','s-create','s-mine','s-konto','s-termine','s-laden'];
 let me=null;
 function show(v){if(v==='s-drafts')v='s-mine'; // Heldenerstellung steckt jetzt in „Meine Helden“
   if(v==='s-stream')v='s-home'; // Soundstream steckt ganz in der Kachel
   ({'s-mine':'#mineList','s-termine':'#pollList'})[v]&&($(({'s-mine':'#mineList','s-termine':'#pollList'})[v]).innerHTML='<p class="mut">lädt …</p>');
   if(v==='s-mine'){$('#mineSheet').hidden=true}
-  VIEWS.forEach(x=>$('#'+x).hidden=x!==v);({'s-home':pollPunkt,'s-mine':()=>{loadMine();loadDrafts()},'s-konto':loadKonto,'s-termine':loadPolls})[v]?.();window.scrollTo(0,0)}
+  VIEWS.forEach(x=>$('#'+x).hidden=x!==v);({'s-laden':ladenView,'s-home':()=>{pollPunkt();ladenStatus()},'s-mine':()=>{loadMine();loadDrafts()},'s-konto':loadKonto,'s-termine':loadPolls})[v]?.();window.scrollTo(0,0)}
 function go(v){if(location.hash.slice(1)===v)guard(v);else location.hash=v}
 addEventListener('hashchange',()=>guard(location.hash.slice(1)||'s-home'));
 async function guard(v){
@@ -549,6 +556,15 @@ $('#mineList').onclick=e=>{if(e.target.closest('[data-hdel]'))return;const a=e.t
   $('#mineSheet').innerHTML=`<h2>${esc(h.name)}</h2><dl class="kv">${Object.entries({...s.basis,'Profession':h.profession}).filter(([k,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>${waffenBox(h)}
     ${s.sections.map(sec=>`<details class="sec" open><summary><b>${esc(sec.title)}</b> <span class="mut small">${sec.rows.length}</span></summary><div class="tw"><table class="small"><tbody>${sec.rows.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td class="mono">${esc(r.value)}</td><td class="mut">${esc(r.details)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')}`;
   $('#mineSheet').scrollIntoView({behavior:'smooth'})};
+
+/* ---------- Laden: eigener Bereich, Held auswählen, dann einkaufen ---------- */
+async function ladenStatus(){try{const l=await api('/api/laden');$('#ladenStatus').innerHTML=l.offen?'<span class="pill ok">offen</span>':'<span class="pill">zu</span>'}catch(e){}}
+async function ladenView(){let hs;try{hs=(await api('/api/myheroes')).filter(h=>h.status!=='neu')}catch(e){return toastErr(e.message)}
+  if(!hs.length){$('#ladenHeld').innerHTML='';$('#ladenHinweis').textContent='Einkaufen geht erst mit einem Helden, den der Meister übernommen hat.';$('#ladenBox').innerHTML='';return}
+  const last=LS.get('hh-ladenheld','');$('#ladenHeld').innerHTML=hs.map(h=>`<option value="${esc(h.file)}"${h.file===last?' selected':''}>${esc(h.name)}</option>`).join('');
+  $('#ladenHinweis').textContent='';ladenHeldZeigen()}
+function ladenHeldZeigen(){const f=$('#ladenHeld').value;if(!f)return;LS.set('hh-ladenheld',f);$('#ladenBox').innerHTML='<p class="mut">lädt …</p>';ausrOeffnen($('#ladenBox'),'/api/myheroes/'+encodeURIComponent(f),false)}
+$('#ladenHeld').onchange=ladenHeldZeigen;
 
 /* ---------- Termine ---------- */
 let polls=[],pdraft={};

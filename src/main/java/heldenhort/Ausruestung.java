@@ -546,7 +546,7 @@ public class Ausruestung {
             }
             ctx.json(ladenInfo());
         });
-        m.get("/api/laden", ctx -> ctx.json(ladenInfo()));
+        for (Javalin app : List.of(m, s)) app.get("/api/laden", ctx -> ctx.json(ladenInfo()));
         m.get("/api/heroes/{file}/kampfwerte", ctx -> ctx.json(kampfwerte(heroes.file(ctx.pathParam("file")).getFileName().toString())));
         m.get("/api/namen/generatoren", ctx -> ctx.json(generatoren()));
         m.get("/api/namen", ctx -> ctx.json(namen(App.str(ctx.queryParam("g")), "w".equals(ctx.queryParam("s")), "1".equals(ctx.queryParam("adlig")),
