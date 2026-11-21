@@ -822,9 +822,11 @@ public final class Creation {
     private static String setTalent(String xml, String name, int value) throws Exception {
         var d = parse(xml);
         org.w3c.dom.Element held = (org.w3c.dom.Element) d.getElementsByTagName("held").item(0);
-        org.w3c.dom.Element t = byName(held, "talent", name);
+        // nur in der Talentliste suchen: SF wie Scharfschütze (Bogen) tragen ein gleichnamiges <talent name="Bogen"/> ohne Wert
+        org.w3c.dom.Element liste0 = Heroes.first(held, "talentliste");
+        org.w3c.dom.Element t = byName(liste0 == null ? held : liste0, "talent", name);
         if (t == null) {
-            org.w3c.dom.Element liste = Heroes.first(held, "talentliste");
+            org.w3c.dom.Element liste = liste0;
             if (liste == null) throw new IllegalArgumentException("Im Entwurf fehlt die Talentliste. Bitte Herkunft neu wählen.");
             t = d.createElement("talent");
             t.setAttribute("name", name);
