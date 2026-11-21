@@ -26,10 +26,9 @@ public class Ausruestung {
     private final Advance adv;
     private final Regeln regeln;
     private final Accounts accounts;
-    private final Mail mail;
 
-    public Ausruestung(Db db, Heroes heroes, HeldenJar jar, Advance adv, Regeln regeln, Accounts accounts, Mail mail) {
-        this.db = db; this.heroes = heroes; this.jar = jar; this.adv = adv; this.regeln = regeln; this.accounts = accounts; this.mail = mail;
+    public Ausruestung(Db db, Heroes heroes, HeldenJar jar, Advance adv, Regeln regeln, Accounts accounts) {
+        this.db = db; this.heroes = heroes; this.jar = jar; this.adv = adv; this.regeln = regeln; this.accounts = accounts;
         // Warenkorb: Spieler sammeln, Meister prüft (Preise je Position änderbar), erst die Freigabe bucht Ware und Geld
         db.exec("CREATE TABLE IF NOT EXISTS warenkorb(id INTEGER PRIMARY KEY AUTOINCREMENT, file TEXT, account INTEGER, status TEXT, created TEXT, gesendet TEXT, entschieden TEXT, kommentar TEXT)");
         db.exec("CREATE TABLE IF NOT EXISTS warenkorb_pos(id INTEGER PRIMARY KEY AUTOINCREMENT, korb INTEGER, name TEXT, anzahl INTEGER, preis INTEGER, meisterpreis INTEGER)");
@@ -476,10 +475,6 @@ public class Ausruestung {
         Map<String, Object> d = korbDaten(k);
         if (((List<?>) d.get("pos")).isEmpty()) throw new IllegalArgumentException("Der Warenkorb ist leer.");
         db.exec("UPDATE warenkorb SET status='angefragt', gesendet=? WHERE id=?", App.now(), k.get("id"));
-        List<String> z = new ArrayList<>();
-        for (Object o : (List<?>) d.get("pos")) { Map<?, ?> p = (Map<?, ?>) o; z.add(p.get("anzahl") + "× " + p.get("name") + " (" + geldText(((Number) p.get("summe")).intValue()) + ")"); }
-        mail.notifyMeister("Warenkorb: " + d.get("held"), d.get("held") + " möchte einkaufen (zusammen " + d.get("summeText") + ", hat " + d.get("geldText") + "):\n\n- "
-                + String.join("\n- ", z) + "\n\nPrüfen und freigeben in der Meister-UI unter „Laden“.");
         return "Warenkorb an den Meister geschickt (" + d.get("summeText") + ").";
     }
 
@@ -521,11 +516,6 @@ public class Ausruestung {
         Advance.ereignis(doc, held, "Einkauf", "Warenkorb " + id, geld, geld - summe, geldText(summe));
         speichern(file, doc);
         db.exec("UPDATE warenkorb SET status='freigegeben', entschieden=? WHERE id=?", App.now(), id);
-        String who = accounts.email(r.get(0).get("account"));
-        List<String> z = new ArrayList<>();
-        for (Object o : pos) { Map<?, ?> p = (Map<?, ?>) o; z.add(p.get("anzahl") + "× " + p.get("name") + " für " + geldText(((Number) p.get("summe")).intValue())); }
-        mail.notify(who, "Einkauf freigegeben: " + held.getAttribute("name"), "Der Meister hat den Warenkorb von " + held.getAttribute("name") + " freigegeben:\n\n- " + String.join("\n- ", z)
-                + "\n\nZusammen " + geldText(summe) + ", übrig " + geldText(geld - summe) + ". Alles liegt schon im Gepäck.");
         return held.getAttribute("name") + ": Einkauf für " + geldText(summe) + " gebucht, übrig " + geldText(geld - summe) + ".";
     }
 
@@ -534,8 +524,6 @@ public class Ausruestung {
         if (r.isEmpty()) throw new IllegalStateException("Dieser Warenkorb wartet nicht (mehr) auf Freigabe.");
         Map<String, Object> d = korbDaten(r.get(0));
         db.exec("UPDATE warenkorb SET status='abgelehnt', entschieden=?, kommentar=? WHERE id=?", App.now(), grund, id);
-        mail.notify(accounts.email(r.get(0).get("account")), "Einkauf abgelehnt: " + d.get("held"), "Der Meister hat den Warenkorb von " + d.get("held") + " abgelehnt."
-                + (grund.isBlank() ? "" : "\n\nBegründung: " + grund) + "\n\nEs wurde nichts abgebucht.");
         return d.get("held") + ": Warenkorb abgelehnt.";
     }
 

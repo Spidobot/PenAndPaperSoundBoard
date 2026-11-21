@@ -689,7 +689,7 @@ public final class App {
         new Polls(db, mail, accounts).routes(m, s);
         advance.routes(m, s);
         begleiter.routes(m, s);
-        new Ausruestung(db, heroes, jar, advance, regeln, accounts, mail).routes(m, s);
+        new Ausruestung(db, heroes, jar, advance, regeln, accounts).routes(m, s);
 
         m.start(Integer.parseInt(env("MEISTER_PORT", "8080")));
         s.start(Integer.parseInt(env("SPIELER_PORT", "8081")));
