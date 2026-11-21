@@ -52,8 +52,10 @@ html,body{margin:0}
     <div class="spread" style="margin-bottom:18px"><div style="display:grid;gap:4px"><span class="smalllogo"><img src="/common/d20.svg" alt="" width="22" height="22"> Heldenhort</span><h1 id="greet"></h1></div><details class="gear"><summary aria-label="Einstellungen" title="Konto und Abmelden">&#9881;&#xFE0E;</summary><div class="gearmenu"><button type="button" data-go="s-konto">Konto (Passwort, Mail)</button><button type="button" id="logout">Abmelden</button></div></details></div>
     <div class="tiles">
       <button class="tile" data-go="s-mine"><span class="ico">⚔</span><h2>Meine Helden</h2><span class="mut">Deine Helden ansehen, neue Helden erstellen und angefangene weiterbauen.</span></button>
-      <div class="tile" data-go="s-stream" role="button" tabindex="0"><span class="ico">♪</span><h2>Soundstream</h2><span class="mut">Musik und Geräusche vom Spieltisch. Du regelst nur deine Lautstärke.</span>
-        <button type="button" class="btn pri tplay" id="tplay" aria-pressed="false" aria-label="Ton einschalten">▶ Ton an</button></div>
+      <div class="tile tstream"><span class="ico">♪</span><h2>Soundstream</h2><span class="mut">Musik und Geräusche vom Spieltisch.</span>
+        <div class="tsrow"><button type="button" class="btn pri tplay" id="pplay" aria-pressed="false" aria-label="Ton einschalten">▶ Ton an</button><div class="wave" id="wave" aria-hidden="true"></div></div>
+        <p id="pstat" class="small mut">Tippen zum Einschalten. Der Browser braucht einmal einen Klick, bevor Ton erlaubt ist.</p>
+        <label class="small tsvol"><span>Lautstärke</span><input type="range" class="vol" id="pvol" min="0" max="100" value="70" aria-label="Lautstärke"></label></div>
       <button class="tile" data-go="s-termine"><span class="ico">⧗</span><h2>Termine</h2><span class="mut">Abstimmen, wann die nächste Runde stattfindet.</span><span class="dot" id="pollDot" hidden title="Hier fehlt noch deine Stimme" aria-label="Hier fehlt noch deine Stimme"></span></button>
     </div>
   </div>
@@ -107,16 +109,6 @@ html,body{margin:0}
     </div>
   </div>
 
-  <!-- Soundstream -->
-  <div id="s-stream" hidden>
-    <div class="row" style="margin-bottom:14px"><button class="btn sm" data-go="s-home">← Zurück</button><h1>Soundstream</h1></div>
-    <div class="card stream">
-      <button class="bigplay" id="pplay" aria-pressed="false" aria-label="Ton einschalten">▶</button>
-      <div class="wave" id="wave" aria-hidden="true"></div>
-      <p id="pstat" class="mut">Tippen zum Einschalten. Der Browser braucht einmal einen Klick, bevor Ton erlaubt ist.</p>
-      <div class="field" style="width:min(360px,100%)"><label class="label" for="pvol">Lautstärke</label><input type="range" class="vol" id="pvol" min="0" max="100" value="70"></div>
-    </div>
-  </div>
 
 </div></div>
 <div class="toast" id="toast" hidden></div>
@@ -124,9 +116,10 @@ html,body{margin:0}
 <script src="/common/common.js?v=@build.version@"></script>
 <script>
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-const VIEWS=['s-login','s-home','s-create','s-mine','s-konto','s-stream','s-termine'];
+const VIEWS=['s-login','s-home','s-create','s-mine','s-konto','s-termine'];
 let me=null;
 function show(v){if(v==='s-drafts')v='s-mine'; // Heldenerstellung steckt jetzt in „Meine Helden“
+  if(v==='s-stream')v='s-home'; // Soundstream steckt ganz in der Kachel
   ({'s-mine':'#mineList','s-termine':'#pollList'})[v]&&($(({'s-mine':'#mineList','s-termine':'#pollList'})[v]).innerHTML='<p class="mut">lädt …</p>');
   if(v==='s-mine'){$('#mineSheet').hidden=true}
   VIEWS.forEach(x=>$('#'+x).hidden=x!==v);({'s-home':pollPunkt,'s-mine':()=>{loadMine();loadDrafts()},'s-konto':loadKonto,'s-termine':loadPolls})[v]?.();window.scrollTo(0,0)}
@@ -138,8 +131,7 @@ async function guard(v){
   if(v.startsWith('d-')){openDraft(+v.slice(2));return}
   show(VIEWS.includes(v)||v==='s-drafts'?v:'s-home')}
 addEventListener('hh401',()=>{me=null;show('s-login')});
-document.addEventListener('click',e=>{if(e.target.closest('.tplay'))return;const b=e.target.closest('[data-go]');if(b)go(b.dataset.go)});
-document.addEventListener('keydown',e=>{const t=e.target.closest('div.tile[data-go]');if(t&&e.target===t&&(e.key==='Enter'||e.key===' ')){e.preventDefault();go(t.dataset.go)}});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-go]');if(b)go(b.dataset.go)});
 
 /* ---------- Login / Konto ---------- */
 $('#lname').value=LS.get('hh-name','');
@@ -587,11 +579,9 @@ function sstat(m){$('#pstat').textContent=(m.ch.music.playing||m.ch.bg.playing)?
 pl.onFxError=(file,why)=>toast('Effekt konnte nicht abgespielt werden: '+why);
 /* Ton an/aus: großer Knopf im Soundstream und kleiner Knopf direkt auf der Kachel, beide immer im gleichen Zustand */
 function tonUmschalten(){pl.unlock();const on=$('#pplay').getAttribute('aria-pressed')!=='true';
-  $('#pplay').setAttribute('aria-pressed',on);$('#pplay').textContent=on?'❚❚':'▶';
-  $('#tplay').setAttribute('aria-pressed',on);$('#tplay').textContent=on?'❚❚ Ton aus':'▶ Ton an';$('#tplay').setAttribute('aria-label',on?'Ton ausschalten':'Ton einschalten');
+  $('#pplay').setAttribute('aria-pressed',on);$('#pplay').textContent=on?'❚❚ Ton aus':'▶ Ton an';$('#pplay').setAttribute('aria-label',on?'Ton ausschalten':'Ton einschalten');
   if(on)startStream();else{stopStream();$('#pstat').textContent='Ton aus.'}}
 $('#pplay').onclick=tonUmschalten;
-$('#tplay').onclick=e=>{e.stopPropagation();tonUmschalten()};
 $('#pvol').oninput=e=>{pl.setMaster(e.target.value/100);LS.set('hh-vol',+e.target.value)};
 setInterval(()=>{const on=pl.enabled&&Object.values(pl.a).some(a=>!a.paused);$$('#wave i').forEach(i=>i.style.height=(on?4+Math.random()*30*($('#pvol').value/100):4)+'px')},200);
 

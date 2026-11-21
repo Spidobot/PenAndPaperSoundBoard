@@ -317,8 +317,6 @@ tr.geplant td{background:var(--acc-soft)}
 .tile .dot{position:absolute;top:14px;right:14px;width:16px;height:16px;border-radius:50%;background:#d93a2b;box-shadow:0 0 0 3px var(--panel),0 0 10px rgba(217,58,43,.7);animation:dotpuls 2s ease-in-out infinite}
 @keyframes dotpuls{50%{transform:scale(1.15)}}
 @media (prefers-reduced-motion:reduce){.tile .dot{animation:none}}
-div.tile[data-go]{cursor:pointer}
-.tile .tplay{justify-self:start;margin-top:4px}
 
 .geld input{width:64px}
 .geld label{display:inline-flex;gap:4px;align-items:center}
@@ -340,3 +338,12 @@ div.tile[data-go]{cursor:pointer}
 .bgl td:last-child{white-space:normal}
 .bgl .btn.sm{white-space:nowrap}
 .bgl .row input{width:90px}
+
+/* Soundstream ganz in der Kachel: Ton an/aus, laufende Balken, Lautstärke */
+.tstream{cursor:default}
+.tstream:hover{border-color:var(--line);box-shadow:none}
+.tstream .tsrow{display:flex;align-items:center;gap:14px;margin-top:4px}
+.tstream .wave{height:30px}
+.tstream .tsvol{display:grid;gap:4px}
+.tstream .tsvol input{width:100%}
+.tstream #pstat{margin:0}
