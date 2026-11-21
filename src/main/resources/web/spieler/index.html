@@ -53,7 +53,7 @@ html,body{margin:0}
     <div class="tiles">
       <button class="tile" data-go="s-mine"><span class="ico">⚔</span><h2>Meine Helden</h2><span class="mut">Deine Helden ansehen, neue Helden erstellen und angefangene weiterbauen.</span></button>
       <div class="tile tstream"><span class="ico">♪</span><h2>Soundstream</h2><span class="mut">Musik und Geräusche vom Spieltisch.</span>
-        <div class="tsrow"><button type="button" class="btn pri tplay" id="pplay" aria-pressed="false" aria-label="Ton einschalten">▶ Ton an</button><div class="wave" id="wave" aria-hidden="true"></div></div>
+        <div class="tsrow"><button type="button" class="btn pri tplay" id="pplay" aria-pressed="false" aria-label="Ton einschalten">▶</button><div class="wave" id="wave" aria-hidden="true"></div></div>
         <p id="pstat" class="small mut">Nicht verbunden</p>
         <label class="small tsvol"><span>Lautstärke</span><input type="range" class="vol" id="pvol" min="0" max="100" value="70" aria-label="Lautstärke"></label></div>
       <button class="tile" data-go="s-termine"><span class="ico">⧗</span><h2>Termine</h2><span class="mut">Abstimmen, wann die nächste Runde stattfindet.</span><span class="dot" id="pollDot" hidden title="Hier fehlt noch deine Stimme" aria-label="Hier fehlt noch deine Stimme"></span></button>
@@ -579,7 +579,7 @@ function sstat(m){$('#pstat').textContent='Verbunden'}
 pl.onFxError=(file,why)=>toast('Effekt konnte nicht abgespielt werden: '+why);
 /* Ton an/aus: großer Knopf im Soundstream und kleiner Knopf direkt auf der Kachel, beide immer im gleichen Zustand */
 function tonUmschalten(){pl.unlock();const on=$('#pplay').getAttribute('aria-pressed')!=='true';
-  $('#pplay').setAttribute('aria-pressed',on);$('#pplay').textContent=on?'❚❚ Ton aus':'▶ Ton an';$('#pplay').setAttribute('aria-label',on?'Ton ausschalten':'Ton einschalten');
+  $('#pplay').setAttribute('aria-pressed',on);$('#pplay').textContent=on?'❚❚':'▶';$('#pplay').setAttribute('aria-label',on?'Ton ausschalten':'Ton einschalten');
   if(on)startStream();else{stopStream();$('#pstat').textContent='Nicht verbunden'}}
 $('#pplay').onclick=tonUmschalten;
 $('#pvol').oninput=e=>{pl.setMaster(e.target.value/100);LS.set('hh-vol',+e.target.value)};
