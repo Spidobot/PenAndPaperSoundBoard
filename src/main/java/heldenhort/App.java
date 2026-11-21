@@ -237,6 +237,24 @@ public final class App {
             db.exec("UPDATE hero SET background=? WHERE file=?", cleanBg(ctx.bodyAsClass(Map.class).get("bg")), ctx.pathParam("file"));
             ctx.json(Map.of("ok", true));
         });
+        // Initiative einer Session (Kämpfer, Würfe, Runde, wer dran ist) als JSON; Hausregel gilt für alle Sessions
+        m.get("/api/sessions/{id}/initiative", ctx -> {
+            String j = db.get("initiative-" + ctx.pathParam("id"), "");
+            Map<String, Object> st = j.isBlank() ? new LinkedHashMap<>(Map.of("kaempfer", List.of(), "runde", 1, "dran", "")) : JSON.readValue(j, Map.class);
+            st.put("hausregel", "1".equals(db.get("iniHausregel", "0")));
+            ctx.json(st);
+        });
+        m.put("/api/sessions/{id}/initiative", ctx -> {
+            Map<?, ?> b = ctx.bodyAsClass(Map.class);
+            if (!(b.get("kaempfer") instanceof List<?> k) || k.size() > 200) throw new IllegalArgumentException("Kämpferliste fehlt oder ist zu lang (höchstens 200).");
+            Map<String, Object> st = new LinkedHashMap<>();
+            st.put("kaempfer", b.get("kaempfer"));
+            st.put("runde", b.get("runde") instanceof Number n ? n.intValue() : 1);
+            st.put("dran", str(b.get("dran")));
+            db.put("initiative-" + ctx.pathParam("id"), JSON.writeValueAsString(st));
+            if (b.get("hausregel") != null) db.put("iniHausregel", Boolean.TRUE.equals(b.get("hausregel")) ? "1" : "0");
+            ctx.json(Map.of("ok", true));
+        });
         m.post("/api/accounts/{id}/votefor", ctx -> { // Pärchen: dieses Konto stimmt bei Terminen auch für ein anderes ab
             long id = Long.parseLong(ctx.pathParam("id"));
             Object f = ctx.bodyAsClass(Map.class).get("for");

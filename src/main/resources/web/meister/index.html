@@ -86,6 +86,23 @@
         <span class="small mut">z. B. 150 % im Dorf, 80 % beim Großhändler</span></div>
       <div class="card"><span class="label">Helden in dieser Session</span><div class="hpick" id="hpick"></div>
         <div class="row"><button class="btn sm" type="button" id="sesRegeln" title="Vor-/Nachteile, Sonderfertigkeiten, Manöver, Liturgien und Zauber aller Helden dieser Session, jede Regel einmal mit den Helden, die sie haben">Regelzusammenfassung</button><a class="btn sm" id="sesRegelnPdf" href="#">als PDF</a></div></div>
+      <div class="card" id="iniCard">
+        <div class="spread"><h3 style="margin:0">Initiative &amp; Reihenfolge</h3>
+          <label class="small" style="display:inline-flex;gap:6px;align-items:center" title="Wer die höchste INI hat, handelt als Letzter und kann auf alles reagieren"><input type="checkbox" id="iniHaus"> Hausregel: höchste INI ist zuletzt dran</label></div>
+        <div class="row" style="align-items:end;margin-top:8px">
+          <div class="field"><label class="label" for="iniName">Gegner</label><input type="text" id="iniName" placeholder="z. B. Ork" style="width:160px"></div>
+          <div class="field"><label class="label" for="iniBas">INI-Basis</label><input type="number" id="iniBas" value="10" data-nostep style="width:70px"></div>
+          <div class="field"><label class="label" for="iniAnz">Anzahl</label><input type="number" id="iniAnz" value="1" min="1" max="30" data-nostep style="width:60px"></div>
+          <div class="field"><label class="label" for="iniLe">LeP</label><input type="number" id="iniLe" placeholder="–" data-nostep style="width:70px"></div>
+          <button class="btn sm" type="button" id="iniAdd">+ Gegner</button>
+          <button class="btn sm" type="button" id="iniHelden" title="Helden dieser Session mit ihrer INI-Basis (inkl. Kampfreflexe/Kampfgespür) übernehmen">Helden übernehmen</button>
+          <button class="btn sm" type="button" id="iniWurf" title="Für alle ohne Wurf 1W6 würfeln">Alle würfeln</button>
+          <button class="btn sm pri" type="button" id="iniNext">Nächster ▶</button>
+          <button class="btn sm" type="button" id="iniEnde">Kampf beenden</button></div>
+        <p class="small mut" id="iniStand"></p>
+        <div class="tw"><table class="small zebra"><thead><tr><th>#</th><th>Wer</th><th>INI-Basis</th><th>Wurf</th><th>Mod.</th><th>INI</th><th>LeP</th><th>Notiz</th><th></th></tr></thead><tbody id="iniBody"></tbody></table></div>
+        <p class="small mut">INI = Basis + Wurf + Mod. (z. B. −BE der Rüstung). Bei gleicher INI zählt die höhere Basis. Würfe direkt eintragen oder „Alle würfeln“.</p>
+      </div>
       <div class="card">
         <div class="field"><label class="label" for="q">Suchen: alles am Helden (Eigenschaften, Talente, Zauber, Vor-/Nachteile, Sonderfertigkeiten, Kampfwerte, Ausrüstung, Geld …)</label>
           <div class="row" style="flex-wrap:nowrap"><input type="text" id="q" list="qlist" autocomplete="off" placeholder="z. B. Sinnenschärfe, Gefahreninstinkt, KL, Langschwert, Balsam…" value="Sinnenschärfe">
@@ -481,12 +498,12 @@ async function loadSession(){try{[sessions,heroes]=await Promise.all([api('/api/
   if(openSess!=null&&sessions.find(s=>s.id===openSess))cur=openSess;else cur=sessions[0]?.id??null; // immer die neueste, außer explizit geöffnet
   openSess=null;
   $('#sessSel').innerHTML=sessions.map(s=>`<option value="${s.id}"${s.id===cur?' selected':''}>${esc(s.name)}</option>`).join('')||'<option>Keine Session</option>';
-  renderPick();renderSearch();renderAttr();renderAward()}
+  renderPick();renderSearch();renderAttr();renderAward();iniLaden()}
 const inSess=()=>{const s=sessions.find(x=>x.id===cur);return new Set(s?JSON.parse(s.heroes||'[]'):[])};
 const sessHeroes=()=>{const set=inSess();return heroes.filter(h=>set.has(h.file)&&!h.error)};
 function renderPick(){const set=inSess();
   $('#hpick').innerHTML=cur==null?'<span class="mut small">Erst eine Session anlegen.</span>':heroes.filter(h=>!h.error).map(h=>`<label><input type="checkbox" data-s="${esc(h.file)}"${set.has(h.file)?' checked':''}> ${esc(h.name)} <span class="mut small">${esc(h.player)}</span>${h.status==='neu'?' <span class="pill new">neu</span>':''}</label>`).join('')||'<span class="mut small">Noch keine Helden.</span>'}
-$('#sessSel').onchange=e=>{cur=+e.target.value;renderPick();renderSearch();renderAttr();renderAward()};
+$('#sessSel').onchange=e=>{cur=+e.target.value;renderPick();renderSearch();renderAttr();renderAward();iniLaden()};
 /* ---------- Sessions verwalten ---------- */
 let confirmDel=null;
 async function loadSessions(){try{[sessions,heroes]=await Promise.all([api('/api/sessions'),api('/api/heroes')])}catch(e){return toastErr(e.message)}renderSessions()}
@@ -723,6 +740,42 @@ document.addEventListener('change',async e=>{const s=e.target.closest('select.ow
   try{await api('/api/heroes/'+encodeURIComponent(s.dataset.file)+'/owner',{method:'POST',body:{account:s.value?+s.value:null}});toast('Besitzer gespeichert');const h=heroes.find(x=>x.file===s.dataset.file);if(h){h.account=s.value?+s.value:null}}catch(x){toastErr(x.message)}});
 
 const LS=window.LS||{get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+/* ---------- Initiative & Reihenfolge (pro Session gespeichert) ---------- */
+let INI={kaempfer:[],runde:1,dran:'',hausregel:false};
+const iniWert=k=>(+k.basis||0)+(+k.wurf||0)+(+k.mod||0);
+/** Reihenfolge: höchste INI zuerst; Gleichstand: höhere Basis. Hausregel: genau umgekehrt (höchste INI zuletzt). */
+function iniReihe(){const r=[...INI.kaempfer].sort((a,b)=>iniWert(b)-iniWert(a)||(+b.basis||0)-(+a.basis||0)||String(a.name).localeCompare(b.name));return INI.hausregel?r.reverse():r}
+async function iniLaden(){if(cur==null)return;try{INI=await api('/api/sessions/'+cur+'/initiative')}catch(e){return}$('#iniHaus').checked=!!INI.hausregel;iniZeigen()}
+async function iniSpeichern(){if(cur==null)return;try{await api('/api/sessions/'+cur+'/initiative',{method:'PUT',body:INI})}catch(e){toastErr(e.message)}}
+function iniZeigen(){const r=iniReihe();
+  $('#iniBody').innerHTML=r.map((k,i)=>`<tr data-ik="${esc(k.id)}"${k.id===INI.dran?' class="best"':''}><td class="mono">${i+1}${k.id===INI.dran?' ▶':''}</td>
+    <td><b>${esc(k.name)}</b> <span class="small mut">${k.held?'Held':'Gegner'}</span>${k.info?`<div class="small mut">${esc(k.info)}</div>`:''}</td>
+    <td><input type="number" data-if="basis" value="${esc(k.basis)}" data-nostep style="width:60px"></td>
+    <td><input type="number" data-if="wurf" value="${esc(k.wurf??'')}" data-nostep style="width:50px" placeholder="W6"></td>
+    <td><input type="number" data-if="mod" value="${esc(k.mod??'')}" data-nostep style="width:50px" placeholder="0"></td>
+    <td class="mono"><b>${k.wurf===''||k.wurf==null?'–':iniWert(k)}</b></td>
+    <td><input type="number" data-if="le" value="${esc(k.le??'')}" data-nostep style="width:60px"></td>
+    <td><input type="text" data-if="notiz" value="${esc(k.notiz||'')}" style="width:140px"></td>
+    <td><button class="btn sm" data-idel aria-label="${esc(k.name)} entfernen">✕</button></td></tr>`).join('')||'<tr><td colspan="9" class="empty">Noch niemand im Kampf. „Helden übernehmen“ und Gegner hinzufügen.</td></tr>';
+  const d=INI.kaempfer.find(k=>k.id===INI.dran);
+  $('#iniStand').textContent=INI.kaempfer.length?`Kampfrunde ${INI.runde}`+(d?` · dran: ${d.name}`:' · „Nächster ▶“ startet die Runde')+(INI.hausregel?' · Hausregel: höchste INI zuletzt':''):''}
+const iniId=()=>Math.random().toString(36).slice(2,9);
+$('#iniHaus').onchange=e=>{INI.hausregel=e.target.checked;iniZeigen();iniSpeichern();toast(e.target.checked?'Hausregel an: höchste INI ist zuletzt dran.':'Normale Reihenfolge: höchste INI zuerst.')};
+$('#iniAdd').onclick=()=>{const n=$('#iniName').value.trim();if(!n)return toast('Erst einen Namen für den Gegner eintragen');const a=Math.max(1,Math.min(30,+$('#iniAnz').value||1));
+  for(let i=1;i<=a;i++)INI.kaempfer.push({id:iniId(),name:a>1?n+' '+i:n,held:false,basis:+$('#iniBas').value||0,wurf:'',mod:'',le:$('#iniLe').value===''?'':+$('#iniLe').value,notiz:''});
+  $('#iniName').value='';iniZeigen();iniSpeichern()};
+$('#iniHelden').onclick=()=>{const hs=sessHeroes();if(!hs.length)return toast('Keine Helden in dieser Session');let neu=0;
+  for(const h of hs){if(INI.kaempfer.some(k=>k.file===h.file))continue;INI.kaempfer.push({id:iniId(),file:h.file,name:h.name,held:true,basis:h.iniBasis??0,info:h.iniInfo||'',wurf:'',mod:'',le:'',notiz:''});neu++}
+  iniZeigen();iniSpeichern();toast(neu?neu+' Helden übernommen':'Alle Helden sind schon dabei')};
+$('#iniWurf').onclick=()=>{let n=0;for(const k of INI.kaempfer)if(k.wurf===''||k.wurf==null){k.wurf=1+Math.floor(Math.random()*6);n++}iniZeigen();iniSpeichern();toast(n?n+'× 1W6 gewürfelt':'Alle haben schon einen Wurf')};
+$('#iniNext').onclick=()=>{const r=iniReihe();if(!r.length)return;const i=r.findIndex(k=>k.id===INI.dran);
+  if(i<0)INI.dran=r[0].id;else if(i===r.length-1){INI.runde++;INI.dran=r[0].id;toast('Kampfrunde '+INI.runde)}else INI.dran=r[i+1].id;iniZeigen();iniSpeichern()};
+$('#iniEnde').onclick=()=>{if(!INI.kaempfer.length)return;if($('#iniEnde').dataset.ask!=='1'){$('#iniEnde').dataset.ask='1';$('#iniEnde').textContent='Wirklich beenden?';return}
+  $('#iniEnde').dataset.ask='';$('#iniEnde').textContent='Kampf beenden';INI={...INI,kaempfer:[],runde:1,dran:''};iniZeigen();iniSpeichern();toast('Kampf beendet')};
+$('#iniBody').addEventListener('change',e=>{const f=e.target.dataset.if;if(!f)return;const k=INI.kaempfer.find(x=>x.id===e.target.closest('[data-ik]').dataset.ik);
+  k[f]=f==='notiz'?e.target.value:(e.target.value===''?'':+e.target.value);iniZeigen();iniSpeichern()});
+$('#iniBody').addEventListener('click',e=>{if(!e.target.closest('[data-idel]'))return;const id=e.target.closest('[data-ik]').dataset.ik;INI.kaempfer=INI.kaempfer.filter(k=>k.id!==id);if(INI.dran===id)INI.dran='';iniZeigen();iniSpeichern()});
+
 /* ---------- NSC-Namen (Namengeneratoren der helden.jar) ---------- */
 async function namenView(){if($('#nGen').options.length)return;try{const g=await api('/api/namen/generatoren');$('#nGen').innerHTML=g.map(x=>`<option>${esc(x)}</option>`).join('');
   const last=LS.get('hh-ngen','');if(last&&g.includes(last))$('#nGen').value=last}catch(e){toastErr(e.message)}}

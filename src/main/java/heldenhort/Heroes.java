@@ -136,6 +136,16 @@ public final class Heroes {
             if (k != null) eig.put(k, num(e.getAttribute("value")) + num(e.getAttribute("mod")));
         }
         h.put("E", eig);
+        // Initiative: INI-Basiswert laut Helden-Software (eigenschaft „ini“) + Kampfreflexe 4 + Kampfgespür 2 (WdS S. 74 f.)
+        int iniB = 0;
+        for (Element e : all(held, "eigenschaft")) if ("ini".equals(e.getAttribute("name"))) iniB = num(e.getAttribute("value")) + num(e.getAttribute("mod"));
+        int iniPlus = 0; List<String> iniSf = new ArrayList<>();
+        for (Element s : all(held, "sonderfertigkeit")) {
+            if (s.getAttribute("name").equals("Kampfreflexe")) { iniPlus += 4; iniSf.add("Kampfreflexe +4"); }
+            if (s.getAttribute("name").equals("Kampfgespür")) { iniPlus += 2; iniSf.add("Kampfgespür +2"); }
+        }
+        h.put("iniBasis", iniB + iniPlus);
+        h.put("iniInfo", "INI-Basis " + iniB + (iniSf.isEmpty() ? "" : ", " + String.join(", ", iniSf)));
         Map<String, Integer> tal = new LinkedHashMap<>();
         for (Element t : all(held, "talent")) if (t.hasAttribute("value")) tal.put(t.getAttribute("name"), num(t.getAttribute("value")));
         h.put("T", tal);
