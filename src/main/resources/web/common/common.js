@@ -207,3 +207,49 @@ function bildEditor(root,base){
         if(!r.ok)throw new Error(d.error||d.title||'Hochladen hat nicht geklappt ('+r.status+').');toast('Bild gespeichert.');load()}catch(x){toastErr(x.message)}};
     root.querySelector('[data-bdel]').onclick=async()=>{try{await api(base+'/bild',{method:'DELETE'});toast('Bild entfernt.');load()}catch(x){toastErr(x.message)}}};
   load()}
+
+/* ---------- Ausrüstung & Laden (Meister und Spieler) ----------
+   Katalog, Preise (Kreuzer) und Gewichte (Unzen) aus der helden.jar. base = '/api/heroes/<datei>' (Meister) oder '/api/myheroes/<datei>' (Spieler). */
+let KAT=null;
+async function katalogLaden(){if(!KAT){KAT=(await api('/api/katalog')).filter(x=>!/Wesen|Modifikatoren/.test(x.art))}return KAT}
+function kreuzerText(k){if(!k)return '0 K';const t=[];for(const[w,n]of[[1000,'D'],[100,'S'],[10,'H'],[1,'K']]){const c=Math.floor(k/w);k-=c*w;if(c)t.push(c+' '+n)}return t.join(' ')}
+const SLOTNAME={nkwaffe1:'Nahkampfwaffe 1',nkwaffe2:'Nahkampfwaffe 2',fkwaffe1:'Fernkampfwaffe',schild1:'Schild / Parierwaffe',ruestung1:'Rüstung 1',ruestung2:'Rüstung 2',ruestung3:'Rüstung 3',ruestung4:'Rüstung 4',ruestung5:'Rüstung 5',ruestung6:'Rüstung 6'};
+const SLOTART={nkwaffe1:'Nahkampfwaffe',nkwaffe2:'Nahkampfwaffe',fkwaffe1:'Fernkampfwaffe',schild1:'Schild',ruestung1:'Rüstung',ruestung2:'Rüstung',ruestung3:'Rüstung',ruestung4:'Rüstung',ruestung5:'Rüstung',ruestung6:'Rüstung'};
+function ausrHtml(z,meister){
+  const laden=z.laden||{},fak=laden.faktor||100;
+  const ruest=Object.keys(z.plaetze).filter(s=>s.startsWith('ruestung')).length;
+  const slots=['nkwaffe1','nkwaffe2','fkwaffe1','schild1',...['ruestung1','ruestung2','ruestung3','ruestung4','ruestung5','ruestung6'].slice(0,Math.max(1,ruest+1))];
+  const passt=(s,i)=>s==='schild1'?/Schild|Parierwaffe/.test(i.art):i.art.includes(SLOTART[s]);
+  const slotZeile=s=>{const cand=z.inventar.filter(i=>passt(s,i));const waffe=s.startsWith('nk')||s==='fkwaffe1';
+    const tal=z.kampftalente.filter(t=>s==='fkwaffe1'?/Armbrust|Belagerung|Blasrohr|Bogen|Diskus|Schleuder|Wurf/.test(t):!/Armbrust|Belagerung|Blasrohr|Bogen|Diskus|Schleuder|Wurf|Lanzenreiten/.test(t));
+    return `<tr data-slot="${s}"><td><b>${SLOTNAME[s]}</b></td><td>${z.plaetze[s]?esc(z.plaetze[s]):'<span class="mut">frei</span>'}</td>
+      <td>${cand.length?`<select class="aw-name" aria-label="${SLOTNAME[s]} wählen"><option value="">– ablegen –</option>${cand.map(i=>`<option${(z.plaetze[s]||'').startsWith(i.name)?' selected':''}>${esc(i.name)}</option>`).join('')}</select>
+        ${waffe?`<select class="aw-tal" aria-label="Talent">${tal.map(t=>`<option${(z.plaetze[s]||'').includes('('+t+')')?' selected':''}>${esc(t)}</option>`).join('')}</select>`:''}
+        <button class="btn sm" data-aw-anlegen>Übernehmen</button>`:'<span class="small mut">nichts Passendes im Gepäck</span>'}</td></tr>`};
+  return `<div class="ausr">
+    <p class="cost"><b>Geld ${esc(z.geldText)}</b> · Last <b>${z.gewichtStein}</b> von ${z.tragkraftStein} Stein Tragkraft <span class="small mut">(ohne getragene Rüstung)</span>${z.lastBe?` · <b class="warn">BE +${z.lastBe} durch Last</b>`:''} ${meister?'':` · Laden: <b>${laden.offen?'offen':'zu'}</b>${laden.offen&&fak!==100?' (Preise '+fak+' %)':''}`}</p>
+    <h4>Angelegt</h4><div class="tw"><table class="small zebra"><tbody>${slots.map(slotZeile).join('')}</tbody></table></div>
+    <h4>Im Gepäck</h4><div class="tw"><table class="small zebra"><thead><tr><th>Gegenstand</th><th>Anzahl</th><th>Gewicht</th><th>Wert</th><th></th></tr></thead><tbody>
+      ${z.inventar.map(i=>`<tr data-item="${esc(i.name)}"><td>${esc(i.name)} <span class="small mut">${esc(i.art)}</span></td><td class="mono">${i.anzahl}</td>
+        <td class="mono small">${i.gewicht!=null?Math.round(i.gewicht*i.anzahl)+' U':''}</td><td class="mono small">${i.preis!=null?kreuzerText(i.preis*i.anzahl):''}</td>
+        <td class="nowrap"><button class="btn sm" data-aw-weg="1" title="einen weniger">−1</button>${i.anzahl>1?`<button class="btn sm" data-aw-weg="${i.anzahl}">alle weg</button>`:''}</td></tr>`).join('')||'<tr><td colspan="5" class="mut">Nichts im Gepäck.</td></tr>'}</tbody></table></div>
+    <h4>${meister?'Gegenstand eintragen':'Einkaufen'}</h4>
+    ${meister||laden.offen?`<div class="row" style="align-items:center"><input type="text" class="aw-neu" list="katlist" placeholder="Gegenstand suchen, z. B. Pfeil, Wolldecke" style="width:280px" aria-label="Gegenstand">
+      <input type="number" class="aw-anz" min="1" value="1" data-nostep style="width:70px" aria-label="Anzahl"><span class="small aw-preis mut"></span>
+      ${meister?'<button class="btn sm" data-aw-add="0">Eintragen (geschenkt)</button><button class="btn sm pri" data-aw-add="1">Kaufen (Geld abziehen)</button>':'<button class="btn sm pri" data-aw-add="1">Kaufen</button>'}</div>
+      <p class="small mut">Preise und Gewichte aus der helden.jar (Aventurisches Arsenal, Meisterschirm …)${fak!==100?', Ladenpreise '+fak+' %':''}.</p>`
+      :'<p class="small mut">Der Laden ist gerade zu. Der Meister öffnet ihn, wenn ihr einkaufen könnt.</p>'}
+    <datalist id="katlist"></datalist></div>`}
+/** Ausrüstung in root anzeigen und bedienen. nachher(z) wird nach jeder Änderung aufgerufen. */
+async function ausrOeffnen(root,base,meister){let z;
+  try{[z]=await Promise.all([api(base+'/ausruestung'),katalogLaden()])}catch(e){root.innerHTML=`<p class="mut">${esc(e.message)}</p>`;return}
+  const zeigen=()=>{root.innerHTML=ausrHtml(z,meister);const dl=root.querySelector('#katlist');if(dl)dl.innerHTML=KAT.map(k=>`<option value="${esc(k.name)}">${esc(k.art)} · ${kreuzerText(k.preis)}</option>`).join('')};
+  zeigen();
+  const senden=async body=>{try{const r=await api(base+'/ausruestung',{method:'POST',body});toast(r.text);z=r.zustand;zeigen()}catch(x){toastErr(x.message)}};
+  root.oninput=e=>{if(!e.target.closest('.aw-neu,.aw-anz'))return;const n=root.querySelector('.aw-neu').value,a=+root.querySelector('.aw-anz').value||1,k=KAT.find(x=>x.name===n),p=root.querySelector('.aw-preis');
+    const f=(z.laden&&z.laden.faktor)||100;p.textContent=k?`Preis: ${kreuzerText(Math.round(k.preis*a*f/100))}`:''};
+  root.onclick=async e=>{const b=e.target.closest('button');if(!b)return;
+    if(b.dataset.awAdd!==undefined){const n=root.querySelector('.aw-neu').value.trim(),a=+root.querySelector('.aw-anz').value||1;if(!n)return toast('Erst einen Gegenstand aus der Liste wählen');
+      if(!KAT.some(k=>k.name===n))return toastErr('„'+n+'“ kennt die helden.jar nicht. Bitte aus der Liste wählen.');senden({name:n,anzahl:a,kaufen:b.dataset.awAdd==='1'})}
+    if(b.dataset.awWeg){senden({name:b.closest('[data-item]').dataset.item,anzahl:-(+b.dataset.awWeg)})}
+    if(b.dataset.awAnlegen!==undefined){const tr=b.closest('[data-slot]'),t=tr.querySelector('.aw-tal');senden({slot:tr.dataset.slot,name:tr.querySelector('.aw-name').value,talent:t?t.value:''})}}}

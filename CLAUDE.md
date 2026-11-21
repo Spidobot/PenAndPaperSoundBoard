@@ -28,6 +28,13 @@ Push auf `main` baut per GitHub Actions das Image auf ghcr.io.
 - Tier-Manöver/Tricks/Ausbildungen: Auswahl aus dem Setting „Tiere“ der helden.jar (settingstiere.xml), ins XML als <sonderfertigkeit name><auswahl name="Wert"/> (so speichert es die jar). Unbekannte Namen verwerfen beim Einlesen den ganzen Begleiter, darum nur Namen aus der Liste.
 - PDFs (Helden-PDF, Session-Regelzusammenfassung): App.BEGLEITER.anreichern hängt Werte, Vertrauten-Daten und DB-Vertrautenzauber an.
 
+## Ausrüstung, Laden, NSC-Namen (Ausruestung.java)
+- Katalog (~970 Gegenstände, Preis in Kreuzern, Gewicht in Unzen, Art, Quelle wie „AA: 39“) aus der helden.jar (DatenPluginHeldenWerkzeugImpl.getAlleGegenstaende). Keine fremden Preislisten ins Repo.
+- Gegenstände/Ausrüstungsplätze schreiben wir selbst ins XML (gegenstand, heldenausruestung nkwaffe1/2, fkwaffe1, schild1, ruestung1–6; BF aus der Arsenal-Tabelle der Regeldaten), danach liest die Jar den Helden ein und speichert ihn neu. Hinzufügen/Anlegen über die Plugin-API geht ohne GUI nicht.
+- Laden: Meister öffnet ihn (Session-Ansicht, Preisfaktor %). Tragkraft = KK Stein (WdS S. 144), getragene Rüstung zählt nicht als Last; Sperre und Toleranz in der Konfiguration. Begleiter (gegenstand mit Wesen) sind kein Gepäck.
+- NSC-Namen: Namengeneratoren.xml/Namenlisten.xml der Jar; Link auf rpgenerator.net/dsa.
+- Battlemap: Konzept in docs/battlemap-konzept.md, noch nicht umgesetzt.
+
 ## Mails und Freigaben
 - Freigaben: eine Mail je Held, erst wenn alle Punkte entschieden sind (30 s Pause für Korrekturen), mit Begründungen.
 - Alle Mails: Text + HTML mit eingebettetem W20-Logo (resources/mail/logo.png) und wechselndem hochnäsigem Meister-Gruß.

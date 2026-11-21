@@ -163,9 +163,9 @@ public final class App {
 
         m.get("/api/config", ctx -> {
             Map<String, Object> c = new LinkedHashMap<>();
-            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit", "greeting", "impressum", "autoUebernehmen"))
+            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit", "greeting", "impressum", "autoUebernehmen", "ueberladung", "tragkraftSperre"))
             {
-                String def = k.equals("autoUebernehmen") ? "1" : k.equals("updateTime") ? "04:00" : k.equals("smtpPort") ? "587" : k.equals("steigerLimit") ? "0" : k.equals("greeting") ? GREETING : k.equals("impressum") ? IMPRESSUM : "";
+                String def = k.equals("autoUebernehmen") || k.equals("tragkraftSperre") ? "1" : k.equals("updateTime") ? "04:00" : k.equals("smtpPort") ? "587" : k.equals("steigerLimit") || k.equals("ueberladung") ? "0" : k.equals("greeting") ? GREETING : k.equals("impressum") ? IMPRESSUM : "";
                 String v = db.get(k, def);
                 c.put(k, v.isBlank() && (k.equals("greeting") || k.equals("impressum")) ? def : v); // leer gespeichert = Vorlage zeigen
             }
@@ -177,8 +177,9 @@ public final class App {
             if (!t.matches("([01]\\d|2[0-3]):[0-5]\\d")) throw new IllegalArgumentException("Uhrzeit bitte als HH:MM");
             if (!String.valueOf(b.get("smtpPort")).matches("\\d{1,5}")) throw new IllegalArgumentException("SMTP-Port ist keine Zahl");
             if (!String.valueOf(b.get("steigerLimit")).matches("\\d{1,3}")) throw new IllegalArgumentException("Steigerungsgrenze ist keine Zahl (0 = keine Grenze)");
+            if (b.get("ueberladung") != null && !String.valueOf(b.get("ueberladung")).matches("\\d{1,3}")) throw new IllegalArgumentException("Überladung bitte als ganze Zahl in Prozent (0 = gar nicht über die Tragkraft).");
             if (!t.equals(db.get("updateTime", "04:00"))) db.put("jarLastDay", ""); // neue Uhrzeit gilt schon heute
-            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit", "greeting", "impressum", "autoUebernehmen"))
+            for (String k : List.of("mailTo", "smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom", "updateTime", "steigerLimit", "greeting", "impressum", "autoUebernehmen", "ueberladung", "tragkraftSperre"))
                 db.put(k, String.valueOf(b.get(k) == null ? "" : b.get(k)).trim());
             ctx.json(Map.of("ok", true));
         });
@@ -669,6 +670,7 @@ public final class App {
         new Polls(db, mail, accounts).routes(m, s);
         advance.routes(m, s);
         begleiter.routes(m, s);
+        new Ausruestung(db, heroes, jar, advance, regeln, accounts).routes(m, s);
 
         m.start(Integer.parseInt(env("MEISTER_PORT", "8080")));
         s.start(Integer.parseInt(env("SPIELER_PORT", "8081")));

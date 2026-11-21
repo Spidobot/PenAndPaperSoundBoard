@@ -347,3 +347,9 @@ tr.geplant td{background:var(--acc-soft)}
 .tstream .tsvol{display:grid;gap:4px}
 .tstream .tsvol input{width:100%}
 .tstream #pstat{margin:0}
+
+/* Ausrüstung & NSC-Namen */
+.ausr h4{margin:12px 0 4px}
+.ausr select{width:auto;max-width:220px}
+.namen{columns:2;list-style:none;padding:0;margin:12px 0}
+.namen li{margin:3px 0}

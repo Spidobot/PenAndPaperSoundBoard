@@ -20,6 +20,7 @@
     <a href="#m-sessions" data-v="m-sessions">Sessions</a>
     <a href="#m-spieler" data-v="m-spieler">Spieler</a>
     <a href="#m-termine" data-v="m-termine">Termine</a>
+    <a href="#m-namen" data-v="m-namen">NSC-Namen</a>
     <a href="#m-config" data-v="m-config">Konfiguration</a>
     <a href="#" id="logout">Abmelden</a>
     <div class="foot">Jeder Bereich hat eine eigene Adresse. Mehrere Tabs gleichzeitig möglich.<br><br><button type="button" class="link" onclick="showImpressum()">Impressum</button><br>Icons: <a href="https://icons8.com" target="_blank" rel="noopener" style="display:inline;padding:0">Icons8</a></div>
@@ -79,6 +80,10 @@
       <div class="spread"><h1>Session</h1>
         <div class="row"><select id="sessSel" style="width:auto" aria-label="Session"></select><a class="btn sm" href="#m-sessions">Sessions verwalten</a></div>
       </div>
+      <div class="card row" style="align-items:center"><b>Laden für die Spieler</b>
+        <label class="small" style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="ladenOffen"> offen (Spieler können mit ihrem Geld einkaufen)</label>
+        <label class="small" style="display:inline-flex;gap:6px;align-items:center">Preise <input type="number" id="ladenFaktor" min="10" max="1000" value="100" data-nostep style="width:70px"> %</label>
+        <span class="small mut">z. B. 150 % im Dorf, 80 % beim Großhändler</span></div>
       <div class="card"><span class="label">Helden in dieser Session</span><div class="hpick" id="hpick"></div>
         <div class="row"><button class="btn sm" type="button" id="sesRegeln" title="Vor-/Nachteile, Sonderfertigkeiten, Manöver, Liturgien und Zauber aller Helden dieser Session, jede Regel einmal mit den Helden, die sie haben">Regelzusammenfassung</button><a class="btn sm" id="sesRegelnPdf" href="#">als PDF</a></div></div>
       <div class="card">
@@ -127,6 +132,17 @@
       <p class="small mut">Spieler melden sich mit Name und Passwort an und können das Passwort selbst ändern. Die Mail-Adresse hinterlegen sie selbst; sie gilt erst nach Klick auf den Bestätigungslink.</p>
     </section>
 
+    <section class="view" id="m-namen" hidden>
+      <h1>NSC-Namen</h1>
+      <div class="card"><div class="row" style="align-items:end">
+        <div class="field"><label class="label" for="nGen">Herkunft</label><select id="nGen" style="width:auto"></select></div>
+        <div class="field"><span class="label">Geschlecht</span><div class="row"><label class="small"><input type="radio" name="nSex" value="m" checked> männlich</label><label class="small"><input type="radio" name="nSex" value="w"> weiblich</label></div></div>
+        <div class="field"><label class="small" style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="nAdlig"> adlig</label></div>
+        <button class="btn pri" id="nGo">Namen würfeln</button></div>
+        <ul class="namen" id="nList"></ul>
+        <p class="small mut">Klick auf einen Namen kopiert ihn. Namenslisten aus der helden.jar. Mehr Generatoren (Orte, Tavernen, Schiffe …): <a href="https://rpgenerator.net/dsa" target="_blank" rel="noopener">rpgenerator.net/dsa</a></p></div>
+    </section>
+
     <section class="view" id="m-termine" hidden>
       <h1>Termine</h1>
       <form class="card" id="pollForm"><h3>Neue Abstimmung</h3>
@@ -150,6 +166,9 @@
           <div class="field"><label class="label" for="mailTo">Hierhin gehen alle Nachrichten an den Meister</label><input type="email" id="mailTo"></div>
           <div class="field"><label class="label" for="steigerLimit">Steigerungen ohne Freigabe</label><input type="number" id="steigerLimit" min="0" max="999" style="max-width:160px"></div>
           <p class="small mut">Wie oft eine Fertigkeit seit dem letzten Aussenden gesteigert werden darf, bevor du freigeben musst (mit Mail an dich). 0 = keine Grenze.</p>
+          <label class="small" style="display:inline-flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="tragkraftSperre"> Laden: Käufe über die Tragkraft sperren</label>
+          <div class="field"><label class="label" for="ueberladung">Laden: erlaubte Überladung in %</label><input type="number" id="ueberladung" min="0" max="999" style="max-width:160px"></div>
+          <p class="small mut">Tragkraft = KK in Stein (WdS S. 144). Im Laden kann niemand mehr kaufen, als Tragkraft plus diese Toleranz erlaubt. 0 = nicht über die Tragkraft; je angefangene 50 % darüber kostet 1 BE.</p>
           <div class="field"><label class="label" for="autoUebernehmen">Helden übernehmen</label><select id="autoUebernehmen" style="max-width:420px"><option value="1">automatisch, sobald nichts mehr zu genehmigen ist</option><option value="0">immer selbst mit „Übernehmen“</option></select></div>
         </div>
         <div class="card">
@@ -191,7 +210,7 @@
 /* ---------- Routing ---------- */
 function route(){const h=location.hash.slice(1)||'m-sound';$$('.view').forEach(v=>v.hidden=v.id!==h);
   $$('.side a[data-v]').forEach(a=>a.dataset.v===h?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'));
-  ({'m-helden':loadHeroes,'m-freigaben':loadFg,'m-session':loadSession,'m-sessions':loadSessions,'m-spieler':loadAccounts,'m-termine':loadPolls,'m-config':loadCfg})[h]?.();if(h==='m-sound')setTimeout(fitLists,0);}
+  ({'m-namen':namenView,'m-helden':loadHeroes,'m-freigaben':loadFg,'m-session':loadSession,'m-sessions':loadSessions,'m-spieler':loadAccounts,'m-termine':loadPolls,'m-config':loadCfg})[h]?.();if(h==='m-sound')setTimeout(fitLists,0);}
 addEventListener('hashchange',route);
 
 /* ---------- Soundboard ---------- */
@@ -632,7 +651,8 @@ function fillSheet(root,h){root.querySelectorAll(".hbild").forEach(b=>bildEditor
 function openSheet(file){const h=heroes.find(x=>x.file===file);if(!h)return;const d=$('#sheet');
   // ⓘ-Texte des Bogens im Hintergrund vorladen
   try{const sec=(h.sheet&&h.sheet.sections)||[];vorladenRegeln(sec.filter(x=>/vorteil|nachteil|sonderfertig|zauber|talent/i.test(x.title)).flatMap(x=>x.rows.map(r=>r.name)))}catch(_){}
-  $('#sheetbody').innerHTML=sheetHtml(h,true)+'<div id="mBgl"></div>';fillSheet($('#sheetbody'),h);if(!d.open)d.showModal();$('#sheetbody .sq').focus();mBglLaden(file)}
+  $('#sheetbody').innerHTML=sheetHtml(h,true)+'<h2 style="margin-top:18px">Ausrüstung</h2><div id="mAus"><p class="mut">lädt …</p></div><div id="mBgl"></div>';fillSheet($('#sheetbody'),h);if(!d.open)d.showModal();$('#sheetbody .sq').focus();mBglLaden(file);
+  ausrOeffnen($('#mAus'),'/api/heroes/'+encodeURIComponent(file),true)}
 /* Begleiter im Bogen bearbeiten: Werte setzen (z. B. nach Abrichten, ZBA), Fähigkeiten eintragen, Sonder-AP für Vertraute */
 let MBGL={file:null,list:[]};
 let TIERSF=null; // Tier-Fähigkeiten laut helden.jar (Setting „Tiere“), wahl = braucht einen Wert
@@ -698,6 +718,19 @@ $('#acctab').addEventListener('change',async e=>{const c=e.target.closest('[data
 document.addEventListener('change',async e=>{const s=e.target.closest('select.owner');if(!s)return;
   try{await api('/api/heroes/'+encodeURIComponent(s.dataset.file)+'/owner',{method:'POST',body:{account:s.value?+s.value:null}});toast('Besitzer gespeichert');const h=heroes.find(x=>x.file===s.dataset.file);if(h){h.account=s.value?+s.value:null}}catch(x){toastErr(x.message)}});
 
+const LS=window.LS||{get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+/* ---------- NSC-Namen (Namengeneratoren der helden.jar) ---------- */
+async function namenView(){if($('#nGen').options.length)return;try{const g=await api('/api/namen/generatoren');$('#nGen').innerHTML=g.map(x=>`<option>${esc(x)}</option>`).join('');
+  const last=LS.get('hh-ngen','');if(last&&g.includes(last))$('#nGen').value=last}catch(e){toastErr(e.message)}}
+$('#nGo').onclick=async()=>{LS.set('hh-ngen',$('#nGen').value);try{const n=await api('/api/namen?g='+encodeURIComponent($('#nGen').value)+'&s='+document.querySelector('[name=nSex]:checked').value+'&adlig='+($('#nAdlig').checked?1:0)+'&n=12');
+  $('#nList').innerHTML=n.map(x=>`<li><button class="link" data-nm="${esc(x)}">${esc(x)}</button></li>`).join('')}catch(e){toastErr(e.message)}};
+$('#nList').onclick=e=>{const b=e.target.closest('[data-nm]');if(!b)return;navigator.clipboard?.writeText(b.dataset.nm).then(()=>toast('Kopiert: '+b.dataset.nm),()=>toast(b.dataset.nm))};
+/* ---------- Laden ---------- */
+async function ladenLaden(){try{const l=await api('/api/laden');$('#ladenOffen').checked=l.offen;$('#ladenFaktor').value=l.faktor}catch(e){}}
+$('#ladenOffen').onchange=async e=>{try{await api('/api/laden',{method:'POST',body:{offen:e.target.checked}});toast(e.target.checked?'Laden ist offen: Spieler können einkaufen.':'Laden ist zu.')}catch(x){toastErr(x.message);e.target.checked=!e.target.checked}};
+$('#ladenFaktor').onchange=async e=>{try{const l=await api('/api/laden',{method:'POST',body:{faktor:+e.target.value}});toast('Ladenpreise: '+l.faktor+' %')}catch(x){toastErr(x.message)}};
+ladenLaden();
+
 /* ---------- Termine ---------- */
 let polls=[],pollDel=null;
 function addOpt(v=''){const d=document.createElement('div');d.className='row';d.style.flexWrap='nowrap';
@@ -730,10 +763,10 @@ $('#pollList').onclick=async e=>{const b=e.target.closest('button');if(!b)return
 setInterval(()=>{if(location.hash==='#m-termine'&&!$('#pollForm').contains(document.activeElement))loadPolls()},15000);
 
 /* ---------- Konfiguration ---------- */
-const CFG=['autoUebernehmen','steigerLimit','greeting','impressum','mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];
+const CFG=['autoUebernehmen','steigerLimit','ueberladung','greeting','impressum','mailTo','smtpHost','smtpPort','smtpUser','smtpPass','smtpFrom','updateTime'];
 // Speichern erst nach erfolgreichem Laden: sonst würden leere Felder die gespeicherte Konfiguration überschreiben
 async function loadCfg(){const sb=$('#cfg button[type=submit]');sb.disabled=true;$('#cfgErr').hidden=true;
-  try{const c=await api('/api/config');CFG.forEach(k=>$('#'+k).value=c[k]??'');sb.disabled=false;saveSt('','');loadJar();loadRegeln()}
+  try{const c=await api('/api/config');CFG.forEach(k=>$('#'+k).value=c[k]??'');$('#tragkraftSperre').checked=c.tragkraftSperre!=='0';sb.disabled=false;saveSt('','');loadJar();loadRegeln()}
   catch(e){$('#cfgErr').hidden=false;$('#cfgErrMsg').textContent=e.message}}
 $('#sesRegeln').onclick=async()=>{if(cur==null)return toast('Keine Session gewählt');
   try{const r=await api('/api/sessions/'+cur+'/regeln');let d=$('#sesRegDlg');
@@ -753,8 +786,8 @@ async function loadJar(){try{const j=await api('/api/jar');
    :`<p class="err">helden.jar fehlt. Bitte per FTP nach <span class="mono">${esc(j.path)}</span> legen.</p>`}catch(e){toastErr(e.message)}}
 // Speicherstand sichtbar: grün mit Uhrzeit, gelb bei ungespeicherten Änderungen, rot bei Fehler
 function saveSt(cls,txt){const s=$('#savest');s.className='savest '+cls;s.textContent=txt}
-$('#cfg').addEventListener('input',()=>saveSt('dirty','● Ungespeicherte Änderungen'));
-async function saveCfg(){const b={};CFG.forEach(k=>b[k]=$('#'+k).value);
+$('#cfg').addEventListener('input',()=>saveSt('dirty','● Ungespeicherte Änderungen'));$('#cfg').addEventListener('change',()=>saveSt('dirty','● Ungespeicherte Änderungen'));
+async function saveCfg(){const b={};CFG.forEach(k=>b[k]=$('#'+k).value);b.tragkraftSperre=$('#tragkraftSperre').checked?'1':'0';
   try{await api('/api/config',{method:'PUT',body:b});saveSt('ok','✓ Gespeichert um '+new Date().toLocaleTimeString('de-AT'));loadJar();return true}
   catch(x){saveSt('bad','✗ Nicht gespeichert: '+x.message);toastErr('Nicht gespeichert: '+x.message);return false}}
 $('#cfg').onsubmit=e=>{e.preventDefault();saveCfg()};
