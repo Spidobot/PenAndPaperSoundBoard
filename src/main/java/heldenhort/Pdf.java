@@ -90,7 +90,7 @@ public final class Pdf {
                     catch (Exception pageFailed) { g.dispose(); continue; } // eine kaputte Seite soll nicht den ganzen Bogen verhindern
                     g.dispose();
                     if (r != Printable.PAGE_EXISTS) break;
-                    addForm(doc, g);
+                    addForm(doc, g, BOGEN_MASSSTAB);
                 }
                 if (backgroundHtml != null && !backgroundHtml.isBlank()) appendHtml(doc, title + " – Backgroundstory", backgroundHtml);
                 if (extraHtml != null && !extraHtml.isBlank()) appendHtml(doc, title + " – Zusatzinfos", extraHtml);
@@ -122,10 +122,25 @@ public final class Pdf {
         doc.getDocumentCatalog().setViewerPreferences(prefs);
     }
 
-    private static void addForm(PDDocument doc, PdfBoxGraphics2D g) throws Exception {
+    static final float BOGEN_MASSSTAB = 0.96f; // Platz für den nicht bedruckbaren Rand der Drucker
+
+    private static void addForm(PDDocument doc, PdfBoxGraphics2D g) throws Exception { addForm(doc, g, 1f); }
+
+    /**
+     * scale < 1: Seite mittig verkleinern. Der Bogen der helden.jar reicht bis ca. 2 mm an die Blattkante; Drucker lassen dort
+     * 4–5 mm frei, sonst fehlen Fußzeile und rechter Rand. Bei 0,96 bleiben rundum gut 6 mm.
+     */
+    private static void addForm(PDDocument doc, PdfBoxGraphics2D g, float scale) throws Exception {
         PDPage page = new PDPage(PDRectangle.A4);
         doc.addPage(page);
-        try (PDPageContentStream cs = new PDPageContentStream(doc, page)) { cs.drawForm(g.getXFormObject()); }
+        try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+            if (scale != 1f) {
+                cs.saveGraphicsState();
+                cs.transform(new org.apache.pdfbox.util.Matrix(scale, 0, 0, scale, W * (1 - scale) / 2, H * (1 - scale) / 2));
+            }
+            cs.drawForm(g.getXFormObject());
+            if (scale != 1f) cs.restoreGraphicsState();
+        }
     }
 
     /** Backgroundstory als Seiten (HTML wie im Editor, gesetzt von Swing). */
