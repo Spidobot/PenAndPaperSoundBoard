@@ -245,6 +245,35 @@ public class Ausruestung {
             "Armbrust", "Belagerungswaffen", "Blasrohr", "Bogen", "Diskus", "Lanzenreiten", "Schleuder", "Wurfbeile", "Wurfmesser", "Wurfspeere");
     static boolean kampftalent(String n) { return KAMPF.contains(n); }
 
+    /** Vom Meister gesetzte Preise (Kreuzer) je Gegenstand; ohne Eintrag gilt der Standardpreis × Ladenfaktor. */
+    @SuppressWarnings("unchecked")
+    Map<String, Integer> eigenePreise() {
+        try { Map<String, Object> m = App.JSON.readValue(db.get("ladenPreise", "{}"), Map.class); Map<String, Integer> o = new TreeMap<>(); m.forEach((k, v) -> o.put(k, ((Number) v).intValue())); return o; }
+        catch (Exception e) { return new TreeMap<>(); }
+    }
+
+    /** Preis im Laden für ein Stück (Kreuzer). */
+    int ladenpreis(String name) throws Exception {
+        Integer eigen = eigenePreise().get(name);
+        if (eigen != null) return eigen;
+        return (int) Math.round(((Number) artikel(name).get("preis")).intValue() * Integer.parseInt(db.get("ladenFaktor", "100")) / 100.0);
+    }
+
+    /** Katalog mit Ladenpreis (eigener Preis oder Standard × Faktor). */
+    List<Map<String, Object>> katalogMitPreisen() throws Exception {
+        Map<String, Integer> eigen = eigenePreise();
+        int f = Integer.parseInt(db.get("ladenFaktor", "100"));
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> k : katalog()) {
+            Map<String, Object> m = new LinkedHashMap<>(k);
+            Integer e = eigen.get(String.valueOf(k.get("name")));
+            m.put("ladenpreis", e != null ? e : (int) Math.round(((Number) k.get("preis")).intValue() * f / 100.0));
+            if (e != null) m.put("eigenerPreis", true);
+            out.add(m);
+        }
+        return out;
+    }
+
     Map<String, Object> ladenInfo() {
         return Map.of("offen", "1".equals(db.get("ladenOffen", "0")), "faktor", Integer.parseInt(db.get("ladenFaktor", "100")));
     }
@@ -282,7 +311,7 @@ public class Ausruestung {
         String text;
         if (anzahl > 0) {
             if (kaufen) {
-                int preis = (int) Math.round(((Number) art.get("preis")).intValue() * anzahl * Integer.parseInt(db.get("ladenFaktor", "100")) / 100.0);
+                int preis = ladenpreis(name) * anzahl;
                 int tk = tragkraftUnzen(held), tol = Integer.parseInt(db.get("ueberladung", "0"));
                 double neu = lastUnzen(d, held) + ((Number) art.get("gewicht")).doubleValue() * anzahl, max = tk * (1 + tol / 100.0);
                 if (tk > 0 && neu > max && !"0".equals(db.get("tragkraftSperre", "1")))
@@ -486,7 +515,19 @@ public class Ausruestung {
 
     public void routes(Javalin m, Javalin s) {
         // Katalog: für beide Seiten
-        for (Javalin app : List.of(m, s)) app.get("/api/katalog", ctx -> ctx.json(katalog()));
+        for (Javalin app : List.of(m, s)) app.get("/api/katalog", ctx -> ctx.json(katalogMitPreisen()));
+        m.post("/api/laden/preis", ctx -> { // eigener Preis je nach Verfügbarkeit; preis = null/leer: wieder Standardpreis
+            Map<?, ?> b = ctx.bodyAsClass(Map.class);
+            String name = App.str(b.get("name"));
+            artikel(name);
+            Map<String, Integer> eigen = eigenePreise();
+            if (b.get("preis") instanceof Number n) {
+                if (n.intValue() < 0 || n.intValue() > 100_000_000) throw new IllegalArgumentException("Preis bitte zwischen 0 und 100000 Dukaten.");
+                eigen.put(name, n.intValue());
+            } else eigen.remove(name);
+            db.put("ladenPreise", App.JSON.writeValueAsString(eigen));
+            ctx.json(Map.of("text", b.get("preis") instanceof Number n ? name + " kostet im Laden jetzt " + geldText(n.intValue()) : name + ": wieder Standardpreis", "eigene", eigen.size()));
+        });
         // Meister
         m.get("/api/heroes/{file}/ausruestung", ctx -> ctx.json(zustand(heroes.file(ctx.pathParam("file")).getFileName().toString())));
         m.post("/api/heroes/{file}/ausruestung", ctx -> {

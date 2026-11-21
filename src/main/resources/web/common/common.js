@@ -243,11 +243,11 @@ function ausrHtml(z,meister){
 /** Ausrüstung in root anzeigen und bedienen. nachher(z) wird nach jeder Änderung aufgerufen. */
 async function ausrOeffnen(root,base,meister){let z;
   try{[z]=await Promise.all([api(base+'/ausruestung'),katalogLaden()])}catch(e){root.innerHTML=`<p class="mut">${esc(e.message)}</p>`;return}
-  const zeigen=()=>{root.innerHTML=ausrHtml(z,meister);const dl=root.querySelector('#katlist');if(dl)dl.innerHTML=KAT.map(k=>`<option value="${esc(k.name)}">${esc(k.art)} · ${kreuzerText(k.preis)}</option>`).join('')};
+  const zeigen=()=>{root.innerHTML=ausrHtml(z,meister);const dl=root.querySelector('#katlist');if(dl)dl.innerHTML=KAT.map(k=>`<option value="${esc(k.name)}">${esc(k.art)} · ${kreuzerText(k.ladenpreis??k.preis)}</option>`).join('')};
   zeigen();
   const senden=async body=>{try{const r=await api(base+'/ausruestung',{method:'POST',body});toast(r.text);z=r.zustand;zeigen()}catch(x){toastErr(x.message)}};
   root.oninput=e=>{if(!e.target.closest('.aw-neu,.aw-anz'))return;const n=root.querySelector('.aw-neu').value,a=+root.querySelector('.aw-anz').value||1,k=KAT.find(x=>x.name===n),p=root.querySelector('.aw-preis');
-    const f=(z.laden&&z.laden.faktor)||100;p.textContent=k?`Preis: ${kreuzerText(Math.round(k.preis*a*f/100))}`:''};
+    p.textContent=k?`Preis: ${kreuzerText(k.ladenpreis*a)}`+(k.ladenpreis!==k.preis?` (Standard ${kreuzerText(k.preis*a)})`:''):''};
   root.onclick=async e=>{const b=e.target.closest('button');if(!b)return;
     if(b.dataset.awAdd!==undefined){const n=root.querySelector('.aw-neu').value.trim(),a=+root.querySelector('.aw-anz').value||1;if(!n)return toast('Erst einen Gegenstand aus der Liste wählen');
       if(!KAT.some(k=>k.name===n))return toastErr('„'+n+'“ kennt die helden.jar nicht. Bitte aus der Liste wählen.');senden({name:n,anzahl:a,kaufen:b.dataset.awAdd==='1'})}
