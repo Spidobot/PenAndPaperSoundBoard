@@ -152,9 +152,9 @@
       <h1>NSC-Generator</h1>
       <div class="card"><div class="row" style="align-items:end">
         <div class="field"><label class="label" for="nGen">Herkunft</label><select id="nGen" style="width:auto"></select></div>
-        <div class="field"><span class="label">Geschlecht</span><div class="row"><label class="small"><input type="radio" name="nSex" value="m" checked> männlich</label><label class="small"><input type="radio" name="nSex" value="w"> weiblich</label></div></div>
-        <div class="field"><label class="small" style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="nAdlig"> adlig</label></div>
-        <button class="btn pri" id="nGo">Namen würfeln</button><button class="btn pri" id="nNsc">NSC würfeln</button></div>
+        <div class="field"><span class="label">Geschlecht</span><div class="row"><label class="small"><input type="radio" name="nSex" value="m" checked> männlich</label><label class="small"><input type="radio" name="nSex" value="w"> weiblich</label><label class="small"><input type="radio" name="nSex" value="a"> alle</label></div></div>
+        <div class="field"><span class="label">Stand</span><div class="row"><label class="small"><input type="radio" name="nStand" value="b" checked> Bürger</label><label class="small"><input type="radio" name="nStand" value="a"> Adel</label><label class="small"><input type="radio" name="nStand" value="x"> alle</label></div></div>
+        <button class="btn pri" id="nNsc">NSC würfeln</button><button class="btn" id="nGo">nur Namen</button></div>
         <div class="nsc" id="nNscList"></div>
         <ul class="namen" id="nList"></ul>
         <p class="small mut">Klick auf einen Namen kopiert ihn. Namenslisten aus der helden.jar. Mehr Generatoren (Orte, Tavernen, Schiffe …): <a href="https://rpgenerator.net/dsa" target="_blank" rel="noopener">rpgenerator.net/dsa</a></p></div>
@@ -816,12 +816,19 @@ $('#iniBody').addEventListener('click',e=>{if(!e.target.closest('[data-idel]'))r
 /* ---------- NSC-Namen (Namengeneratoren der helden.jar) ---------- */
 async function namenView(){if($('#nGen').options.length)return;try{const g=await api('/api/namen/generatoren');$('#nGen').innerHTML=g.map(x=>`<option>${esc(x)}</option>`).join('');
   const last=LS.get('hh-ngen','');if(last&&g.includes(last))$('#nGen').value=last}catch(e){toastErr(e.message)}}
-$('#nGo').onclick=async()=>{LS.set('hh-ngen',$('#nGen').value);try{const n=await api('/api/namen?g='+encodeURIComponent($('#nGen').value)+'&s='+document.querySelector('[name=nSex]:checked').value+'&adlig='+($('#nAdlig').checked?1:0)+'&n=12');
+/** Namen mit Geschlecht/Stand je Eintrag; „alle“ = je Eintrag zufällig */
+async function nscNamen(n){const gen=$('#nGen').value,sx=document.querySelector('[name=nSex]:checked').value,st=document.querySelector('[name=nStand]:checked').value,out=[];
+  for(let i=0;i<n;i++){const w=sx==='a'?Math.random()<.5:sx==='w',ad=st==='x'?Math.random()<.2:st==='a';out.push({w,ad})}
+  const holen=async(w,ad,k)=>k?await api('/api/namen?g='+encodeURIComponent(gen)+'&s='+(w?'w':'m')+'&adlig='+(ad?1:0)+'&n='+k):[];
+  const gruppen={};out.forEach(o=>{const k=(o.w?'w':'m')+(o.ad?'a':'b');(gruppen[k]=gruppen[k]||[]).push(o)});
+  for(const [k,l] of Object.entries(gruppen)){const n2=await holen(k[0]==='w',k[1]==='a',l.length);l.forEach((o,i)=>o.name=n2[i])}
+  return out}
+$('#nGo').onclick=async()=>{LS.set('hh-ngen',$('#nGen').value);try{const n=(await nscNamen(12)).map(o=>o.name);
   $('#nList').innerHTML=n.map(x=>`<li><button class="link" data-nm="${esc(x)}">${esc(x)}</button></li>`).join('')}catch(e){toastErr(e.message)}};
 $('#nList').onclick=e=>{const b=e.target.closest('[data-nm]');if(!b)return;navigator.clipboard?.writeText(b.dataset.nm).then(()=>toast('Kopiert: '+b.dataset.nm),()=>toast(b.dataset.nm))};
 /* ---------- NSC würfeln: Name aus der helden.jar, Rest aus eigenen Listen ---------- */
 const NSC={
-  beruf:['Wirt','Schankmagd','Schmied','Händlerin','Krämer','Bauer','Bäuerin','Fischer','Stadtgardist','Bettler','Gaukler','Schreiber','Baderin','Fuhrmann','Söldnerin','Jäger','Kräuterfrau','Hehler','Schiffer','Hirte','Bäcker','Gerber','Zimmermann','Steinmetz','Botenreiterin','Torwächter','Stallknecht','Kesselflicker','Hebamme','Schneiderin','Geldwechsler','Tagelöhner','Fährmann','Bergmann','Köhler','Schäferin','Pilger','Novize','Barde','Taschendieb'],
+  beruf:[['Wirt','Wirtin'],['Schankknecht','Schankmagd'],['Schmied','Schmiedin'],['Händler','Händlerin'],['Krämer','Krämerin'],['Bauer','Bäuerin'],['Fischer','Fischerin'],['Stadtgardist','Stadtgardistin'],['Bettler','Bettlerin'],['Gaukler','Gauklerin'],['Schreiber','Schreiberin'],['Bader','Baderin'],['Fuhrmann','Fuhrfrau'],['Söldner','Söldnerin'],['Jäger','Jägerin'],['Kräutermann','Kräuterfrau'],['Hehler','Hehlerin'],['Schiffer','Schifferin'],['Hirte','Hirtin'],['Bäcker','Bäckerin'],['Gerber','Gerberin'],['Zimmermann','Zimmerin'],['Steinmetz','Steinmetzin'],['Botenreiter','Botenreiterin'],['Torwächter','Torwächterin'],['Stallknecht','Stallmagd'],['Kesselflicker','Kesselflickerin'],['Wundarzt','Hebamme'],['Schneider','Schneiderin'],['Geldwechsler','Geldwechslerin'],['Tagelöhner','Tagelöhnerin'],['Fährmann','Fährfrau'],['Bergmann','Bergfrau'],['Köhler','Köhlerin'],['Schäfer','Schäferin'],['Pilger','Pilgerin'],['Novize','Novizin'],['Barde','Bardin'],['Taschendieb','Taschendiebin']],
   charakter:['freundlich','mürrisch','geschwätzig','misstrauisch','gierig','abergläubisch','fromm','ängstlich','prahlerisch','neugierig','hilfsbereit','verschlagen','stolz','melancholisch','jähzornig','gutmütig','geizig','lebenslustig','verbittert','ehrlich','verlogen','zerstreut','pedantisch','abenteuerlustig','schüchtern','arrogant','gelassen','nervös','sarkastisch','loyal','faul','fleißig','eitel','bescheiden','trinkfreudig','rachsüchtig','großzügig','klatschsüchtig'],
   besonders:['Narbe quer über die Wange','fehlender Finger an der linken Hand','hinkt leicht','auffällige Tätowierung am Unterarm','Goldzahn','stottert, wenn er aufgeregt ist','riecht stark nach Kräutern','trägt immer einen zerbeulten Hut','isst ständig etwas','sammelt kleine Steine','pfeift falsch, wenn er nachdenkt','redet mit seinem Hund wie mit einem Menschen','zählt beim Reden an den Fingern ab','sehr laute Stimme','flüstert fast nur','trägt ein Amulett, das er ständig berührt','lacht über die eigenen Witze','verwechselt ständig Namen','auffällig gepflegte Hände','hat immer ein Messer zum Schnitzen dabei','schielt leicht','spricht mit starkem Dialekt','zitiert dauernd Sprichwörter','kratzt sich ständig am Kinn','trägt Kleidung, die nicht zum Stand passt'],
   statur:['hager','stämmig','korpulent','drahtig','groß und schlaksig','klein und gedrungen','kräftig','zierlich','durchschnittlich','breitschultrig'],
@@ -831,13 +838,18 @@ const NSC={
   motiv:['braucht dringend Geld für Schulden','sucht einen verschwundenen Verwandten','will einfach in Ruhe gelassen werden','hat etwas gesehen, das er nicht hätte sehen sollen','hofft auf Abenteuer und Ruhm','fürchtet einen mächtigen Feind','will einen Rivalen loswerden','sucht Arbeit','plant heimlich, die Stadt zu verlassen','ist verliebt und will es verbergen','dient insgeheim einem Auftraggeber','will Rache für ein altes Unrecht','möchte die Helden für eigene Zwecke einspannen','hat ein Geheimnis über einen Adligen','sammelt Gerüchte und verkauft sie weiter'],
   haltung:['freundlich','neutral','misstrauisch','abweisend','neugierig','unterwürfig','herablassend','hilfsbereit, aber vorsichtig']};
 const wahl=a=>a[Math.floor(Math.random()*a.length)];
-function nscAlter(gen){const g=gen.toLowerCase();if(/elf/.test(g))return 30+Math.floor(Math.random()*300);if(/zwerg|angrosch/.test(g))return 40+Math.floor(Math.random()*200);if(/ork|goblin/.test(g))return 12+Math.floor(Math.random()*30);return 16+Math.floor(Math.random()*55)}
-$('#nNsc').onclick=async()=>{LS.set('hh-ngen',$('#nGen').value);const w=document.querySelector('[name=nSex]:checked').value==='w',gen=$('#nGen').value;
-  let namen;try{namen=await api('/api/namen?g='+encodeURIComponent(gen)+'&s='+(w?'w':'m')+'&adlig='+($('#nAdlig').checked?1:0)+'&n=4')}catch(e){return toastErr(e.message)}
-  $('#nNscList').innerHTML=namen.map(n=>{let c1=wahl(NSC.charakter),c2=wahl(NSC.charakter);while(c2===c1)c2=wahl(NSC.charakter);
-    const txt=`${n}, ${w?'weiblich':'männlich'}, ${nscAlter(gen)} Jahre
-Namen: ${gen}\nBeruf: ${wahl(NSC.beruf)}\nAussehen: ${wahl(NSC.statur)}, ${wahl(NSC.haar)} ${wahl(NSC.frisur).replace(/^(kurze|lange|wirre|schütteres|geflochtene) /,'')}, ${wahl(NSC.augen)} Augen\nCharakter: ${c1}, ${c2}\nBesonderheit: ${wahl(NSC.besonders)}\nWill: ${wahl(NSC.motiv)}\nGegenüber den Helden: ${wahl(NSC.haltung)}`;
-    return `<div class="card nsckarte"><pre>${esc(txt)}</pre><button class="btn sm" data-nsc="${esc(txt)}">Kopieren</button></div>`}).join('')};
+/** Alter: meist Erwachsene, aber auch Kinder und Greise (Elfen/Zwerge entsprechend älter) */
+function nscAlter(gen){const g=gen.toLowerCase(),r=Math.random();if(/elf/.test(g))return 20+Math.floor(Math.random()*400);if(/zwerg|angrosch/.test(g))return 25+Math.floor(Math.random()*250);
+  if(/ork|goblin/.test(g))return 8+Math.floor(Math.random()*35);return r<.1?5+Math.floor(Math.random()*11):r<.85?16+Math.floor(Math.random()*44):60+Math.floor(Math.random()*25)}
+const NSC_LOOK=['Narbe über der Augenbraue','auffälliger Kupferring','Sommersprossen','Zahnlücke','buschige Augenbrauen','schiefe Nase','ausladender Bart','kahl rasierter Schädel','lange, geflochtene Haare','tiefe Lachfalten','Brandnarbe an der Hand','graue Strähne im Haar','Hakennase','Pausbacken','sehr blasse Haut','wettergegerbtes Gesicht','auffällig bunte Kleidung','abgetragener Mantel','Ohrring aus Bein','Augenklappe','Kette mit Holzanhänger','tintenfleckige Finger','dreckige Fingernägel','Halstuch in Rot','federgeschmückter Hut','auffällig gerader Gang','zitternde Hände','sehr klein','sehr groß','muskulöse Arme','schmale Lippen','stechender Blick','auffällig weiße Zähne','Tätowierung am Hals','fehlender Schneidezahn','riecht nach Rauch','riecht nach Seife','dicker Wollschal','silberne Haarspange','vernarbte Knöchel'];
+function nscZeile(o,gen){let c1=wahl(NSC.charakter),c2=wahl(NSC.charakter);while(c2===c1)c2=wahl(NSC.charakter);
+  const alter=nscAlter(gen),kind=alter<14&&!/elf|zwerg/i.test(gen),beruf=kind?'':Math.random()<.6?wahl(NSC.beruf)[o.w?1:0]:'';
+  const kurz=[`${alter} Jahre`,wahl(NSC_LOOK),c1,beruf].filter(Boolean),
+    lang=`${o.name} (${o.w?'weiblich':'männlich'}${o.ad?', adlig':''}), ${alter} Jahre, ${gen}\n${beruf?'Beruf: '+beruf+'\n':''}Aussehen: ${wahl(NSC.statur)}, ${wahl(NSC.haar)} Haare, ${wahl(NSC.augen)} Augen, ${kurz[1]}\nCharakter: ${c1}, ${c2}\nEigenheit: ${wahl(NSC.besonders)}${kind?'':'\nWill: '+wahl(NSC.motiv)}\nGegenüber den Helden: ${wahl(NSC.haltung)}`;
+  return {o,kurz,lang}}
+$('#nNsc').onclick=async()=>{LS.set('hh-ngen',$('#nGen').value);const gen=$('#nGen').value;let l;try{l=await nscNamen(10)}catch(e){return toastErr(e.message)}
+  $('#nNscList').innerHTML=l.map(o=>{const z=nscZeile(o,gen);return `<details class="nscz"><summary><b>${esc(o.name)}</b> <span class="small mut">${z.kurz.map(esc).join(' · ')}</span></summary>
+    <pre>${esc(z.lang)}</pre><button class="btn sm" data-nsc="${esc(z.lang)}">Kopieren</button></details>`}).join('')};
 $('#nNscList').onclick=e=>{const b=e.target.closest('[data-nsc]');if(!b)return;navigator.clipboard?.writeText(b.dataset.nsc).then(()=>toast('NSC kopiert'),()=>toast('Kopieren geht hier nicht, bitte markieren'))};
 /* ---------- Laden ---------- */
 async function ladenLaden(){try{const l=await api('/api/laden');$('#ladenOffen').checked=l.offen;$('#ladenFaktor').value=l.faktor}catch(e){}}

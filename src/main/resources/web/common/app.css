@@ -354,5 +354,7 @@ tr.geplant td{background:var(--acc-soft)}
 .namen{columns:2;list-style:none;padding:0;margin:12px 0}
 .namen li{margin:3px 0}
 
-.nsc{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;margin-top:12px}
-.nsckarte pre{white-space:pre-wrap;font-family:inherit;margin:0 0 8px}
+.nsc{display:grid;gap:2px;margin-top:12px}
+.nscz{border-bottom:1px solid var(--line);padding:4px 0}
+.nscz summary{cursor:pointer}
+.nscz pre{white-space:pre-wrap;font-family:inherit;margin:6px 0}
