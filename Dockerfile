@@ -6,6 +6,10 @@ COPY src src
 RUN mvn -q -B package -DskipTests
 
 FROM eclipse-temurin:21-jre
+# Schriften mit den Laufweiten von Times New Roman/Arial: Die helden.jar setzt den Heldenbogen in diesen Maßen.
+# Ohne sie nimmt Java DejaVu (breiter) und Beschriftungen überlappen die Werte.
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-liberation && rm -rf /var/lib/apt/lists/*
+COPY fonts.conf /etc/fonts/local.conf
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 DATA_DIR=/data MEISTER_PORT=8080 SPIELER_PORT=8081 TZ=Europe/Vienna
 COPY --from=build /src/target/heldenhort.jar /app/heldenhort.jar
 EXPOSE 8080 8081

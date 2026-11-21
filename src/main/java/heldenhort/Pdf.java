@@ -45,6 +45,7 @@ public final class Pdf {
             if (regelnHtml != null && !regelnHtml.isBlank()) Textsatz.append(doc, title + " – Regelzusammenfassung", regelnHtml);
             if (doc.getNumberOfPages() == 0) throw new IllegalArgumentException("Für diesen Helden gibt es zu den gewählten Teilen noch keinen Inhalt (z. B. keine Backgroundstory). Bitte „Heldenbogen“ dazunehmen oder erst etwas eintragen.");
             ByteArrayOutputStream out = new ByteArrayOutputStream();
+            druckEinstellungen(doc);
             doc.save(out);
             return out.toByteArray();
         }
@@ -95,7 +96,8 @@ public final class Pdf {
                 if (extraHtml != null && !extraHtml.isBlank()) appendHtml(doc, title + " – Zusatzinfos", extraHtml);
                 if (regelnHtml != null && !regelnHtml.isBlank()) Textsatz.append(doc, title + " – Regelzusammenfassung", regelnHtml);
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
-                doc.save(out);
+                druckEinstellungen(doc);
+            doc.save(out);
                 return out.toByteArray();
             } finally { Thread.currentThread().setContextClassLoader(old); }
         }
@@ -106,9 +108,18 @@ public final class Pdf {
         try (PDDocument doc = new PDDocument()) {
             Textsatz.append(doc, title, html);
             ByteArrayOutputStream out = new ByteArrayOutputStream();
+            druckEinstellungen(doc);
             doc.save(out);
             return out.toByteArray();
         }
+    }
+
+    /** Acrobat & Co. sollen in Originalgröße auf A4 drucken (nicht „anpassen“, sonst landet der Bogen verkleinert in einer Ecke). */
+    private static void druckEinstellungen(PDDocument doc) {
+        var prefs = new org.apache.pdfbox.pdmodel.interactive.viewerpreferences.PDViewerPreferences(new org.apache.pdfbox.cos.COSDictionary());
+        prefs.setPrintScaling(org.apache.pdfbox.pdmodel.interactive.viewerpreferences.PDViewerPreferences.PRINT_SCALING.None);
+        prefs.getCOSObject().setBoolean(org.apache.pdfbox.cos.COSName.getPDFName("PickTrayByPDFSize"), true);
+        doc.getDocumentCatalog().setViewerPreferences(prefs);
     }
 
     private static void addForm(PDDocument doc, PdfBoxGraphics2D g) throws Exception {
