@@ -46,8 +46,6 @@
             <div class="spread"><h3>Dateiordner: <span id="uplScene"></span></h3><button class="btn sm" id="uplClose">Schließen</button></div>
             <div class="grid2">
               <div class="field"><label class="label" for="uplTarget">Ziel</label><select id="uplTarget"><option value="Music">Musik</option><option value="Sounds">Hintergrundgeräusche</option></select></div>
-              <div class="field"><label class="label" for="uplRate">Tempo</label><select id="uplRate" title="Ein Upload über Cloudflare belegt die Leitung des Servers. Gebremst bleibt genug Platz für Musik und Befehle.">
-                <option value="0.5">schonend (0,5 MB/s, Soundboard bleibt flüssig)</option><option value="1.5">mittel (1,5 MB/s)</option><option value="0">volle Leitung (Spieler hängen evtl.)</option></select></div>
             </div>
             <label class="drop" for="upfile" id="drop">MP3 hierher ziehen oder klicken<input type="file" id="upfile" multiple accept=".mp3,audio/mpeg" hidden></label>
             <div class="prog" id="uplProg" hidden><i></i></div>
@@ -346,8 +344,6 @@ $('#upl').addEventListener('toggle',()=>fitLists(),true);
 // Anzeige und Balken gelten für alles zusammen. Weitere Dateien während eines Uploads kommen hinten dran.
 // Große Dateien gehen in Teilen zu 50 MB (Cloudflare erlaubt höchstens 100 MB pro Anfrage).
 const UQ={items:[],done:0,bytes:0,sent:0,ok:[],bad:[],running:false,scenes:new Set()};
-try{$('#uplRate').value=localStorage.getItem('hh-uplrate')||'0.5'}catch(_){}
-$('#uplRate').onchange=e=>{try{localStorage.setItem('hh-uplrate',e.target.value)}catch(_){}};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const TNAME={Music:'Musik',Sounds:'Geräusche'};
 function upload(files){files=[...files].filter(f=>/\.mp3$/i.test(f.name));if(!files.length)return toastErr('Nur MP3-Dateien');
@@ -360,19 +356,18 @@ function uplShow(cur){const total=UQ.done+UQ.items.length+(cur?1:0);
   $('#uplProg').firstElementChild.style.width=(UQ.bytes?UQ.sent/UQ.bytes*100:0)+'%';
   $('#uplInfo').textContent=cur?`Datei ${UQ.done+1} von ${total} · ${TNAME[cur.target]}: ${cur.f.name}${cur.parts>1?` (Teil ${cur.k+1}/${cur.parts})`:''} · ${Math.round(UQ.sent/1048576)} von ${Math.round(UQ.bytes/1048576)} MB`:''}
 async function uplRun(){UQ.running=true;
-  while(UQ.items.length){const it=UQ.items.shift(),f=it.f,rate=+$('#uplRate').value,PART=(rate?1:50)*1024*1024,parts=Math.max(1,Math.ceil(f.size/PART));let r,base=UQ.sent;
+  while(UQ.items.length){const it=UQ.items.shift(),f=it.f,PART=50*1024*1024,parts=Math.max(1,Math.ceil(f.size/PART));let r,base=UQ.sent;
     for(let k=0;k<parts;k++){it.k=k;it.parts=parts;uplShow(it);
       const fd=new FormData();fd.append('target',it.target);fd.append('scene',it.scene);if(it.scene==='Session')fd.append('sid',it.sid);
       fd.append('name',f.name);fd.append('part',k);fd.append('parts',parts);fd.append('files',f.slice(k*PART,(k+1)*PART),f.name);
-      const start=base+k*PART,t0=Date.now();
+      const start=base+k*PART;
       r=await new Promise(res=>{const x=new XMLHttpRequest();
         x.upload.onprogress=e=>{if(e.lengthComputable){UQ.sent=start+Math.min(e.loaded,f.size-k*PART);uplShow(it)}};
         x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(_){}res({status:x.status,j})};
         x.onerror=()=>res({status:0,j:{}});x.open('POST','/api/sound/upload');x.send(fd)});
       if(r.status===401){UQ.running=false;return dispatchEvent(new Event('hh401'))}
       if(!(r.status>=200&&r.status<300))break;
-      // Bremse: jedes 1-MB-Stück darf höchstens so schnell gehen wie eingestellt, der Rest der Zeit gehört dem Soundboard
-      const want=+$('#uplRate').value;if(want&&k<parts-1)await sleep(Math.max(0,1000/want-(Date.now()-t0)));}
+      }
     UQ.sent=base+f.size;UQ.done++;UQ.scenes.add(it.scene);
     if(r.status>=200&&r.status<300)UQ.ok.push(f.name);else UQ.bad.push(`${f.name} (${TNAME[it.target]}): `+(r.j.error||(r.status===413?'zu groß für den Proxy':r.status?'Fehler '+r.status:'Verbindung abgebrochen')))}
   UQ.running=false;$('#uplProg').hidden=true;$('#uplInfo').textContent='';
