@@ -95,8 +95,7 @@
           <div class="field"><label class="label" for="iniRsG">RS</label><input type="number" id="iniRsG" value="0" data-nostep style="width:60px"></div>
           <div class="field"><label class="label" for="iniWs" title="Wundschwelle (KO/2); leer = keine Wunden anzeigen">WS</label><input type="number" id="iniWs" placeholder="–" data-nostep style="width:60px"></div>
           <button class="btn sm" type="button" id="iniAdd">+ Gegner</button>
-          <button class="btn sm" type="button" id="iniHelden" title="Helden dieser Session mit ihrer INI-Basis (inkl. Kampfreflexe/Kampfgespür) übernehmen">Helden übernehmen</button>
-          <button class="btn sm" type="button" id="iniWurf" title="Für alle ohne Wurf 1W6 würfeln">Alle würfeln</button>
+          <button class="btn sm" type="button" id="iniWurf" title="Für alle Gegner ohne Wurf 1W6 würfeln; die Spieler würfeln selbst und sagen ihren Wurf an">Gegner würfeln</button>
           <button class="btn sm pri" type="button" id="iniNext">Nächster ▶</button>
           <button class="btn sm" type="button" id="iniEnde">Kampf beenden</button></div>
         <p class="small mut" id="iniStand"></p>
@@ -112,8 +111,9 @@
           <div class="field"><label class="label" for="patVor">oder Ergebnis vorgeben</label><select id="patVor" style="width:auto"></select></div>
           <button class="btn sm" type="button" id="patSetzen">Vorgeben</button></div>
         <div id="patErg" style="margin-top:8px"></div>
+        <details id="patDet"><summary class="small">Patzertabelle anzeigen</summary>
         <div class="tw"><table class="small zebra"><thead><tr><th>2W6</th><th>Ergebnis</th><th>INI</th><th>Folgen</th></tr></thead><tbody id="patTab"></tbody></table></div>
-        <p class="small mut" id="patFuss"></p>
+        <p class="small mut" id="patFuss"></p></details>
       </div>
       <div class="card">
         <div class="field"><label class="label" for="q">Suchen: alles am Helden (Eigenschaften, Talente, Zauber, Vor-/Nachteile, Sonderfertigkeiten, Kampfwerte, Ausrüstung, Geld …)</label>
@@ -558,7 +558,7 @@ $('#sesstab').onclick=async e=>{const b=e.target.closest('button');if(!b)return;
 $('#sesstab').addEventListener('change',async e=>{const id=e.target.dataset.ren;if(!id)return;
   try{await api('/api/sessions/'+id,{method:'PUT',body:{name:e.target.value}});toast('Umbenannt');loadSess()}catch(x){toastErr(x.message);loadSessions()}});
 $('#hpick').onchange=async()=>{const files=$$('#hpick input:checked').map(i=>i.dataset.s);
-  try{await api('/api/sessions/'+cur,{method:'PUT',body:{heroes:files}});sessions.find(s=>s.id===cur).heroes=JSON.stringify(files);renderSearch();renderAttr();renderAward()}catch(e){toastErr(e.message)}};
+  try{await api('/api/sessions/'+cur,{method:'PUT',body:{heroes:files}});sessions.find(s=>s.id===cur).heroes=JSON.stringify(files);renderSearch();renderAttr();renderAward();iniHeldenSync()}catch(e){toastErr(e.message)}};
 const quick=['Sinnenschärfe','Gefahreninstinkt','Selbstbeherrschung','Schwimmen','Menschenkenntnis','Schleichen','IN','MU'];
 $('#quick').innerHTML=quick.map(q=>`<button class="chip" data-q="${q}">${q}</button>`).join('');
 $('#quick').onclick=e=>{const b=e.target.closest('[data-q]');if(b){$('#q').value=b.dataset.q;$('#qcat').value='';renderSearch()}};
@@ -786,7 +786,7 @@ let INI={kaempfer:[],runde:1,dran:'',hausregel:false};
 const iniWert=k=>(+k.basis||0)+(+k.wurf||0)+(+k.mod||0);
 /** Reihenfolge: höchste INI zuerst; Gleichstand: höhere Basis. Hausregel: genau umgekehrt (höchste INI zuletzt). */
 function iniReihe(){const r=[...INI.kaempfer].sort((a,b)=>iniWert(b)-iniWert(a)||(+b.basis||0)-(+a.basis||0)||String(a.name).localeCompare(b.name));return INI.hausregel?r.reverse():r}
-async function iniLaden(){if(cur==null)return;try{INI=await api('/api/sessions/'+cur+'/initiative')}catch(e){return}$('#iniHaus').checked=!!INI.hausregel;$('#iniRs').value=INI.rsModus||'gesamt';iniZeigen()}
+async function iniLaden(){if(cur==null)return;try{INI=await api('/api/sessions/'+cur+'/initiative')}catch(e){return}$('#iniHaus').checked=!!INI.hausregel;$('#iniRs').value=INI.rsModus||'gesamt';iniZeigen();iniHeldenSync()}
 const ZONEN={kopf:'Kopf',brust:'Brust',ruecken:'Rücken',bauch:'Bauch',linkerarm:'linker Arm',rechterarm:'rechter Arm',linkesbein:'linkes Bein',rechtesbein:'rechtes Bein'};
 const ZONEN_AN={kopf:'am Kopf',brust:'an der Brust',ruecken:'am Rücken',bauch:'am Bauch',linkerarm:'am linken Arm',rechterarm:'am rechten Arm',linkesbein:'am linken Bein',rechtesbein:'am rechten Bein'};
 const zonenText=z=>Object.entries(ZONEN).filter(([k])=>z[k]!=null).map(([k,n])=>n+' '+z[k]).join(', ');
@@ -811,7 +811,7 @@ function iniZeigen(){const r=iniReihe();
     <td><input type="number" data-if="rs" value="${esc(k.rs??'')}" data-nostep style="width:50px" title="${k.rsZ?esc(zonenText(k.rsZ)):'Gesamt-RS (bei Zonen-RS für alle Zonen)'}"></td>
     <td class="nowrap"><input type="number" class="ini-tp" data-nostep style="width:55px" placeholder="TP" aria-label="Trefferpunkte für ${esc(k.name)}"><button class="btn sm" data-ihit>Treffer</button></td>
     <td><input type="text" data-if="notiz" value="${esc(k.notiz||'')}" style="width:140px"></td>
-    <td><button class="btn sm" data-idel aria-label="${esc(k.name)} entfernen">✕</button></td></tr>`).join('')||'<tr><td colspan="11" class="empty">Noch niemand im Kampf. „Helden übernehmen“ und Gegner hinzufügen.</td></tr>';
+    <td><button class="btn sm" data-idel aria-label="${esc(k.name)} entfernen">✕</button></td></tr>`).join('')||'<tr><td colspan="11" class="empty">Noch niemand im Kampf. Helden oben der Session zuordnen, Gegner hier hinzufügen.</td></tr>';
   const d=INI.kaempfer.find(k=>k.id===INI.dran);if(typeof patWer==='function')patWer();
   $('#iniStand').textContent=INI.kaempfer.length?`Kampfrunde ${INI.runde}`+(d?` · dran: ${d.name}`:' · „Nächster ▶“ startet die Runde')+(INI.hausregel?' · Hausregel: höchste INI zuletzt':''):''}
 const iniId=()=>Math.random().toString(36).slice(2,9);
@@ -821,16 +821,24 @@ $('#iniAdd').onclick=()=>{const n=$('#iniName').value.trim();if(!n)return toast(
   const le=$('#iniLe').value===''?'':+$('#iniLe').value;
   for(let i=1;i<=a;i++)INI.kaempfer.push({id:iniId(),name:a>1?n+' '+i:n,held:false,basis:+$('#iniBas').value||0,wurf:'',mod:'',le,leMax:le,rs:+$('#iniRsG').value||0,ws:$('#iniWs').value===''?'':+$('#iniWs').value,notiz:''});
   $('#iniName').value='';iniZeigen();iniSpeichern()};
-$('#iniHelden').onclick=async()=>{const hs=sessHeroes();if(!hs.length)return toast('Keine Helden in dieser Session');let neu=0;$('#iniHelden').disabled=true;
+/** Die Helden der Session stehen immer in der Liste: fehlende kommen dazu (LeP/RS/WS aus der helden.jar), abgewählte fliegen raus. */
+let iniSyncLauf=null;
+async function iniHeldenSync(){if(cur==null)return;if(iniSyncLauf)return iniSyncLauf;
+  iniSyncLauf=(async()=>{const sid=cur,hs=sessHeroes(),files=new Set(hs.map(h=>h.file));let neu=0;
+  const vorher=INI.kaempfer.length;INI.kaempfer=INI.kaempfer.filter(k=>!k.held||files.has(k.file));let weg=vorher-INI.kaempfer.length;
   for(const h of hs){if(INI.kaempfer.some(k=>k.file===h.file))continue;let kw={};try{kw=await api('/api/heroes/'+encodeURIComponent(h.file)+'/kampfwerte')}catch(e){}
+    if(sid!==cur)return;
     const rsZ=kw.rs||{};INI.kaempfer.push({id:iniId(),file:h.file,name:h.name,held:true,basis:h.iniBasis??0,info:(h.iniInfo||'')+(rsZ.behinderung?', Rüstungs-BE '+rsZ.behinderung+' (bei Mod. abziehen, wenn ihr mit BE auf die INI spielt)':''),wurf:'',mod:'',
       le:kw.le??'',leMax:kw.le??'',ws:kw.ws??'',rs:rsZ.gesamtschutz??0,rsZ,notiz:''});neu++}
-  $('#iniHelden').disabled=false;iniZeigen();iniSpeichern();toast(neu?neu+' Helden übernommen (LeP, RS und Wundschwelle aus der helden.jar)':'Alle Helden sind schon dabei')};
-$('#iniWurf').onclick=()=>{let n=0;for(const k of INI.kaempfer)if(k.wurf===''||k.wurf==null){k.wurf=1+Math.floor(Math.random()*6);n++}iniZeigen();iniSpeichern();toast(n?n+'× 1W6 gewürfelt':'Alle haben schon einen Wurf')};
+  if(INI.dran&&!INI.kaempfer.some(k=>k.id===INI.dran))INI.dran='';
+  iniZeigen();if(neu||weg)iniSpeichern()})();
+  try{await iniSyncLauf}finally{iniSyncLauf=null}}
+$('#iniWurf').onclick=()=>{let n=0;for(const k of INI.kaempfer)if(!k.held&&(k.wurf===''||k.wurf==null)){k.wurf=1+Math.floor(Math.random()*6);n++}iniZeigen();iniSpeichern();
+  toast(n?n+' Gegner: je 1W6 gewürfelt':INI.kaempfer.some(k=>!k.held)?'Alle Gegner haben schon einen Wurf':'Noch keine Gegner eingetragen')};
 $('#iniNext').onclick=()=>{const r=iniReihe();if(!r.length)return;const i=r.findIndex(k=>k.id===INI.dran);
   if(i<0)INI.dran=r[0].id;else if(i===r.length-1){INI.runde++;INI.dran=r[0].id;toast('Kampfrunde '+INI.runde)}else INI.dran=r[i+1].id;iniZeigen();iniSpeichern()};
 $('#iniEnde').onclick=()=>{if(!INI.kaempfer.length)return;if($('#iniEnde').dataset.ask!=='1'){$('#iniEnde').dataset.ask='1';$('#iniEnde').textContent='Wirklich beenden?';return}
-  $('#iniEnde').dataset.ask='';$('#iniEnde').textContent='Kampf beenden';INI={...INI,kaempfer:[],runde:1,dran:''};iniZeigen();iniSpeichern();toast('Kampf beendet')};
+  $('#iniEnde').dataset.ask='';$('#iniEnde').textContent='Kampf beenden';INI={...INI,kaempfer:[],runde:1,dran:''};iniZeigen();iniSpeichern();iniHeldenSync();toast('Kampf beendet, Gegner entfernt')};
 $('#iniBody').addEventListener('change',e=>{const f=e.target.dataset.if;if(!f)return;const k=INI.kaempfer.find(x=>x.id===e.target.closest('[data-ik]').dataset.ik);
   k[f]=f==='notiz'||f==='name'?e.target.value:(e.target.value===''?'':+e.target.value);iniZeigen();iniSpeichern()});
 function iniTreffer(row){const k=INI.kaempfer.find(x=>x.id===row.dataset.ik),i=row.querySelector('.ini-tp'),tp=+i.value;if(!(tp>0))return toast('Erst die Trefferpunkte (TP) eintragen');
