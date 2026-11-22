@@ -38,6 +38,8 @@ public class Ausruestung {
 
     private volatile List<Map<String, Object>> katalog;
     private volatile Map<String, Map<String, Object>> katalogNachName;
+    /** Jar-Objekte der Katalogeinträge (für Tiere: daraus erzeugt die Jar das vollständige Begleiter-XML). */
+    private volatile Map<String, Object> objektNachName;
 
     /** Alle Gegenstände der helden.jar. Braucht einen geladenen Helden (die Jar liefert den Katalog über einen Helden). */
     List<Map<String, Object>> katalog() throws Exception {
@@ -54,6 +56,7 @@ public class Ausruestung {
                 Object h = ((List<?>) Creation.call(xp, "ladeHelden", irgendein.toFile())).get(0);
                 Object hw = l.loadClass("helden.plugin.datenplugin.impl.DatenPluginHeldenWerkzeugImpl").getConstructor(l.loadClass("helden.framework.held.H")).newInstance(h);
                 List<Map<String, Object>> out = new ArrayList<>();
+                Map<String, Object> objekte = new HashMap<>();
                 Set<String> seen = new HashSet<>();
                 for (Object x : (List<?>) Creation.call(hw, "getAlleGegenstaende", false)) {
                     String name = String.valueOf(Creation.call(x, "getName"));
@@ -64,6 +67,9 @@ public class Ausruestung {
                     m.put("gewicht", Creation.call(x, "getGewicht"));  // Unzen
                     Object o = Creation.call(x, "getObject");
                     m.put("art", art(o));
+                    objekte.put(name, o);
+                    // Tiere: die Jar führt den Preis in Dukaten (ZBA), alles andere in Kreuzern; Tiere sind kein Gepäck
+                    if ("Wesen".equals(m.get("art"))) { m.put("preis", ((Number) m.get("preis")).intValue() * 1000); m.put("gewicht", 0.0); }
                     m.put("quelle", quelle(o));
                     out.add(m);
                 }
@@ -71,6 +77,7 @@ public class Ausruestung {
                 Map<String, Map<String, Object>> byName = new HashMap<>();
                 for (var m : out) byName.put(String.valueOf(m.get("name")), m);
                 katalogNachName = byName;
+                objektNachName = objekte;
                 return katalog = out;
             } finally { Thread.currentThread().setContextClassLoader(old); }
         }
@@ -302,10 +309,47 @@ public class Ausruestung {
         }
     }
 
+    static boolean istTier(Map<String, Object> art) { return "Wesen".equals(art.get("art")); }
+
+    /** Gegenstand ins Gepäck legen; ein Tier wird als Begleiter angelegt (XML erzeugt die helden.jar selbst, wie beim Hinzufügen in der Helden-Software). */
+    private void einlegen(String file, Document d, Element held, String name, int anzahl) throws Exception {
+        Element gl = liste(d, held, "gegenstände");
+        if (istTier(artikel(name))) {
+            for (int i = 0; i < anzahl; i++) { Element w = tierElement(file, d, name); w.setAttribute("slot", "0"); gl.appendChild(w); }
+            return;
+        }
+        Element g = null;
+        for (Element e : kinder(gl, "gegenstand")) if (e.getAttribute("name").equals(name) && kinder(e, "Wesen").isEmpty()) { g = e; break; }
+        if (g == null) { g = d.createElement("gegenstand"); g.setAttribute("name", name); g.setAttribute("anzahl", "0"); g.setAttribute("slot", "0"); gl.appendChild(g); }
+        g.setAttribute("anzahl", String.valueOf(Heroes.num(g.getAttribute("anzahl")) + anzahl));
+    }
+
+    private Element tierElement(String file, Document d, String name) throws Exception {
+        Object o = objektNachName == null ? null : objektNachName.get(name);
+        if (o == null) throw new IllegalArgumentException("„" + name + "“ kennt die helden.jar nicht als Tier.");
+        synchronized (jar) {
+            ClassLoader l = jar.loader(), old = Thread.currentThread().getContextClassLoader();
+            Thread.currentThread().setContextClassLoader(l);
+            try {
+                Object xp = l.loadClass("helden.framework.held.persistenz.XMLPersistierer").getConstructor().newInstance();
+                Object h = ((List<?>) Creation.call(xp, "ladeHelden", heroes.file(file).toFile())).get(0);
+                Class<?> hx = l.loadClass("helden.framework.held.persistenz.HeldXML");
+                var k = hx.getDeclaredConstructor(l.loadClass("helden.framework.held.H"), Document.class);
+                k.setAccessible(true);
+                Object x = k.newInstance(h, d);
+                for (var m : hx.getDeclaredMethods())
+                    if (m.getName().equals("getGegenstandselement") && m.getParameterCount() == 2) { m.setAccessible(true); return (Element) m.invoke(x, o, 1); }
+                throw new IllegalStateException("Diese helden.jar kann kein Begleiter-XML erzeugen (HeldXML.getGegenstandselement fehlt).");
+            } finally { Thread.currentThread().setContextClassLoader(old); }
+        }
+    }
+
     /** anzahl > 0 hinzufügen, < 0 entfernen. kaufen: Preis (× Ladenfaktor) aus der Geldbörse. */
     synchronized String aendern(String file, String name, int anzahl, boolean kaufen) throws Exception {
         if (anzahl == 0) throw new IllegalArgumentException("Anzahl fehlt.");
         Map<String, Object> art = artikel(name);
+        if (istTier(art) && anzahl < 0) throw new IllegalArgumentException("Begleiter entfernt der Meister in der Begleiter-Ansicht des Helden.");
+        List<String> tiereVorher = istTier(art) ? App.BEGLEITER.namen(file) : null;
         Document d = adv.read(file);
         Element held = (Element) d.getElementsByTagName("held").item(0);
         Element gl = liste(d, held, "gegenstände");
@@ -327,8 +371,8 @@ public class Ausruestung {
                 text = anzahl + "× " + name + " gekauft für " + geldText(preis) + ", übrig: " + geldText(geld - preis);
                 Advance.ereignis(d, held, "Einkauf", anzahl + "× " + name, geld, geld - preis, geldText(preis));
             } else text = anzahl + "× " + name + " eingetragen";
-            if (g == null) { g = d.createElement("gegenstand"); g.setAttribute("name", name); g.setAttribute("anzahl", "0"); g.setAttribute("slot", "0"); gl.appendChild(g); }
-            g.setAttribute("anzahl", String.valueOf(Heroes.num(g.getAttribute("anzahl")) + anzahl));
+            einlegen(file, d, held, name, anzahl);
+            if (istTier(art)) text += " (als Begleiter)";
         } else {
             if (g == null) throw new IllegalArgumentException(held.getAttribute("name") + " hat kein(e) " + name + ".");
             int neu = Heroes.num(g.getAttribute("anzahl")) + anzahl;
@@ -340,6 +384,7 @@ public class Ausruestung {
             } else { g.setAttribute("anzahl", String.valueOf(neu)); text = (-anzahl) + "× " + name + " entfernt, noch " + neu; }
         }
         speichern(file, d);
+        if (tiereVorher != null) App.BEGLEITER.nachKauf(file, tiereVorher);
         return text;
     }
 
@@ -493,6 +538,9 @@ public class Ausruestung {
         String file = String.valueOf(r.get(0).get("file"));
         List<?> pos = (List<?>) d.get("pos");
         if (pos.isEmpty()) throw new IllegalArgumentException("Der Warenkorb ist leer. Ablehnen oder Artikel stehen lassen.");
+        boolean tiere = false;
+        for (Object o : pos) if (istTier(artikel(String.valueOf(((Map<?, ?>) o).get("name"))))) tiere = true;
+        List<String> tiereVorher = tiere ? App.BEGLEITER.namen(file) : null;
         Document doc = adv.read(file);
         Element held = (Element) doc.getElementsByTagName("held").item(0);
         int summe = ((Number) d.get("summe")).intValue(), geld = geldInKreuzer(held);
@@ -503,18 +551,14 @@ public class Ausruestung {
         if (tk > 0 && neu > tk * (1 + tol / 100.0) && !"0".equals(db.get("tragkraftSperre", "1")))
             throw new IllegalArgumentException("Zu schwer: " + held.getAttribute("name") + " trüge danach " + Math.round(neu / 4.0) / 10.0 + " Stein, Tragkraft " + tk / 40 + " Stein"
                     + (tol > 0 ? " plus " + tol + " %" : "") + " (WdS S. 144). Artikel entfernen oder in der Konfiguration die Sperre lockern.");
-        Element gl = liste(doc, held, "gegenstände");
         for (Object o : pos) {
             Map<?, ?> p = (Map<?, ?>) o;
-            String name = String.valueOf(p.get("name"));
-            Element g = null;
-            for (Element e : kinder(gl, "gegenstand")) if (e.getAttribute("name").equals(name) && kinder(e, "Wesen").isEmpty()) { g = e; break; }
-            if (g == null) { g = doc.createElement("gegenstand"); g.setAttribute("name", name); g.setAttribute("anzahl", "0"); g.setAttribute("slot", "0"); gl.appendChild(g); }
-            g.setAttribute("anzahl", String.valueOf(Heroes.num(g.getAttribute("anzahl")) + ((Number) p.get("anzahl")).intValue()));
+            einlegen(file, doc, held, String.valueOf(p.get("name")), ((Number) p.get("anzahl")).intValue());
         }
         geldSetzen(doc, held, geld - summe);
         Advance.ereignis(doc, held, "Einkauf", "Warenkorb " + id, geld, geld - summe, geldText(summe));
         speichern(file, doc);
+        if (tiereVorher != null) App.BEGLEITER.nachKauf(file, tiereVorher);
         db.exec("UPDATE warenkorb SET status='freigegeben', entschieden=? WHERE id=?", App.now(), id);
         return held.getAttribute("name") + ": Einkauf für " + geldText(summe) + " gebucht, übrig " + geldText(geld - summe) + ".";
     }

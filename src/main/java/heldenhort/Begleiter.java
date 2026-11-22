@@ -42,6 +42,51 @@ public class Begleiter {
         // verwirft sonst beim Einlesen den ganzen Begleiter), sondern hier
         db.exec("CREATE TABLE IF NOT EXISTS begleiter_kann(file TEXT, idx INTEGER, name TEXT, art TEXT, ap INTEGER, at TEXT, PRIMARY KEY(file, idx, name))");
         db.exec("CREATE TABLE IF NOT EXISTS begleiter_log(id INTEGER PRIMARY KEY AUTOINCREMENT, file TEXT, idx INTEGER, was TEXT, ap INTEGER, at TEXT, wer TEXT)");
+        // im Laden gekaufte Tiere sind nie Vertraute, auch wenn der Held die Vertrautenbindung hat
+        try { db.exec("ALTER TABLE begleiter ADD COLUMN gekauft INTEGER DEFAULT 0"); } catch (Exception ignored) { }
+    }
+
+    private boolean gekauft(String file, int idx) {
+        var r = db.query("SELECT gekauft FROM begleiter WHERE file=? AND idx=?", file, idx);
+        return !r.isEmpty() && r.get(0).get("gekauft") instanceof Number n && n.intValue() == 1;
+    }
+
+    private boolean vertraut(Element held, Element w, String file, int idx) {
+        return hatSf(held, "Vertrautenbindung") && "Tier".equalsIgnoreCase(Heroes.attr(kind(w, "wesensart"), "value")) && !gekauft(file, idx);
+    }
+
+    /** Namen der Begleiter in der Reihenfolge des XML (= idx). */
+    synchronized List<String> namen(String file) throws Exception {
+        List<String> out = new ArrayList<>();
+        for (Element w : wesen(held(adv.read(file)))) out.add(name(w));
+        return out;
+    }
+
+    /** Nach einem Kauf: die helden.jar sortiert die Begleiter beim Speichern neu. DB-Einträge (AP, LO, Zauber, Log) wandern
+     *  per Name mit; die neuen Tiere bekommen einen Eintrag „gekauft“ (kein Vertrauter). */
+    synchronized void nachKauf(String file, List<String> vorher) throws Exception {
+        Document d = adv.read(file);
+        List<Element> ws = wesen(held(d));
+        List<String> nachher = new ArrayList<>();
+        for (Element w : ws) nachher.add(name(w));
+        boolean[] belegt = new boolean[nachher.size()];
+        int[] neu = new int[vorher.size()];
+        for (int i = 0; i < vorher.size(); i++) {
+            neu[i] = -1;
+            for (int j = 0; j < nachher.size(); j++) if (!belegt[j] && nachher.get(j).equals(vorher.get(i))) { belegt[j] = true; neu[i] = j; break; }
+        }
+        List<String> tabs = List.of("begleiter", "begleiter_log", "begleiter_kann");
+        for (String t : tabs) db.exec("UPDATE " + t + " SET idx=idx+100000 WHERE file=? AND idx<100000", file);
+        for (int i = 0; i < vorher.size(); i++)
+            for (String t : tabs)
+                if (neu[i] >= 0) db.exec("UPDATE " + t + " SET idx=? WHERE file=? AND idx=?", neu[i], file, i + 100000);
+        for (String t : tabs) db.exec("DELETE FROM " + t + " WHERE file=? AND idx>=100000", file);
+        for (int j = 0; j < nachher.size(); j++)
+            if (!belegt[j]) {
+                db.exec("DELETE FROM begleiter WHERE file=? AND idx=?", file, j);
+                db.exec("INSERT INTO begleiter(file,idx,name,ap,frei,lo,uebertragen,rk,start,gekauft) VALUES(?,?,?,?,?,?,?,?,?,1)", file, j, nachher.get(j), 0, 0, null, 0, null,
+                        App.JSON.writeValueAsString(werte(ws.get(j))));
+            }
     }
 
     // ------------------------------------------------------------------ Tier-Manöver der helden.jar (Setting „Tiere“)
@@ -241,7 +286,7 @@ public class Begleiter {
         for (int i = 0; i < ws.size(); i++) {
             Element w = ws.get(i);
             String wesensart = Heroes.attr(kind(w, "wesensart"), "value");
-            boolean vertraut = bindung && "Tier".equalsIgnoreCase(wesensart);
+            boolean vertraut = bindung && "Tier".equalsIgnoreCase(wesensart) && !gekauft(file, i);
             Map<String, Object> z = zeile(file, i, w, vertraut);
             Map<String, Integer> st = start(z);
             Map<String, Object> b = new LinkedHashMap<>();
@@ -304,7 +349,7 @@ public class Begleiter {
         List<Element> ws = wesen(held);
         if (idx < 0 || idx >= ws.size()) throw new NotFoundResponse("Diesen Begleiter gibt es im Helden nicht mehr.");
         Element w = ws.get(idx);
-        boolean vertraut = hatSf(held, "Vertrautenbindung") && "Tier".equalsIgnoreCase(Heroes.attr(kind(w, "wesensart"), "value"));
+        boolean vertraut = vertraut(held, w, file, idx);
         if (!vertraut) throw new IllegalArgumentException(name(w) + " ist kein Vertrauter: normale Begleiter steigern nicht mit AP (WdZ S. 124). Der Meister trägt Änderungen ein.");
         Map<String, Object> z = zeile(file, idx, w, true);
         Map<String, Integer> werte = werte(w);
@@ -335,7 +380,7 @@ public class Begleiter {
         List<Element> ws = wesen(held);
         if (idx < 0 || idx >= ws.size()) throw new NotFoundResponse("Diesen Begleiter gibt es im Helden nicht mehr.");
         Element w = ws.get(idx);
-        if (!(hatSf(held, "Vertrautenbindung") && "Tier".equalsIgnoreCase(Heroes.attr(kind(w, "wesensart"), "value"))))
+        if (!vertraut(held, w, file, idx))
             throw new IllegalArgumentException("Vertrautenzauber lernen nur Vertraute (WdZ S. 125).");
         Map<String, Object> z = zeile(file, idx, w, true);
         Set<String> schon = zauberVon(w);

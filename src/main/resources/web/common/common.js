@@ -212,7 +212,7 @@ function bildEditor(root,base){
 /* ---------- Ausrüstung & Laden (Meister und Spieler) ----------
    Katalog, Preise (Kreuzer) und Gewichte (Unzen) aus der helden.jar. base = '/api/heroes/<datei>' (Meister) oder '/api/myheroes/<datei>' (Spieler). */
 let KAT=null;
-async function katalogLaden(){if(!KAT){KAT=(await api('/api/katalog')).filter(x=>!/Wesen|Modifikatoren/.test(x.art))}return KAT}
+async function katalogLaden(){if(!KAT){KAT=(await api('/api/katalog')).filter(x=>!/Modifikatoren/.test(x.art))}return KAT}
 function kreuzerText(k){if(!k)return '0 K';const t=[];for(const[w,n]of[[1000,'D'],[100,'S'],[10,'H'],[1,'K']]){const c=Math.floor(k/w);k-=c*w;if(c)t.push(c+' '+n)}return t.join(' ')}
 const SLOTNAME={nkwaffe1:'Nahkampfwaffe 1',nkwaffe2:'Nahkampfwaffe 2',fkwaffe1:'Fernkampfwaffe',schild1:'Schild / Parierwaffe',ruestung1:'Rüstung 1',ruestung2:'Rüstung 2',ruestung3:'Rüstung 3',ruestung4:'Rüstung 4',ruestung5:'Rüstung 5',ruestung6:'Rüstung 6'};
 const SLOTART={nkwaffe1:'Nahkampfwaffe',nkwaffe2:'Nahkampfwaffe',fkwaffe1:'Fernkampfwaffe',schild1:'Schild',ruestung1:'Rüstung',ruestung2:'Rüstung',ruestung3:'Rüstung',ruestung4:'Rüstung',ruestung5:'Rüstung',ruestung6:'Rüstung'};
@@ -242,7 +242,7 @@ function ausrHtml(z,meister,ohneEinkauf){
 `;
   return `<div class="ausr">
     <p class="cost"><b>Geld ${esc(z.geldText)}</b> · Last <b>${z.gewichtStein}</b> von ${z.tragkraftStein} Stein Tragkraft <span class="small mut">(ohne getragene Rüstung)</span>${z.lastBe?` · <b class="warn">BE +${z.lastBe} durch Last</b>`:''} ${meister?'':` · Laden: <b>${laden.offen?'offen':'zu'}</b>${laden.offen&&fak!==100?' (Preise '+fak+' %)':''}`}</p>
-${ohneEinkauf?teilAngelegt:meister?teilAngelegt+teilEinkauf:teilEinkauf+teilAngelegt}
+${ohneEinkauf?teilAngelegt:meister?teilAngelegt+teilEinkauf:'<p class="small mut">Einkaufen geht über den Laden (Startseite, Kachel „Laden“): Warenkorb, der Meister gibt frei. Gekaufte Waffen, Schilde und Rüstungen legst du hier unter „Angelegt“ an, gekaufte Tiere stehen bei den Begleitern.</p>'+teilAngelegt}
     <datalist id="katlist"></datalist></div>`}
 /** Ausrüstung in root anzeigen und bedienen. nachher(z) wird nach jeder Änderung aufgerufen. */
 async function ausrOeffnen(root,base,meister,ohneEinkauf){let z;
@@ -261,6 +261,7 @@ async function ausrOeffnen(root,base,meister,ohneEinkauf){let z;
 /* ---------- Laden-Browser (Meister und Spieler): stöbern nach Kategorien, suchen, sortieren ----------
    opt: {meister, kaufen(name,anzahl,geschenkt) → Promise, preisSetzen(name,kreuzer|null) → Promise} */
 const LADENKAT=[
+  ['Tiere & Begleiter',k=>k.art==='Wesen'],
   ['Nahkampfwaffen',k=>/Nahkampfwaffe/.test(k.art)],
   ['Fernkampfwaffen',k=>/Fernkampfwaffe/.test(k.art)],
   ['Munition',k=>/^(Pfeil|Bolzen|Kugel|Bleikugel|Schleuderstein|Wurf)/i.test(k.name)&&!/Nahkampf|Fernkampf/.test(k.art)],
@@ -294,8 +295,8 @@ async function ladenBrowser(root,opt){await katalogLaden();const st={kat:'',q:''
     const p=k=>k.ladenpreis??k.preis;l.sort(st.sort==='preis'?(a,b)=>p(a)-p(b):st.sort==='preisab'?(a,b)=>p(b)-p(a):st.sort==='gewicht'?(a,b)=>a.gewicht-b.gewicht:(a,b)=>a.name.localeCompare(b.name));
     const n=l.length;if(!st.mehr)l=l.slice(0,150);
     root.querySelector('.lb').innerHTML=l.map(k=>`<tr data-ln="${esc(k.name)}"><td><b>${esc(k.name)}</b>${k.quelle?` <span class="small mut">${esc(k.quelle)}</span>`:''}</td><td class="small mut">${esc(k.kat)}</td>
-      <td class="mono small">${k.gewicht>=40?(Math.round(k.gewicht/4)/10)+' Stein':k.gewicht+' U'}</td>
-      <td class="mono">${kreuzerText(p(k))}${p(k)!==k.preis?`<div class="small mut">Standard ${kreuzerText(k.preis)}</div>`:''}</td>
+      <td class="mono small">${k.art==='Wesen'?'–':k.gewicht>=40?(Math.round(k.gewicht/4)/10)+' Stein':k.gewicht+' U'}</td>
+      <td class="mono">${k.art==='Wesen'&&!p(k)?'<span class="small mut">legt der Meister fest</span>':kreuzerText(p(k))}${p(k)!==k.preis?`<div class="small mut">Standard ${kreuzerText(k.preis)}</div>`:''}</td>
       ${opt.meister?`<td><input type="text" class="lpreis" value="${k.eigenerPreis?esc(kreuzerText(k.ladenpreis)):''}" placeholder="z. B. 3D 5S" style="width:90px" aria-label="Preis im Laden für ${esc(k.name)}"></td>`:''}
       <td class="nowrap">${opt.zu?.()?'':`<input type="number" class="lanz" min="1" value="1" data-nostep style="width:52px" aria-label="Anzahl">
         <button class="btn sm pri" data-lkauf="1">${esc(opt.knopf||'Kaufen')}</button>${opt.meister?'<button class="btn sm" data-lkauf="0" title="ohne Geld abzuziehen">Geben</button>':''}`}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">Nichts gefunden.</td></tr>';
